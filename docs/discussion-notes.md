@@ -65,11 +65,29 @@ reader, coverage reader, `check` and optional `detect`. All its code is Python, 
 - A stack joins the built-in set by a PR to bull after passing `bull stack test`.
 - Rejected: building stacks only inside the bull repo, tracked in bull's status file.
 
+## Roadmap items (decided 2026-11-05)
+
+In v2.0, as foundations that would be hard to add later:
+- **Machine-readable output** (item 3's prerequisite): `--json` on status, backlog, usage and tags.
+- **Event log** (item 4): append-only `.bull/events.jsonl` (git-ignored, machine-local), written by
+  status changes, gate runs (per gate step) and subagent start/end hooks. No report yet.
+- **Settings basics** (item 5): layered TOML (bull defaults → stack → user `~/.config/bull/` → app →
+  part), validated on load and on write; `bull config show` (value and the layer it came from) and
+  `bull config set`. Per-agent model is a setting. Expect settings to keep growing after v2.0; keep the
+  schema easy to extend.
+- **Provider seam** (item 6): everything Claude Code-specific (plugin files, hooks, launching,
+  status-line usage, model names) in one `providers/claude_code` module behind an interface. Only
+  Claude Code implemented.
+- **iOS stack run hygiene** (from item 2, common-sense parts): one simulator chosen by UDID; no
+  parallel testing, one destination; test diagnostics collected only on failure; UI test screenshots
+  kept only on failure; build output and results under the app's `.bull/` instead of the global
+  DerivedData, with a prune command.
+
 ## Open questions (from the brief)
 
 1. ~~One part or two?~~ One part, all Python (see Stack).
 2. ~~Existing stacks?~~ See Stacks in v2.0.
-3. Which roadmap items are in v2.0?
+3. ~~Roadmap items?~~ See Roadmap items.
 4. Where bull installs, and how it updates.
 5. Status file: JSON? One file or several?
 6. Plugin name and slash-command namespace.
@@ -84,6 +102,14 @@ _Draft list in the brief; to be written out as concrete scenarios._
 ## Later features
 
 - Windows support: hooks, paths and git behave differently; macOS and Linux first.
+- GUI: a view across all apps, reading `--json` output (roadmap item 3); native macOS app or local web dashboard is open.
+- Time report: `bull status time` totals by stage, module, unit, agent and gate step, from the event log (roadmap item 4).
+- Settings page: GUI or screen for settings, beyond `bull config show/set` (roadmap item 5).
+- Other AI providers: implementations behind the provider seam (roadmap item 6).
+- Store readiness: optional stack release hook plus the iOS checks (privacy manifest, icons, permission strings, store-guidelines review) (roadmap item 7).
+- Token report: tokens per stage, module, unit and agent (roadmap item 8).
+- Automatic orchestrator restarts at module boundaries: bull drives `claude` from outside; needs its own design.
+- Quieter iOS test runs (in limbo): simulator audio crackling seemed to resolve itself before the planned experiments ran. Remaining experiments: shut down simulators after every run (conflicts with reusing one booted simulator), report orphaned simulators at start, keep screenshots out of Photos and Spotlight (Spotlight Privacy as a manual setup step); open questions on clean-state launches and the speed cost of no parallel testing (roadmap item 2).
 
 ## Constraints
 
