@@ -7,4 +7,13 @@
 
 # The stack this app is built with (`ios-pipeline stacks` lists them). Chosen during /discuss
 # with `ios-pipeline stack select <name>`, which also adds the stack's settings below.
-STACK=""
+STACK="python_cli"
+
+# --- python_cli stack: a uv-managed, src-layout CLI package ---
+# Import name of the package, and the name of its installed console script (both the same
+# string, by convention — rename freely, they just have to stay in sync with pyproject.toml).
+APP_PACKAGE="myapp"
+# Folder containing the installable package; modules live in <APP_SOURCE_DIR>/Modules/<Module>/,
+# their tests in <APP_TEST_DIR>/<Module>/ (same convention as every other stack).
+APP_SOURCE_DIR="src/myapp"
+APP_TEST_DIR="tests"

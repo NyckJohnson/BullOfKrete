@@ -4,3 +4,15 @@
 .pipeline/gates/
 .pipeline/usage.json
 .claude/settings.local.json
+
+# python_cli stack
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
