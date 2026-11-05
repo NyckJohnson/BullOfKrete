@@ -202,8 +202,46 @@ small **fixture stack** (fast, no real toolchain) unless a journey says otherwis
     command in her app stops with "this app's files are format 1; run `bull migrate`"; `bull migrate`
     upgrades the files, commits, and commands work again. An app whose format is newer than the
     installed bull is refused with "upgrade bull".
+12. **Reference tests for a rewrite.** Dana rewrites an old tool with bull. Her memo gives module
+    `Store` a `Reference tests:` line naming two old test files, and lists one unmapped old test
+    under `## Unmapped reference tests` with a reason. After `Store`'s last unit, `bull status next`
+    names the reference-test scan before coverage triage; the scan's findings are recorded
+    (`covered`, `missed` → a new spec-based test, `contradicts`/`not-in-spec` → a human decision in
+    the decisions log), and the module can't merge until the scan is recorded.
+    - Failure: a test-writer or code-writer brief that lists the reference folder is refused by the
+      reference-protection hook.
 
 ## MVP features
+
+Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the items below.
+
+- Core pipeline: six stages, four checkpoints, orchestrator instructions, commands (`/bull:…`),
+  subagent definitions, one subagent at a time, briefs, `partial` returns, 3 attempts per unit,
+  work units by `max_files_per_unit`, decisions log.
+- `bull` command: `init`, `open`, `doctor`, `status` (with `--json`), `gates`, `api`, `coverage`,
+  `feature`, `stacks`, `stack`, `part`, `config`, `migrate`, `template`, `hook <name>`, `statusline`.
+- Gates: per module, `--fast`, `--failed`, `--coverage-report`, `--all`, `--after-merge`, journey
+  tests; gate-pass records; merge guard.
+- Contracts as generated snapshots; `api` gate; pre-approved contract changes in a feature memo.
+- Coverage triage with `coverage-exempt` markers, read through the stack's coverage reader.
+- Hooks (all `bull hook …`): session start, usage guard, merge guard, test protection,
+  reference protection; status line writing usage.
+- Usage pause and resume.
+- Feature backlog and cycle on `feature/<slug>/main`; abandon.
+- `/adopt` for one-part apps on `adopt/main`, with switch-over units and the legacy-test scan.
+- Reference tests for rewrites (journey 12): `Reference tests:` memo lines, `## Unmapped reference
+  tests`, the scan step, the reference-protection hook.
+- Parts: several parts per app, each with its own stack and folder.
+- Stacks: manifest + Python readers, self-test (`stack test`, `--static`), maturity
+  (`experimental`/`verified`), installable stacks, the staged stack workflow (`init --stack`).
+- Built-in stacks: `python_cli`, `ios` (built now); `bash_shell` (through the stack workflow, or
+  later if it isn't done in time); a fixture stack for tests.
+- Foundations: format versions and `bull migrate`, event log, layered validated settings, provider
+  seam (Claude Code only).
+- Open-source readiness: README for new users, license, contributing guide, no paths specific to one
+  machine, macOS and Linux CI.
+- v1 Markdown reviewed: every file in `reference/v1-docs/` kept, merged, rewritten or dropped, with
+  the memo recording which.
 
 ## Later features
 
@@ -218,6 +256,12 @@ small **fixture stack** (fast, no real toolchain) unless a journey says otherwis
 - Quieter iOS test runs (in limbo): simulator audio crackling seemed to resolve itself before the planned experiments ran. Remaining experiments: shut down simulators after every run (conflicts with reusing one booted simulator), report orphaned simulators at start, keep screenshots out of Photos and Spotlight (Spotlight Privacy as a manual setup step); open questions on clean-state launches and the speed cost of no parallel testing (roadmap item 2).
 
 ## Constraints
+
+- Python 3.11+ (stdlib `tomllib`); uv for install and development.
+- macOS and Linux; the iOS stack needs macOS with Xcode.
+- Needs git and Claude Code on the user's Claude plan; never uses an API key or pay-as-you-go usage.
+- No accounts, no server, no network services of its own; everything is local files and git.
+- No runtime dependencies beyond the standard library unless the outline justifies one.
 
 ## Out of scope
 
