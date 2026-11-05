@@ -1,0 +1,6 @@
+# iOS Agent Pipeline
+.DS_Store
+.pipeline/results/
+.pipeline/gates/
+.pipeline/usage.json
+.claude/settings.local.json
