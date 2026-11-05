@@ -39,15 +39,41 @@ Why:
 
 - macOS and Linux for the core. A stack may need a specific platform (the iOS stack: macOS with Xcode).
 
+## Stacks in v2.0
+
+A v2 stack is a self-contained folder: a TOML manifest declaring its build, test, lint, `--fast` and
+`--failed` commands (bull runs them and reads their results), plus Python files for the contract
+reader, coverage reader, `check` and optional `detect`. All its code is Python, like the core.
+
+- **Shipped in v2.0, built now as ordinary bull modules** through the Stage 5 loop, with each stack's
+  self-test (fixture + cases) part of its tests:
+  - `python_cli`: needed so bull itself is the real app that makes it `verified`.
+  - `ios`: needed to migrate the v1 apps.
+- **`bash_shell` is rebuilt through v2's own stack workflow** once the core works: the real run of
+  journey 6 and the workflow's first real test. If it isn't done when the rest of v2.0 is, it moves to
+  later features rather than holding up v2.0.
+- Rejected: building all three as modules (the stack workflow would only ever see a fixture); building
+  only python_cli now (blocks migrating the iOS apps).
+
+**Where stacks are built** (decided 2026-11-05):
+- A stack is loadable from bull's built-in set or from a path or package (`bull stack install <path>`),
+  so others can add stacks without forking bull.
+- The stack workflow runs in the stack's **own git repo**, created by `bull init --stack`, with its own
+  status file. Stages: discuss → scaffold → fixture and cases → gate code → review. Checkpoints:
+  `design-approved` (DESIGN.md) and `rules-approved` (rules.md). Branches and tags like modules'
+  (`stack/<step>`). Accepted stacks are `experimental` until one real app is accepted with them.
+- A stack joins the built-in set by a PR to bull after passing `bull stack test`.
+- Rejected: building stacks only inside the bull repo, tracked in bull's status file.
+
 ## Open questions (from the brief)
 
 1. ~~One part or two?~~ One part, all Python (see Stack).
-2. Existing stacks: port as they are, or rebuild through the stack workflow?
+2. ~~Existing stacks?~~ See Stacks in v2.0.
 3. Which roadmap items are in v2.0?
 4. Where bull installs, and how it updates.
 5. Status file: JSON? One file or several?
 6. Plugin name and slash-command namespace.
-7. Stack builds: where, how status/checkpoints are tracked, tags and branches?
+7. ~~Stack builds?~~ See Stacks in v2.0.
 
 ## Core journeys
 
