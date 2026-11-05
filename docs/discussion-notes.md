@@ -83,14 +83,37 @@ In v2.0, as foundations that would be hard to add later:
   kept only on failure; build output and results under the app's `.bull/` instead of the global
   DerivedData, with a prune command.
 
+## Install and files (decided 2026-11-05)
+
+- **One Python package holds both the `bull` command and the Claude Code plugin** (commands, agents,
+  hooks). Installed with `uv tool install <package>` (PyPI; from the GitHub repo before the first
+  release). `bull open` starts Claude Code with the plugin files from the same installed package, so
+  command and plugin versions always match. Updated with `uv tool upgrade <package>`; when an app's
+  files are an older format, bull says so and points at `bull migrate`. `bull doctor` checks the
+  install (uv, git, claude, stack toolchains).
+  Rejected: plugin via the Claude Code marketplace (two things to update, can drift); git clone plus
+  a `PATH` link as in v1 (awkward for strangers).
+- **Names:** command `bull`, slash commands `/bull:<command>`. The PyPI package name is settled during
+  `/setup` (`bull` is likely taken; fallbacks `bull-pipeline`, `bullofkrete`).
+- **State files** (folder `.bull/` in each app):
+  - committed: `status.json` (stage, checkpoints, modules, units, attempts, active feature or
+    adoption) and `backlog.json` (feature queue), both JSON, written only by `bull`, atomically, with
+    a `format` version. The backlog is separate because it is edited on `main` while a feature branch
+    changes the status.
+  - committed config (TOML, human-edited, validated): `config.toml`, plus `parts/<part>.toml` for
+    multi-part apps; also with a `format` version.
+  - git-ignored, machine-local: `usage.json`, `events.jsonl`, gate-pass records, run output.
+  Rejected: everything in one status file (backlog edits on `main` collide with a feature's status
+  changes); one status file per feature (more files; only one feature runs at a time).
+
 ## Open questions (from the brief)
 
 1. ~~One part or two?~~ One part, all Python (see Stack).
 2. ~~Existing stacks?~~ See Stacks in v2.0.
 3. ~~Roadmap items?~~ See Roadmap items.
-4. Where bull installs, and how it updates.
-5. Status file: JSON? One file or several?
-6. Plugin name and slash-command namespace.
+4. ~~Install and update?~~ See Install and files.
+5. ~~Status file?~~ See Install and files.
+6. ~~Names?~~ See Install and files.
 7. ~~Stack builds?~~ See Stacks in v2.0.
 
 ## Core journeys
