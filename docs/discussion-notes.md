@@ -118,7 +118,90 @@ In v2.0, as foundations that would be hard to add later:
 
 ## Core journeys
 
-_Draft list in the brief; to be written out as concrete scenarios._
+Draft 2026-11-05, for review. Journeys exercise `bull` as the orchestrator and hooks call it, run as
+real subprocesses against temporary git repos. Subagents (Claude) are not part of the tests: where a
+step is an agent's work, the test supplies the files that agent would write. Apps in journeys use a
+small **fixture stack** (fast, no real toolchain) unless a journey says otherwise.
+
+1. **Install and init.** Dana, a developer new to bull, runs `uv tool install <package>`, then
+   `bull doctor` (reports uv, git and claude found; lists stacks and which toolchains are missing),
+   then `bull init ~/apps/tally`. bull creates the folder, `git init`, `.bull/config.toml` and
+   `status.json` at stage 0, the plugin settings and `CLAUDE.md`, and commits. `bull open ~/apps/tally`
+   prints the `claude` command it launches with the plugin from the installed package; `bull status`
+   says stage 0, next `/bull:discuss`.
+   - Failure: `bull init` on a non-empty folder that isn't a bull app refuses and says why;
+     on an existing bull app it relinks (safe to rerun) without touching state.
+   - Failure: `bull doctor` with `claude` missing exits non-zero and names the fix.
+2. **Build a small app end to end.** Dana builds `tally` with the fixture stack: `stack select`, stage
+   changes 1→6, memo with two modules (`Store`, then `Counter` depending on it), `init-modules` from the
+   memo, setup check passes → tag `setup`, skeleton gates pass → tag `skeleton`, checkpoint
+   `ui-approved`; for each module: branch, unit tests → code → `gates --fast` → review → unit done,
+   coverage report clean, full `gates <Module>` records a pass, merge, `gates --after-merge` (records
+   without rerunning), `api --write`, tag `module/<Name>`; then `gates --all` and acceptance → tag
+   `app-accepted`. `bull status --json` shows every unit done and every tag.
+   - Failure: `status module Counter in_progress` before `Store` is done is refused (dependency).
+   - Failure: a unit's 4th attempt is refused; the unit is `blocked` until the human decides.
+3. **Pause on usage and resume.** Mid-build, the status line writes 5h usage at 92%. The orchestrator's
+   `bull status usage-check` reports `PAUSE` with the reset time; the subagent-launch hook blocks the
+   next agent with the same reason. Dana commits and runs `bull status pause "usage"`. Next day, in a
+   fresh session, the session-start hook prints the stage, the paused unit and "run
+   `/bull:resume`"; usage is back at 10%, `usage-check` reports `OK`, `bull status resume` clears the
+   pause and `bull status next` names the same unit.
+   - Failure: no usage data yet → `UNKNOWN`, proceeds with a warning (never blocks forever).
+4. **Features from a file; build one, abandon one.** After `app-accepted`, Dana writes `ideas.md` with
+   three ideas and runs `bull feature import ideas.md`: three backlog entries, each with a brief in
+   `docs/features/`. `bull feature start reset-button` creates `feature/reset-button/main`; its memo
+   marks `Counter` with `Changes (reset-button)` and a `Contract changes (reset-button)` line;
+   `status feature plan` reopens only the unit holding the changed file. The unit runs the loop, the
+   contract change passes `api` as pre-approved, verify, acceptance merges to `main` and tags
+   `feature/reset-button/accepted`. Dana starts `dark-mode`, changes her mind, and runs
+   `bull feature abandon dark-mode` on `main`: `main` is untouched, the backlog marks it abandoned.
+   Meanwhile she added a fourth idea on `main` while `reset-button` was active, and the merge has no
+   conflict (separate backlog file).
+   - Failure: starting a second feature while one is active is refused; so is any feature before
+     `app-accepted`.
+5. **Adopt an existing app.** Sam has a small app built without bull (fixture stack, a few files,
+   tests). `bull init --adopt .` detects the stack (`detect`), sets up `adopt/main`. The memo lists
+   one module with `Legacy files:`, `Legacy tests:` and `Callers to repoint:`; baseline journey tests
+   pass against the app as it is → tag `baseline`; scaffold → tag `scaffold`. The module's last unit
+   is the switch-over (`status next` names it): legacy tests compared, callers repointed, legacy files
+   deleted; full gates with journey tests pass; merge. `bull status adopt finish` → tags `adopted` and
+   `app-accepted`; the app is an ordinary accepted app.
+   - Failure: `adopt finish` while a legacy file listed in the memo still exists is refused.
+6. **Add a stack through the stack workflow.** Lee wants a `go_cli` stack (a fixture stack in the
+   test). `bull init --stack ~/stacks/go_cli` creates a stack repo with its own status at stage 1.
+   DESIGN.md approved → tag `stack/design-approved`; scaffold from the template; fixture and
+   `cases.json` written; `bull stack test . --static` passes; gate code written; `bull stack test .`:
+   every case gives its expected verdict; rules.md approved → `stack/rules-approved`; accepted as
+   `experimental`. `bull stack install ~/stacks/go_cli` makes it selectable; `bull stacks` lists it as
+   experimental.
+   - Failure: a gate that passes everything → the "failing test" case reports the wrong verdict, and
+     `stack test` fails; a case the stack doesn't run reports "not run" and also fails.
+7. **An app with two parts.** Ana's app has `cli` (fixture stack A) and `web` (fixture stack B):
+   `bull part add cli <A> --dir cli`, `bull part add web <B> --dir web`. Each module has a `Part:`
+   line; `gates <Module>` runs from its part folder with that part's stack; `setup` is tagged only when
+   both parts pass `stack check`; `gates --all` runs each part, then journeys.
+   - Failure: a memo where a `web` module depends on a `cli` module is refused by `init-modules`.
+   - Failure: overlapping part folders reported by `part check`.
+8. **A contract change stops the pipeline.** During `Counter` unit 2, the code-writer changes a
+   method in `Counter/Contracts/`. `bull gates Counter --fast` fails the `api` gate with a diff of
+   the contract against `docs/api/Counter.md`. The orchestrator sets the pipeline to waiting for
+   approval; Dana approves; the decision is logged; `bull api Counter --write` updates the snapshot;
+   gates pass.
+   - Variant: inside a feature whose memo lists that change under `Contract changes (<slug>)`, the
+     same diff passes without stopping; a further, unlisted change still stops.
+9. **An unverified merge is blocked.** Dana (or the orchestrator) runs `git merge --no-ff
+   module/Counter` on `main` after only `gates --fast`. The merge-guard hook refuses: no recorded full
+   pass for the branch head. After `bull gates Counter` passes on a clean tree, the same merge goes
+   through. A dirty working tree also blocks the record.
+10. **Settings.** Dana sets `bull config set max_attempts 5` in her app; `bull config show` lists
+    `max_attempts = 5 (app)`, `review_mode = combined (bull default)`, and the reviewer's model from
+    her user layer. `bull config set max_attempts many` is refused with the allowed type; a hand-edited
+    `config.toml` with an unknown key fails `bull status` with the file, line and key.
+11. **Format versions.** Dana upgrades bull to a release whose status format is newer. Any `bull`
+    command in her app stops with "this app's files are format 1; run `bull migrate`"; `bull migrate`
+    upgrades the files, commits, and commands work again. An app whose format is newer than the
+    installed bull is refused with "upgrade bull".
 
 ## MVP features
 
