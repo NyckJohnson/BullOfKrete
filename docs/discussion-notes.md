@@ -245,7 +245,8 @@ Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the
 
 ## Later features
 
-- Windows support: hooks, paths and git behave differently; macOS and Linux first.
+- Windows support: hooks, paths and git behave differently; macOS and Linux first. Planned for the future, so v2.0 avoids needless POSIX-only assumptions.
+- Phone notifications: send pipeline updates (paused, blocked, waiting for approval, module done) to the user's phone. Wanted soon after v2.0; first feature that needs a network service.
 - GUI: a view across all apps, reading `--json` output (roadmap item 3); native macOS app or local web dashboard is open.
 - Time report: `bull status time` totals by stage, module, unit, agent and gate step, from the event log (roadmap item 4).
 - Settings page: GUI or screen for settings, beyond `bull config show/set` (roadmap item 5).
@@ -257,11 +258,16 @@ Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the
 
 ## Constraints
 
+Constraints for v2.0, not permanent rules: later features may change them (see Later features:
+Windows support, notifications to the user's phone). Design so they can change without rework, e.g.
+paths through one helper, notifications behind a seam.
+
 - Python 3.11+ (stdlib `tomllib`); uv for install and development.
-- macOS and Linux; the iOS stack needs macOS with Xcode.
+- macOS and Linux in v2.0; the iOS stack needs macOS with Xcode.
 - Needs git and Claude Code on the user's Claude plan; never uses an API key or pay-as-you-go usage.
-- No accounts, no server, no network services of its own; everything is local files and git.
+- v2.0 has no accounts, server or network services of its own; everything is local files and git.
 - No runtime dependencies beyond the standard library unless the outline justifies one.
+- License: MIT (decided 2026-11-05).
 
 ## Out of scope
 
