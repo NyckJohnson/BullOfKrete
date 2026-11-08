@@ -53,7 +53,10 @@ def register(
 
     def run_check(args: argparse.Namespace, out: TextIO) -> int:
         problems = parts().check(app())
+        if not problems:
+            out.write("no problems\n")
+            return 0
         out.writelines(f"{problem}\n" for problem in problems)
-        return 1 if problems else 0
+        return 1
 
     check.set_defaults(run=run_check)

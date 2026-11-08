@@ -98,6 +98,7 @@ class LiveParts(Parts):
             )
         found = self._registry.get(stack)  # raises StackError for an unknown stack
         folder = _clean_dir(dir if dir is not None else name)
+        _refuse_reserved(folder)
         existing = self.all(app)
         if any(p.name == name for p in existing):
             raise BullError(f"a part named `{name}` already exists")
@@ -332,6 +333,20 @@ def _clean_dir(folder: str) -> str:
     return clean
 
 
+_RESERVED = (".bull", ".git", "docs", "interfaces")
+
+
+def _refuse_reserved(folder: str) -> None:
+    """Refuse a part folder at or inside one of bull's own app folders."""
+    path = PurePosixPath(folder)
+    for reserved in _RESERVED:
+        if path.is_relative_to(reserved):
+            raise BullError(
+                f"part folder `{folder}` is inside bull's own folder `{reserved}`",
+                "choose another folder with --dir",
+            )
+
+
 def _rel(folder: str) -> PurePosixPath:
     return PurePosixPath(posixpath.normpath(folder) if folder else ".")
 
@@ -491,14 +506,19 @@ def _gitignore_write(
         current = ""
     present = set(current.splitlines())
     added: list[str] = []
+    patterns = False
     for raw in stack_lines:
         line = raw.strip()
         if not line or line.startswith("#"):
+            # Comments and blank lines are copied as they are, never prefixed.
+            added.append(line)
             continue
         moved = _gitignore_line(folder, line)
         if moved not in present and moved not in added:
             added.append(moved)
-    if not added:
+            patterns = True
+    if not patterns:
+        # Nothing new to ignore: don't append the stack's comments again.
         return None
     if current and not current.endswith("\n"):
         current += "\n"
