@@ -943,9 +943,11 @@ when `readers.py` defines `detect`.
     (`stack install` in the CLI also runs `stack test --static` first; see stacktest.)
   - select(app, name): one-part app only (with parts → `StackError` "use `bull part add`"); writes
     `stack` and the stack's `source_dir`/`test_dir` defaults into `config.toml`, merges the stack's
-    `gitignore` lines into `.gitignore` (no duplicates), creates its `scaffold` folders.
+    `gitignore` lines into `.gitignore` (no duplicates), creates its `scaffold` folders; a
+    `config.toml` it cannot edit safely (invalid TOML, or a key set in a form a line edit can't
+    change) → `StackError` and nothing written.
   - rules(stack, agent): `## common` plus `## <agent>` from `rules.md` (heading match
-    case-insensitive); `outline` → `## outline` only; agent not in the file → `StackError`.
+    case-insensitive; no `## common` → the agent's section alone; `common` → that section once); `outline` → `## outline` only; agent not in the file → `StackError`.
   - setup_guide: whole `setup.md`, or one `## <section>`.
   - check(app, part): the stack's `check` for that part's folder and settings, `adopting` true while
     an adoption is active (read from `status.json`), plus bull's own items: each `requires` tool on
@@ -2003,3 +2005,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: memo reference scan — `section_items` matches the `## <heading>` ignoring case (v1's test_sections_and_lists did; added to the spec) — approved by Nicholas Johnson
 - 2026-11-08: memo coverage triage — duplicate `## <heading>`: first wins and it is reported through a new contract field `Memo.parse_problems` (contract change approved; no dependent module built yet); an interface side without `<part> / ` and an interface `File` without `(<format>)` are reported by `problems()`; slugged or unknown lines in `## Legacy code` are ignored (spec'd) — approved by Nicholas Johnson
 - 2026-11-08: stacks reference scan (covered 4, missed 0, contradicts 0, not-in-spec 4) — added to the spec: `bull stack check` without `--part` checks every part (heading per part, exit 1 if any fails), and every `bull stack` command rejects an unknown `--part` naming the known parts; left out: v1's `stack show` and the `(this app: …)` marker in `bull stacks` (`part list` shows part stacks) — approved by Nicholas Johnson
+- 2026-11-08: stacks spec clarifications from coverage triage (flagged to the human at the module boundary): `select` refuses with `StackError`, writing nothing, when `config.toml` can't be edited safely; `rules` without a `## common` section returns the agent's section alone, and `rules(stack, "common")` returns that section once.
