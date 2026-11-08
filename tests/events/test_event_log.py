@@ -210,3 +210,50 @@ def test_read_separates_time_and_kind_from_data(tmp_path: Path) -> None:
     (event,) = make(path, files).read()
     assert event.time == WHEN
     assert dict(event.data) == {"module": "m"}
+
+
+def _line(**fields: object) -> str:
+    return json.dumps({"time": WHEN.isoformat(), "kind": "status", **fields})
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "[1, 2]",
+        '"x"',
+        "42",
+        "null",
+        '{"kind": "status"}',
+        json.dumps({"time": WHEN.isoformat()}),
+        json.dumps({"time": WHEN.isoformat(), "kind": 5}),
+        json.dumps({"time": 5, "kind": "status"}),
+        json.dumps({"time": None, "kind": "status"}),
+        json.dumps({"time": "yesterday", "kind": "status"}),
+        json.dumps({"time": WHEN.isoformat(), "kind": "bogus"}),
+        _line(items=[1, 2]),
+        _line(nested={"a": 1}),
+    ],
+)
+def test_read_skips_invalid_line_between_valid_ones(tmp_path: Path, bad: str) -> None:
+    path = tmp_path / "events.jsonl"
+    files = MockFiles()
+    files.texts[path] = "\n".join([_line(n=1), bad, _line(n=2)]) + "\n"
+    events = make(path, files).read()
+    assert [e.data["n"] for e in events] == [1, 2]
+
+
+def test_append_data_key_named_time_keeps_the_clock_time(tmp_path: Path) -> None:
+    path = tmp_path / "events.jsonl"
+    files = MockFiles()
+    make(path, files).append(EventKind.STATUS, time="bogus")
+    obj = json.loads(lines(files, path)[0])
+    assert datetime.fromisoformat(obj["time"]) == WHEN
+
+
+def test_read_propagates_os_errors_other_than_missing_path(tmp_path: Path) -> None:
+    class DeniedFiles(MockFiles):
+        def read_text(self, path: Path) -> str | None:
+            raise PermissionError("denied")
+
+    with pytest.raises(PermissionError):
+        make(tmp_path / "events.jsonl", DeniedFiles()).read()
