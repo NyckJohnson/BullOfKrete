@@ -117,9 +117,10 @@ def test_part_list_json_with_no_parts_is_an_empty_list(rig: Rig) -> None:
     assert json.loads(text) == []
 
 
-def test_part_check_is_silent_success_without_problems(rig: Rig) -> None:
-    code, _ = rig.run("part", "check")
+def test_part_check_prints_no_problems_and_exits_zero_when_clean(rig: Rig) -> None:
+    code, text = rig.run("part", "check")
     assert code == 0
+    assert text.strip() == "no problems"
     assert ("check", (APP,)) in rig.parts.calls
 
 

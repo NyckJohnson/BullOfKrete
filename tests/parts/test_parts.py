@@ -833,3 +833,116 @@ def test_add_root_part_refused_when_its_folders_would_contain_an_existing_part(
     with pytest.raises(BullError):
         live.add(app, "core", "fixture", ".")
     assert snapshot(app.root) == before
+
+
+# --------------------------------- reference-scan rules: bull's own folders
+
+
+@pytest.mark.parametrize(
+    "folder",
+    [
+        ".bull",
+        ".bull/x",
+        ".git",
+        ".git/hooks",
+        "docs",
+        "docs/web",
+        "interfaces",
+        "interfaces/api",
+    ],
+)
+def test_add_refuses_a_dir_at_or_inside_bulls_own_folders(
+    tmp_path: Path, folder: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n", gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", folder)
+    assert snapshot(app.root) == before
+
+
+def test_add_refuses_a_dir_inside_bulls_folders_on_the_implicit_app(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", "docs/web")
+    assert snapshot(app.root) == before
+
+
+@pytest.mark.parametrize("folder", ["docsite", "interfaces2", ".github", "gitdocs"])
+def test_add_allows_a_sibling_sharing_a_prefix_with_bulls_folders(
+    tmp_path: Path, folder: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    assert make().add(app, "web", "fixture", folder).dir == folder
+
+
+# ------------------------------- reference-scan rules: gitignore line kinds
+
+
+def test_add_keeps_gitignore_comments_and_blank_lines_unchanged(
+    tmp_path: Path,
+) -> None:
+    lines = _gitignore_after_add(tmp_path, "web", "# build output", "", "results/")
+    assert "# build output" in lines
+    assert "" in lines
+    assert "web/**/results/" in lines
+    assert not any(ln.startswith("web/") and "#" in ln for ln in lines)
+    assert "web/" not in lines
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [("!/keep", "!/web/keep"), ("!x.log", "!web/**/x.log")],
+)
+def test_add_keeps_the_negation_mark_in_front_of_prefixed_gitignore_lines(
+    tmp_path: Path, line: str, expected: str
+) -> None:
+    lines = _gitignore_after_add(tmp_path, "web", line)
+    assert expected in lines
+    assert line not in lines
+
+
+# ------------------------- reference-scan rules: one-part app stays folder-less
+
+
+def test_reading_a_one_part_app_never_creates_the_parts_folder(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path)
+    (app.root / "src" / "fx").mkdir(parents=True)
+    (app.root / "tests").mkdir()
+    live = make()
+    live.all(app)
+    live.get(app)
+    live.get(app, "app")
+    assert live.check(app) == []
+    live.is_test_path(app, app.root / "tests" / "test_a.py")
+    live.is_test_path(app, app.root / "src" / "a.py")
+    assert not app.parts_dir.exists()
+
+
+# ---------------------- reference-scan rules: a root part already at the dir
+
+
+def test_add_at_dot_refused_when_the_implicit_part_is_at_the_root(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", ".")
+    assert snapshot(app.root) == before
+
+
+def test_add_at_dot_refused_when_a_moved_root_part_app_is_at_the_root(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n", gitignore="keep/\n")
+    write_part(app, "app", dir=".")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", ".")
+    assert snapshot(app.root) == before
