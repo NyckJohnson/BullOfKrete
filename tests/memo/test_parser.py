@@ -293,3 +293,19 @@ def test_section_items_on_text_without_headings_is_empty(text: str) -> None:
 
 def test_section_items_empty_section_is_empty_list() -> None:
     assert LiveMemoReader().section_items("## A\n\n## B\n- x\n", "A") == []
+
+
+@pytest.mark.parametrize(
+    "heading", ["later features", "LATER FEATURES", "Later Features"]
+)
+def test_section_items_heading_match_ignores_case(heading: str) -> None:
+    text = "## Later features\n- First idea\n- Second idea\n\n## Other\n- nope\n"
+    assert LiveMemoReader().section_items(text, heading) == [
+        "First idea",
+        "Second idea",
+    ]
+
+
+def test_section_items_case_insensitive_match_ignores_other_sections() -> None:
+    text = "## Other\n- nope\n\n## LATER features\n- Only this\n\n## More\n- no\n"
+    assert LiveMemoReader().section_items(text, "later FEATURES") == ["Only this"]
