@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -56,6 +56,20 @@ class Rig:
         if s is not None:
             self.usage.record(s)
         return self.usage.check()
+
+
+class RaisingFiles(MockFiles):
+    """Reads (text or JSON) fail with `error`, like a real disk problem."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    def read_text(self, path: Path) -> str | None:
+        raise self.error
+
+    def read_json(self, path: Path) -> object | None:
+        raise self.error
 
 
 @pytest.fixture
@@ -315,5 +329,40 @@ def test_hundred_percent_pauses(rig: Rig) -> None:
     assert rig.check(sample(100.0, 100.0)).verdict is UsageVerdict.PAUSE
 
 
-def test_utc_constant_is_used_for_times() -> None:
-    assert NOW.tzinfo is UTC
+# --- unreadable at the OS level / non-finite numbers -----------------------
+
+_READ_ERRORS = [
+    PermissionError("denied"),
+    IsADirectoryError("is a directory"),
+    OSError("io"),
+    UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte"),
+]
+
+
+@pytest.mark.parametrize("error", _READ_ERRORS, ids=lambda e: type(e).__name__)
+def test_latest_is_none_when_reading_the_file_fails(error: Exception) -> None:
+    usage = LiveUsage(APP, RaisingFiles(error), MockSettings(), MockClock(NOW))
+    assert usage.latest() is None
+
+
+@pytest.mark.parametrize("error", _READ_ERRORS, ids=lambda e: type(e).__name__)
+def test_check_is_unknown_when_reading_the_file_fails(error: Exception) -> None:
+    usage = LiveUsage(APP, RaisingFiles(error), MockSettings(), MockClock(NOW))
+    check = usage.check()
+    assert check.verdict is UsageVerdict.UNKNOWN
+    assert check.reason == "no usage data yet"
+
+
+@pytest.mark.parametrize("field", ["five_hour", "weekly"])
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
+def test_latest_is_none_for_non_finite_percentages(
+    rig: Rig, field: str, bad: str
+) -> None:
+    body = {"five_hour": "1", "weekly": "1"}
+    body[field] = bad
+    rig.files.texts[APP.usage_file] = (
+        '{"format": 1, "time": "2026-11-07T12:00:00Z", '
+        f'"five_hour": {body["five_hour"]}, "weekly": {body["weekly"]}, '
+        '"five_hour_resets": null, "weekly_resets": null}'
+    )
+    assert rig.usage.latest() is None
