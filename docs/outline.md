@@ -224,7 +224,7 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
 - Windows support: hooks, paths and git behave differently; macOS and Linux first. v2.0 avoids needless POSIX-only assumptions.
 - Phone notifications: send pipeline updates (paused, blocked, waiting for approval, module done) to the user's phone. Wanted soon after v2.0; first feature that needs a network service.
 - GUI: a view across all apps, reading `--json` output (roadmap item 3); native macOS app or local web dashboard is open.
-- Time report: `bull status time` totals by stage, module, unit, agent and gate step, from the event log (roadmap item 4).
+- Time report: `bull status time` totals by stage, module, unit, agent and gate step, from the event log (roadmap item 4). Before it ships, reading the log must survive a torn non-UTF-8 write: today foundation's strict `read_text` makes `EventLog.read` fail on the whole file instead of skipping the damaged line (found in events review, 2026-11-08).
 - Settings page: GUI or screen for settings, beyond `bull config show/set` (roadmap item 5).
 - Other AI providers: implementations behind the provider seam (roadmap item 6).
 - Service stack: a stack whose part runs as a service (e.g. a Python HTTP service), giving OpenAPI interfaces and running parts together their first real stack.
@@ -598,7 +598,8 @@ when `readers.py` defines `detect`.
 - Behavior spec:
   - append: one JSON line `{"time", "kind", ...data}`; `time` from the clock.
   - append when the file can't be written: one warning on stderr per process, never raises.
-  - read: events in file order; blank or unparseable lines skipped; missing file → `[]`.
+  - read: events in file order; blank or unparseable lines skipped (not JSON, not an object, missing
+    or invalid `time`/`kind`, or a data value that isn't str/int/float/bool/null); missing file → `[]`.
 - Anticipated operations (not built yet): time report queries.
 - Reference tests: none.
 - Contract: see `docs/api/events.md` (generated; do not edit by hand)
@@ -1986,3 +1987,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-07: Stage 4 (prototype) skipped: the skeleton's `bull` entry point is a stub and the python_cli stack has no screen-builder rules, so there is nothing to try. `ui-approved` is tagged without a review; the command surface is first checked in Stage 5 (cli) and Stage 6 (journeys). (Options weighed: review the Commands table on paper; a throwaway help-only shell.)
 - 2026-11-08: foundation coverage triage — four behaviors added to the spec rather than removed: temp-name retry in write_atomic, missing `cwd` not reported as ToolMissing, idempotent `stop`, and spawn's ToolMissing (same as run) — approved by Nicholas Johnson
 - 2026-11-08: post-merge check during stage 5 is `ios-pipeline gates --all --skip-coverage` instead of `gates --after-merge`: main has no recorded gate pass (the skeleton never recorded one) and coverage of unbuilt stub modules cannot pass until they are built. Each module still passes its full gates with coverage before merging, and `gates --all` runs once after the last module — approved by Nicholas Johnson
+- 2026-11-08: events coverage triage — `read` skips a line whose data values aren't str/int/float/bool/null (added to the spec); `read` failing on non-UTF-8 bytes is deferred to the time report (Later features) rather than reopening foundation — approved by Nicholas Johnson
