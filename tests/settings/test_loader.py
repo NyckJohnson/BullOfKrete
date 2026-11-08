@@ -21,7 +21,6 @@ from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.settings.Contracts import (
     ConfigError,
     ConfigProblem,
-    Layer,
     Setting,
     SettingType,
     StackLayer,
