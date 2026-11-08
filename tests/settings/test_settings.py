@@ -146,6 +146,22 @@ def test_show_marks_stack_values(env: Env) -> None:
     assert by_key["source_dir"].value == "src"
 
 
+def test_stack_exclude_and_app_exclude_extra_both_resolve_from_one_load(
+    env: Env,
+) -> None:
+    app = env.write(
+        env.app.config_file,
+        'format = 1\nstack = "python_cli"\ncoverage.exclude_extra = ["extra/*"]\n',
+    )
+    settings = env.load()
+    by_key = {r.key: r for r in settings.show()}
+    assert settings.get("coverage.exclude") == ("gen/*",)
+    assert by_key["coverage.exclude"].layer is Layer.STACK
+    assert settings.get("coverage.exclude_extra") == ("extra/*",)
+    assert by_key["coverage.exclude_extra"].layer is Layer.APP
+    assert by_key["coverage.exclude_extra"].source == app
+
+
 def test_show_includes_a_set_models_key(env: Env) -> None:
     env.write(env.app.config_file, "format = 1\nmodels.reviewer = 'opus'\n")
     by_key = {r.key: r for r in env.load().show()}
