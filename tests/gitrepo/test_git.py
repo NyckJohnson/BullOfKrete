@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from bull.Modules.foundation.Contracts import RunResult
+from bull.Modules.foundation.mocks import MockRunner
 from bull.Modules.foundation.runner import LiveRunner
 from bull.Modules.gitrepo.Contracts import GitError
 from bull.Modules.gitrepo.git import LiveGit
@@ -432,3 +435,78 @@ def test_failing_command_raises_git_error_with_stderr_and_command(
     assert "ghost-branch" in text
     assert "git" in text
     assert "switch" in text or "checkout" in text
+
+
+# --- scripted failures and edge cases
+
+
+def failing_git(returncode: int = 128, stderr: str = "fatal: boom\n") -> LiveGit:
+    runner = MockRunner()
+    runner.results["git"] = RunResult(
+        argv=("git", "scripted"),
+        returncode=returncode,
+        stdout="",
+        stderr=stderr,
+        seconds=0.0,
+    )
+    return LiveGit(runner)
+
+
+def test_head_unexpected_failure_raises_git_error_with_command_and_stderr(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(GitError) as info:
+        failing_git().head(tmp_path)
+    assert "git scripted" in str(info.value)
+    assert "fatal: boom" in str(info.value)
+
+
+def test_is_repo_false_for_a_nonexistent_path(git: LiveGit, tmp_path: Path) -> None:
+    assert git.is_repo(tmp_path / "missing") is False
+
+
+def test_is_repo_false_for_a_file(git: LiveGit, tmp_path: Path) -> None:
+    file = tmp_path / "file.txt"
+    file.write_text("x")
+    assert git.is_repo(file) is False
+
+
+def test_toplevel_none_for_a_nonexistent_path(git: LiveGit, tmp_path: Path) -> None:
+    assert git.toplevel(tmp_path / "missing") is None
+
+
+def test_current_branch_unexpected_failure_raises_git_error(tmp_path: Path) -> None:
+    with pytest.raises(GitError) as info:
+        failing_git().current_branch(tmp_path)
+    assert "fatal: boom" in str(info.value)
+
+
+def test_current_branch_exit_one_means_detached_and_is_none(tmp_path: Path) -> None:
+    assert failing_git(returncode=1, stderr="").current_branch(tmp_path) is None
+
+
+def test_branch_exists_unexpected_failure_raises_git_error(tmp_path: Path) -> None:
+    with pytest.raises(GitError) as info:
+        failing_git().branch_exists(tmp_path, "main")
+    assert "fatal: boom" in str(info.value)
+
+
+def test_submodules_empty_when_gitmodules_has_no_paths(
+    git: LiveGit, repo: Path
+) -> None:
+    (repo / ".gitmodules").write_text("# nothing here\n")
+    assert git.submodules(repo) == []
+
+
+def test_submodules_config_failure_raises_git_error(tmp_path: Path) -> None:
+    (tmp_path / ".gitmodules").write_text('[submodule "x"]\n\tpath = x\n')
+    with pytest.raises(GitError) as info:
+        failing_git().submodules(tmp_path)
+    assert "fatal: boom" in str(info.value)
+
+
+def test_active_hooks_empty_when_hooks_folder_is_missing(
+    git: LiveGit, repo: Path
+) -> None:
+    shutil.rmtree(repo / ".git" / "hooks", ignore_errors=True)
+    assert git.active_hooks(repo) == []
