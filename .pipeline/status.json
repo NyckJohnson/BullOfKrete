@@ -21,8 +21,8 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "tests",
+          "attempts": 1
         },
         {
           "number": 2,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-07T23:57:20-08:00",
+  "updatedAt": "2026-11-07T23:58:15-08:00",
   "features": [],
   "activeFeature": null
 }

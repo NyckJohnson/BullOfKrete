@@ -212,13 +212,17 @@ def test_mock_runner_satisfies_protocol() -> None:
 
 def test_mock_runner_run_defaults_to_successful_empty_result() -> None:
     res = MockRunner().run(["echo", "hi"], Path("/cwd"))
-    assert res == RunResult(argv=("echo", "hi"), returncode=0, stdout="", stderr="", seconds=res.seconds)
+    assert res == RunResult(
+        argv=("echo", "hi"), returncode=0, stdout="", stderr="", seconds=res.seconds
+    )
     assert res.argv == ("echo", "hi")
 
 
 def test_mock_runner_run_returns_scripted_result_by_first_arg() -> None:
     m = MockRunner()
-    scripted = RunResult(argv=("git",), returncode=3, stdout="o", stderr="e", seconds=1.0)
+    scripted = RunResult(
+        argv=("git",), returncode=3, stdout="o", stderr="e", seconds=1.0
+    )
     m.results["git"] = scripted
     assert m.run(["git", "status"], Path("/c")) is scripted
     assert m.run(["other"], Path("/c")).returncode == 0
@@ -296,6 +300,8 @@ def test_mock_clock_returns_given_time_and_follows_changes() -> None:
     assert c.now().year == 2021
 
 
-@pytest.mark.parametrize("cls", [MockLayouts, MockFiles, MockRunner, MockClock, MockSpawned])
+@pytest.mark.parametrize(
+    "cls", [MockLayouts, MockFiles, MockRunner, MockClock, MockSpawned]
+)
 def test_mocks_start_with_no_recorded_calls(cls: type) -> None:
     assert cls().calls == []

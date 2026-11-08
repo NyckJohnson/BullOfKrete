@@ -93,7 +93,9 @@ def test_run_result_has_listed_fields() -> None:
 
 
 def test_run_result_keeps_values() -> None:
-    r = RunResult(argv=("git", "status"), returncode=1, stdout="o", stderr="e", seconds=1.5)
+    r = RunResult(
+        argv=("git", "status"), returncode=1, stdout="o", stderr="e", seconds=1.5
+    )
     assert (r.argv, r.returncode, r.stdout, r.stderr, r.seconds) == (
         ("git", "status"),
         1,
