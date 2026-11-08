@@ -61,6 +61,53 @@ def _from_json(raw: object, where: str) -> BacklogItem:
         raise FileFormatError(f"{where}: invalid backlog item: {e}") from e
 
 
+def parse_backlog(data: object, where: str) -> list[BacklogItem]:
+    """The items of a parsed `backlog.json` document (`None`: no file, no items).
+
+    Raises `FileFormatError` naming `where` when the document is malformed.
+    """
+    if data is None:
+        return []
+    if not isinstance(data, dict) or data.get("format") != _FORMAT:
+        raise FileFormatError(f"{where}: expected a format {_FORMAT} backlog")
+    raw_items = data.get("items")
+    if not isinstance(raw_items, list):
+        raise FileFormatError(f"{where}: `items` must be a list")
+    return [_from_json(raw, where) for raw in raw_items]
+
+
+def read_backlog(app: AppLayout, files: Files) -> list[BacklogItem]:
+    """The items in `app.backlog_file`, in queue order; none when the file is missing."""
+    path = app.backlog_file
+    return parse_backlog(files.read_json(path), str(path))
+
+
+def write_backlog(app: AppLayout, files: Files, items: Sequence[BacklogItem]) -> None:
+    """Writes `items` to `app.backlog_file` (atomically, through `files`)."""
+    files.write_json(
+        app.backlog_file, {"format": _FORMAT, "items": [_to_json(i) for i in items]}
+    )
+
+
+def new_ideas(
+    ideas: Sequence[Idea], items: Sequence[BacklogItem], reader: IdeaReader
+) -> list[Idea]:
+    """The ideas `import_ideas` adds: those whose slug or (case-insensitive) title isn't
+    among `items` (in any state) nor an earlier idea in `ideas`; in order."""
+    slugs = {i.slug for i in items}
+    titles = {i.title.casefold() for i in items}
+    fresh: list[Idea] = []
+    for idea in ideas:
+        slug = reader.slug(idea.title, ())
+        title = idea.title.casefold()
+        if title in titles or slug in slugs:
+            continue
+        fresh.append(idea)
+        slugs.add(slug)
+        titles.add(title)
+    return fresh
+
+
 class LiveBacklog(Backlog):
     """The queue in `app.backlog_file`; adding an item also writes its brief."""
 
@@ -73,22 +120,10 @@ class LiveBacklog(Backlog):
         self._ideas = ideas
 
     def _load(self) -> list[BacklogItem]:
-        path = self._app.backlog_file
-        data = self._files.read_json(path)
-        if data is None:
-            return []
-        if not isinstance(data, dict) or data.get("format") != _FORMAT:
-            raise FileFormatError(f"{path}: expected a format {_FORMAT} backlog")
-        raw_items = data.get("items")
-        if not isinstance(raw_items, list):
-            raise FileFormatError(f"{path}: `items` must be a list")
-        return [_from_json(raw, str(path)) for raw in raw_items]
+        return read_backlog(self._app, self._files)
 
     def _save(self, items: Sequence[BacklogItem]) -> None:
-        self._files.write_json(
-            self._app.backlog_file,
-            {"format": _FORMAT, "items": [_to_json(i) for i in items]},
-        )
+        write_backlog(self._app, self._files, items)
 
     def _new_item(self, idea: Idea, taken: Sequence[BacklogItem]) -> BacklogItem:
         slug = self._ideas.slug(idea.title, {i.slug for i in taken})
@@ -116,14 +151,7 @@ class LiveBacklog(Backlog):
         in any state; ideas earlier in `ideas` count too."""
         items = self._load()
         added: list[BacklogItem] = []
-        for idea in ideas:
-            slugs = {i.slug for i in items}
-            titles = {i.title.casefold() for i in items}
-            if (
-                idea.title.casefold() in titles
-                or self._ideas.slug(idea.title, ()) in slugs
-            ):
-                continue
+        for idea in new_ideas(ideas, items, self._ideas):
             item = self._new_item(idea, items)
             items.append(item)
             added.append(item)
