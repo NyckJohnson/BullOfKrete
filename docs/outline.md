@@ -1131,7 +1131,10 @@ when `readers.py` defines `detect`.
     memo has none), depends, one unit per `Files` group (state pending, attempts 1),
     `reference_tests` true when the memo line is non-empty; while adopting, a module with
     `Legacy files` gets a final switch-over unit (no files); existing modules past pending →
-    refused unless `replace`.
+    refused unless `replace`. With `replace`, a module still in the memo keeps each unit whose
+    number, kind and files are unchanged (state and attempts kept); other units start pending with
+    attempts 1; the module keeps its state (and scan record) when every unit was kept, else becomes `in_progress` if
+    any unit is past pending, else `pending`. Modules no longer in the memo are dropped.
   - set_module(M, in_progress): every dependency must be done, else refused naming them; unknown
     module → refused with "did you mean `Counter`?" for a case-insensitive match, else the list of
     modules. done: every unit done.
@@ -1177,6 +1180,52 @@ when `readers.py` defines `detect`.
     `adopted`), sorted.
   - cli: every `bull status …` command in **Commands**; refusals exit 1 with the reason; `usage-check`
     prints `OK|PAUSE|UNKNOWN: <reason>` (exit 0 for all three; `--json` gives the fields).
+- Construction (internal; not contracts):
+  - model.py: `status_from_json(data: object) -> Status` (malformed → `FileFormatError` naming
+    the field) and `status_to_json(status: Status) -> dict[str, object]`; times are ISO 8601 UTC
+    with `Z`.
+  - store.py: `LiveStatusStore(app: AppLayout, files: Files, events: EventLog, clock: Clock,
+    settings: Settings, parts: Parts, memo_reader: MemoReader)`. It owns create, load, mode and the
+    write path (load → apply → validate → atomic write → one `status` event, whose `what` is the
+    method name). Every other change method delegates to a pure function in transitions.py or
+    modules.py with the same name and arguments, taking the current `Status` first and keyword-only
+    context (`now: datetime`, `max_attempts: int`, `known_parts`, `max_files`, `problems`) as it
+    needs, returning the new `Status` (`attempt` → `tuple[Status, Unit]`, `take_approval` →
+    `tuple[Status, Approval | None]`) and raising `StatusError` on refusal. modules.py holds
+    init_modules, set_module, reopen, add_modules; transitions.py holds the rest. Unit 2 may add
+    those functions as `NotImplementedError` stubs; unit 3 implements and tests them (directly and
+    through the store).
+  - attempt at the limit: `transitions.attempt` returns the new `Status` with the unit `blocked`;
+    the store writes it and logs the `status` event, then raises `StatusError` "unit n blocked
+    after <max_attempts> attempts; ask the human" (the one refusal that saves its change).
+  - Unit 3 also finishes the store side (it may edit store.py and model.py): attempt at the limit
+    as above; a no-op change (checkpoint recorded twice, resume when not paused, take_approval with
+    none) writes nothing and logs nothing; `pause` logs `status` + `pause`, `resume` `status` +
+    `resume`, `approve` `status` + `decision` (tests pin the exact event set); init_modules and
+    add_modules pass `known_parts` and `problems` through; `status_from_json` refuses stage
+    outside 0–6, attempts or unit number < 1 and negative scan counts, naming the field.
+  - next_step.py: pure `next_step(status: Status, mode: Mode, refs: Refs, branch: str | None) ->
+    NextStep` (`branch` = current git branch, None when unknown). summary.py (unit 4) holds
+    `LiveProgress(store: StatusStore, refs: Refs, git: Git)`, which calls it.
+  - summary.py: `LiveProgress(app: AppLayout, store: StatusStore, refs: Refs, git: Git)`;
+    each call loads the status once and derives the mode from it;
+    next_step uses `git.current_branch(app.root)`; tags uses `git.tags(app.root, …)`.
+  - cli.py (decisions-log convention): `register(commands, store: Callable[[], StatusStore], refs:
+    Callable[[], Refs], progress: Callable[[], Progress], usage: Callable[[], Usage], memo:
+    Callable[[], Memo]) -> None` (`memo` = the parsed `docs/outline.md`, built by `cli.wiring`).
+    Routing `status` to stackflow in a stack repo is `cli.wiring`'s job; here a stack repo is
+    refused through `store.load()`.
+  - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
+    one `store.load()` (mode derived from that status, as `mode` does), the trunk from `settings.get("base_branch", None)`.
+  - Guards (coverage triage, approved 2026-11-08): a naive time (e.g. from the clock) is treated as UTC, so the change saves; a module with
+    no part when the app has no parts → refused ("add a part with `bull part add`"); reopen with no
+    unit holding any of the files → refused (files no unit holds are otherwise ignored);
+    add_modules with an existing name → refused; build-order names match module blocks case-insensitively (as memo problems do; the block's name is used); a build-order entry with no module block → refused; no module in progress, none can start, not all
+    done → "no module can start (not done: <M>, …): ask the human"; `base_branch` empty or not a
+    string → refused; `max_attempts` / `max_files_per_unit` not an integer → refused; end_feature
+    and mark_contract_applied with no active feature → refused; mark_contract_applied twice →
+    no-op; start_adoption while an adoption or a feature is active → refused; abandon_adoption
+    clears the adoption, leaves the app track as it was, and is refused when none is active.
 - Anticipated operations (not built yet): time totals from the event log.
 - Reference tests: v1-tests/test_adopt_status.py (all cases except test_start_needs_a_clean_tree_on_the_trunk, test_finish_waits_for_verify, test_abandon_keeps_the_trunk_and_carries_the_backlog, test_app_shell_tests_are_not_old_tests, which map to adoption); v1-tests/test_parts.py::test_modules_get_their_part; v1-tests/test_gate_speed.py::test_wrong_case_suggests_the_module, test_unknown_module_lists_the_modules
 - Contract: see `docs/api/status.md` (generated; do not edit by hand)
@@ -2010,3 +2059,8 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: stacks spec clarifications from coverage triage (flagged to the human at the module boundary): `select` refuses with `StackError`, writing nothing, when `config.toml` can't be edited safely; `rules` without a `## common` section returns the agent's section alone, and `rules(stack, "common")` returns that section once.
 - 2026-11-08: parts spec clarifications from review (flagged to the human at the module boundary): a stack's slash-free `.gitignore` line keeps its any-depth meaning under a part folder (`__pycache__/` → `web/**/__pycache__/`; middle-slash lines → `web/<line>`; `/x` → `/web/x`); `part add` refuses a folder that resolves outside the app (symlinks followed), rolls back every write on failure, and creates the part's source and test folders; `part check` also reports missing source/test folders and bad `dir` values; `is_test_path` resolves paths and is false outside the app.
 - 2026-11-08: parts reference scan (covered 8, missed 2, contradicts 2, not-in-spec 3, obsolete 1) — `part check` prints `no problems` on success; a stack's unanchored gitignore lines stay scoped to the part (`web/**/x`, not v1's unchanged copy); the spec line about moving `/`-anchored `.gitignore` lines on the first `part add` is deleted (v1 never did it; a no-op at `.`); `part add` refuses `dir` at or inside `.bull`, `.git`, `docs`, `interfaces` — approved by Nicholas Johnson
+- 2026-11-08: status construction (store/refs constructors, model.py functions, store delegating to pure functions in transitions.py/modules.py) set in the status § "Construction" line; internal wiring, no contract change.
+- 2026-11-08: status `attempt` at the limit saves the `blocked` state, then refuses (store raises after writing); found by the unit 2 code-writer.
+- 2026-11-08: status reference scan (covered 14, missed 0, contradicts 0, not-in-spec 4, obsolete 4) — human: `init-modules --replace` keeps unchanged units' progress (v1 behavior; spec line added under init_modules); `bull status` shows no per-part lines (`bull part list` covers it); finish's "not adopted"/legacy-left refusals belong to the adoption module, already specified there.
+- 2026-11-08: status coverage triage — human approved specifying and testing 12 code-writer guards (listed under status Behavior spec "Guards"). Open for the features module: a `Changes` line naming a file new to an existing module (no unit holds it yet) is refused by `reopen`; features must decide how new files join a module.
+- 2026-11-08: status exemption review — refs and LiveProgress derive mode from one load; naive clock times are treated as UTC (they made every save fail); build order matches module blocks case-insensitively like memo problems. No contract change.
