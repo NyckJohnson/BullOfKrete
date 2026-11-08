@@ -52,7 +52,7 @@
             "mocks/__init__.py",
             "git.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T00:26:03-08:00",
+  "updatedAt": "2026-11-08T00:27:29-08:00",
   "features": [],
   "activeFeature": null
 }
