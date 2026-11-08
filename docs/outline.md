@@ -1131,7 +1131,10 @@ when `readers.py` defines `detect`.
     memo has none), depends, one unit per `Files` group (state pending, attempts 1),
     `reference_tests` true when the memo line is non-empty; while adopting, a module with
     `Legacy files` gets a final switch-over unit (no files); existing modules past pending →
-    refused unless `replace`.
+    refused unless `replace`. With `replace`, a module still in the memo keeps each unit whose
+    number, kind and files are unchanged (state and attempts kept); other units start pending with
+    attempts 1; the module keeps its state when every unit was kept, else becomes `in_progress` if
+    any unit is past pending, else `pending`. Modules no longer in the memo are dropped.
   - set_module(M, in_progress): every dependency must be done, else refused naming them; unknown
     module → refused with "did you mean `Counter`?" for a case-insensitive match, else the list of
     modules. done: every unit done.
@@ -2048,3 +2051,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: parts reference scan (covered 8, missed 2, contradicts 2, not-in-spec 3, obsolete 1) — `part check` prints `no problems` on success; a stack's unanchored gitignore lines stay scoped to the part (`web/**/x`, not v1's unchanged copy); the spec line about moving `/`-anchored `.gitignore` lines on the first `part add` is deleted (v1 never did it; a no-op at `.`); `part add` refuses `dir` at or inside `.bull`, `.git`, `docs`, `interfaces` — approved by Nicholas Johnson
 - 2026-11-08: status construction (store/refs constructors, model.py functions, store delegating to pure functions in transitions.py/modules.py) set in the status § "Construction" line; internal wiring, no contract change.
 - 2026-11-08: status `attempt` at the limit saves the `blocked` state, then refuses (store raises after writing); found by the unit 2 code-writer.
+- 2026-11-08: status reference scan (covered 14, missed 0, contradicts 0, not-in-spec 4, obsolete 4) — human: `init-modules --replace` keeps unchanged units' progress (v1 behavior; spec line added under init_modules); `bull status` shows no per-part lines (`bull part list` covers it); finish's "not adopted"/legacy-left refusals belong to the adoption module, already specified there.
