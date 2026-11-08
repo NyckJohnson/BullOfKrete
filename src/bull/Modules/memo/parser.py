@@ -46,8 +46,14 @@ def _numbered_lines(text: str) -> list[_Line]:
     return result
 
 
-def _sections(text: str) -> dict[str, list[_Line]]:
-    """The lines under each `## <heading>` (the first section of a name wins)."""
+def _sections(
+    text: str, problems: list[MemoProblem] | None = None
+) -> dict[str, list[_Line]]:
+    """The lines under each `## <heading>` (the first section of a name wins).
+
+    A later section with the same heading is skipped and, when `problems` is given,
+    reported there on its heading line.
+    """
     sections: dict[str, list[_Line]] = {}
     current: list[_Line] | None = None
     for number, line in _numbered_lines(text):
@@ -56,6 +62,10 @@ def _sections(text: str) -> dict[str, list[_Line]]:
             heading = match.group(1)
             if heading in sections:
                 current = None
+                if problems is not None:
+                    problems.append(
+                        MemoProblem(number, f"duplicate section `## {heading}`")
+                    )
             else:
                 current = []
                 sections[heading] = current
@@ -293,7 +303,8 @@ class LiveMemoReader(MemoReader):
     """Reads `docs/outline.md` text into a `Memo` and checks it for problems."""
 
     def parse(self, text: str) -> Memo:
-        sections = _sections(text)
+        parse_problems: list[MemoProblem] = []
+        sections = _sections(text, parse_problems)
         legacy_lines = sections.get("Legacy code")
         return Memo(
             build_order=_build_order(sections.get("Build order", [])),
@@ -311,6 +322,7 @@ class LiveMemoReader(MemoReader):
                 _items(sections.get("Unmapped reference tests", []))
             ),
             legacy=_legacy(legacy_lines) if legacy_lines is not None else None,
+            parse_problems=tuple(parse_problems),
         )
 
     def section_items(self, text: str, heading: str) -> list[str]:

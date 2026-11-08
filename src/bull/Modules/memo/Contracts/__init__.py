@@ -69,10 +69,14 @@ class Memo:
     parts: tuple[str, ...]
     unmapped_reference_tests: tuple[str, ...]
     legacy: LegacySection | None
+    parse_problems: tuple[MemoProblem, ...] = ()
+    """Problems found while parsing (e.g. a duplicate `## <heading>` section)."""
 
 
 @dataclass(frozen=True)
 class MemoProblem:
+    """One problem in the memo: its 1-based source line (0 when unknown) and message."""
+
     line: int
     message: str
 

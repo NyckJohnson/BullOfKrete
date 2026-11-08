@@ -26,7 +26,7 @@ def memo_problems(
 
     `known_parts` are the app's configured parts; `max_files` is the most files a unit may hold.
     """
-    problems: list[MemoProblem] = []
+    problems: list[MemoProblem] = list(memo.parse_problems)
     builds = _first_by_name(memo.build_order, problems, "build order entry")
     modules = _first_by_name(memo.modules, problems, "module block")
     problems += _build_order_problems(memo.build_order, builds, modules)
@@ -213,10 +213,26 @@ def _interface_problems(
 ) -> list[MemoProblem]:
     problems: list[MemoProblem] = []
     for interface in memo.interfaces:
+        if not interface.format:
+            problems.append(
+                MemoProblem(
+                    _NO_LINE,
+                    f"interface `{interface.name}`: `File: {interface.file}` needs "
+                    "`(<format>)`",
+                )
+            )
         sides: list[tuple[str, SideRef]] = [("provider", interface.provider)]
         sides += [("consumer", side) for side in interface.consumers]
         for role, side in sides:
-            if side.part not in known_parts:
+            if not side.part:
+                problems.append(
+                    MemoProblem(
+                        _NO_LINE,
+                        f"interface `{interface.name}`: {role} `{side.module}` needs "
+                        "`<part> / <Module>`",
+                    )
+                )
+            elif side.part not in known_parts:
                 problems.append(
                     MemoProblem(
                         _NO_LINE,
