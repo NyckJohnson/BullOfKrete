@@ -664,3 +664,44 @@ def test_abandon_adoption_clears_the_adoption() -> None:
     new = transitions.abandon_adoption(at(0, adoption=Track(3, ("setup",))))
     assert new.adoption is None
     assert new.app.stage == 0
+
+
+# --- coverage triage: feature and adoption guards ------------------------------------------
+
+
+def test_end_feature_without_an_active_feature_is_refused() -> None:
+    with pytest.raises(StatusError):
+        transitions.end_feature(ACCEPTED)
+
+
+def test_mark_contract_applied_without_an_active_feature_is_refused() -> None:
+    with pytest.raises(StatusError):
+        transitions.mark_contract_applied(ACCEPTED, "Store")
+
+
+def test_mark_contract_applied_twice_is_a_no_op() -> None:
+    active = replace(ACCEPTED, feature=ActiveFeature("one", Track(3, ()), ("Store",)))
+    assert transitions.mark_contract_applied(active, "Store") == active
+
+
+def test_start_adoption_refused_while_an_adoption_is_active() -> None:
+    with pytest.raises(StatusError):
+        transitions.start_adoption(at(0, adoption=Track(1, ())))
+
+
+def test_start_adoption_refused_while_a_feature_is_active() -> None:
+    active = ActiveFeature("one", Track(2, ()), ())
+    with pytest.raises(StatusError):
+        transitions.start_adoption(at(0, feature=active))
+
+
+def test_abandon_adoption_leaves_the_app_track_as_it_was() -> None:
+    base = at(2, ("outline-approved",), adoption=Track(3, ("setup",)))
+    new = transitions.abandon_adoption(base)
+    assert new.adoption is None
+    assert new.app == Track(2, ("outline-approved",))
+
+
+def test_abandon_adoption_without_an_adoption_is_refused() -> None:
+    with pytest.raises(StatusError):
+        transitions.abandon_adoption(EMPTY)

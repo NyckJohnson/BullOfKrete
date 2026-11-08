@@ -593,3 +593,279 @@ def test_set_module_through_the_store_logs_a_status_event() -> None:
     env.store.set_module("Counter", ModuleState.BLOCKED)
     assert [e.data["what"] for e in env.events.events] == ["set_module"]
     assert env.on_disk()["modules"][1]["state"] == "blocked"
+
+
+# --- coverage triage: every remaining change through the store ------------------------------
+
+ACCEPTED_CPS = (
+    "outline-approved",
+    "setup",
+    "skeleton",
+    "ui-approved",
+    "app-accepted",
+)
+
+
+def accepted() -> Status:
+    return replace(sample_status(), app=Track(6, ACCEPTED_CPS))
+
+
+def whats(env: Env) -> list[object]:
+    return [e.data["what"] for e in env.events.events if e.kind == EventKind.STATUS]
+
+
+def with_counter(**changes: Any) -> Status:
+    base = sample_status()
+    return replace(base, modules=(base.modules[0], replace(base.modules[1], **changes)))
+
+
+def test_unblock_returns_the_unit_to_tests_with_one_attempt_and_logs() -> None:
+    env = Env()
+    seed_counter_unit(env, UnitState.BLOCKED, 3)
+    env.store.unblock("Counter", 1)
+    unit = model.status_from_json(env.on_disk()).modules[1].units[0]
+    assert (unit.state, unit.attempts) == (UnitState.TESTS, 1)
+    assert whats(env) == ["unblock"]
+
+
+def test_record_scan_stores_the_counts_with_the_time_from_the_clock() -> None:
+    env = Env()
+    env.seed(with_counter(reference_tests=True))
+    env.store.record_scan("Counter", 4, 3, 2, 1)
+    scan = model.status_from_json(env.on_disk()).modules[1].scan
+    assert scan is not None
+    assert (scan.covered, scan.missed, scan.contradicts, scan.not_in_spec) == (
+        4,
+        3,
+        2,
+        1,
+    )
+    assert scan.time == MockClock().time
+    assert whats(env) == ["record_scan"]
+
+
+def test_record_scan_for_a_module_without_reference_tests_is_refused() -> None:
+    env = Env()
+    env.seed(sample_status())
+    with pytest.raises(StatusError):
+        env.store.record_scan("Counter", 1, 0, 0, 0)
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_set_plan_writes_the_plan_and_logs() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_plan("verify", ["login", "export"])
+    plan = model.status_from_json(env.on_disk()).plan
+    assert plan is not None
+    assert plan.label == "verify"
+    assert [(i.name, i.done) for i in plan.items] == [
+        ("login", False),
+        ("export", False),
+    ]
+    assert whats(env) == ["set_plan"]
+
+
+def test_tick_marks_the_item_done_and_logs() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_plan("verify", ["login", "export"])
+    env.events.events.clear()
+    env.store.tick("login")
+    plan = model.status_from_json(env.on_disk()).plan
+    assert plan is not None
+    assert [(i.name, i.done) for i in plan.items] == [
+        ("login", True),
+        ("export", False),
+    ]
+    assert whats(env) == ["tick"]
+
+
+def test_tick_of_an_unknown_item_is_refused_and_writes_nothing() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_plan("verify", ["login"])
+    before = env.files.texts[LAYOUT.status_file]
+    env.events.events.clear()
+    with pytest.raises(StatusError):
+        env.store.tick("nope")
+    assert env.files.texts[LAYOUT.status_file] == before
+    assert env.events.events == []
+
+
+def test_clear_plan_removes_the_plan_and_logs() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_plan("verify", ["login"])
+    env.events.events.clear()
+    env.store.clear_plan()
+    assert env.on_disk()["plan"] is None
+    assert whats(env) == ["clear_plan"]
+
+
+def test_start_feature_writes_the_feature_track_and_logs() -> None:
+    env = Env()
+    env.seed(accepted())
+    env.store.start_feature("dark-mode")
+    feature = model.status_from_json(env.on_disk()).feature
+    assert feature == ActiveFeature("dark-mode", Track(1, ()), ())
+    assert whats(env) == ["start_feature"]
+
+
+def test_end_feature_clears_the_feature_and_logs() -> None:
+    env = Env()
+    env.seed(replace(accepted(), feature=ActiveFeature("one", Track(2, ()), ())))
+    env.store.end_feature()
+    assert env.on_disk()["feature"] is None
+    assert whats(env) == ["end_feature"]
+
+
+def test_end_feature_without_a_feature_is_refused_and_writes_nothing() -> None:
+    env = Env()
+    env.seed(accepted())
+    with pytest.raises(StatusError):
+        env.store.end_feature()
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_mark_contract_applied_records_the_module_and_logs() -> None:
+    env = Env()
+    env.seed(replace(accepted(), feature=ActiveFeature("one", Track(3, ()), ())))
+    env.store.mark_contract_applied("Store")
+    feature = model.status_from_json(env.on_disk()).feature
+    assert feature is not None
+    assert feature.applied_contracts == ("Store",)
+    assert whats(env) == ["mark_contract_applied"]
+
+
+def test_mark_contract_applied_twice_writes_and_logs_only_once() -> None:
+    env = Env()
+    env.seed(replace(accepted(), feature=ActiveFeature("one", Track(3, ()), ())))
+    env.store.mark_contract_applied("Store")
+    env.events.events.clear()
+    env.files.calls.clear()
+    env.store.mark_contract_applied("Store")
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_mark_contract_applied_without_a_feature_is_refused() -> None:
+    env = Env()
+    env.seed(accepted())
+    with pytest.raises(StatusError):
+        env.store.mark_contract_applied("Store")
+    assert env.status_writes() == []
+
+
+def test_reopen_resets_the_units_holding_the_files_and_logs() -> None:
+    env = Env()
+    base = sample_status()
+    store_mod = base.modules[0]
+    env.seed(replace(base, modules=(store_mod, base.modules[1])))
+    env.store.reopen("Store", ["store.fx"])
+    new = model.status_from_json(env.on_disk())
+    assert new.modules[0].state == ModuleState.PENDING
+    assert new.modules[0].units[0].state == UnitState.PENDING
+    assert whats(env) == ["reopen"]
+
+
+def test_reopen_with_unknown_files_is_refused_and_writes_nothing() -> None:
+    env = Env()
+    env.seed(sample_status())
+    with pytest.raises(StatusError):
+        env.store.reopen("Store", ["nowhere.fx"])
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_start_adoption_writes_the_adoption_track_and_logs() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    env.store.start_adoption()
+    assert model.status_from_json(env.on_disk()).adoption == Track(1, ())
+    assert whats(env) == ["start_adoption"]
+
+
+def test_start_adoption_while_a_feature_is_active_is_refused() -> None:
+    env = Env()
+    env.seed(replace(EMPTY, feature=ActiveFeature("one", Track(2, ()), ())))
+    with pytest.raises(StatusError):
+        env.store.start_adoption()
+    assert env.status_writes() == []
+
+
+def test_finish_adoption_records_app_accepted_clears_the_adoption_and_logs() -> None:
+    env = Env()
+    env.seed(
+        replace(
+            EMPTY,
+            adoption=Track(6, ("outline-approved", "setup", "baseline", "scaffold")),
+        )
+    )
+    env.store.finish_adoption()
+    new = model.status_from_json(env.on_disk())
+    assert new.adoption is None
+    assert new.app.stage == 6
+    assert "app-accepted" in new.app.checkpoints
+    assert whats(env) == ["finish_adoption"]
+
+
+def test_abandon_adoption_clears_it_keeps_the_app_track_and_logs() -> None:
+    env = Env()
+    env.seed(
+        replace(
+            EMPTY, app=Track(0, ()), adoption=Track(3, ("outline-approved", "setup"))
+        )
+    )
+    env.store.abandon_adoption()
+    new = model.status_from_json(env.on_disk())
+    assert new.adoption is None
+    assert new.app == Track(0, ())
+    assert whats(env) == ["abandon_adoption"]
+
+
+def test_abandon_adoption_without_an_adoption_is_refused() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    with pytest.raises(StatusError):
+        env.store.abandon_adoption()
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_set_unit_to_the_current_state_writes_nothing_and_logs_nothing() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_unit("Counter", 1, UnitState.TESTS)
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+# --- coverage triage: setting guards -------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["three", True])
+def test_attempt_refuses_a_max_attempts_setting_that_is_not_an_integer(
+    value: object,
+) -> None:
+    env = Env()
+    seed_counter_unit(env, UnitState.CODE, 1)
+    env.settings.app["max_attempts"] = value  # type: ignore[assignment]
+    with pytest.raises(StatusError) as caught:
+        env.store.attempt("Counter", 1)
+    assert "max_attempts" in caught.value.message
+    assert env.status_writes() == []
+
+
+def test_init_modules_refuses_a_max_files_per_unit_setting_that_is_not_an_integer() -> (
+    None
+):
+    env = Env()
+    env.seed(EMPTY)
+    env.settings.app["max_files_per_unit"] = "many"  # type: ignore[assignment]
+    with pytest.raises(StatusError) as caught:
+        env.store.init_modules(env.reader.memo)
+    assert "max_files_per_unit" in caught.value.message
+    assert env.status_writes() == []

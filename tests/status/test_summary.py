@@ -229,3 +229,31 @@ def test_tags_has_no_duplicates(rig: Rig) -> None:
     rig.git.tag_names = ["setup", "module/Store"]
     result = rig.progress.tags()
     assert result == sorted(set(result))
+
+
+# --- coverage triage: an active adoption -----------------------------------------------------
+
+
+def adopting() -> Rig:
+    rig = Rig()
+    adoption = Track(3, ("outline-approved", "setup"))
+    rig.store.status = replace(rig.store.status, adoption=adoption)
+    return rig
+
+
+def test_summary_shows_the_adoptions_stage_mode_and_checkpoints() -> None:
+    text = adopting().progress.summary()
+    assert "stage 3" in text.lower()
+    assert "adopt" in text.lower()
+    assert "outline-approved" in text
+    assert "setup" in text
+    assert "skeleton" not in text
+
+
+def test_as_json_with_an_adoption_has_the_adopt_mode_and_adoption_track() -> None:
+    data = adopting().progress.as_json()
+    assert data["mode"] == "adopt"
+    assert data["adoption"] == {
+        "stage": 3,
+        "checkpoints": ["outline-approved", "setup"],
+    }

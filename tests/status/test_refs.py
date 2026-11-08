@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from bull.Modules.settings.mocks import MockSettings
+from bull.Modules.status.Contracts import StatusError
 from bull.Modules.status.mocks import MockStatusStore, sample_status
 from bull.Modules.status.refs import LiveRefs
 
@@ -162,3 +163,29 @@ def test_module_for_branch_in_adopt_mode() -> None:
 def test_module_for_branch_in_adopt_mode_ignores_other_branches(branch: str) -> None:
     refs, _, _ = make("adopt")
     assert refs.module_for_branch(branch) is None
+
+
+# --- coverage triage: other modes' branches, bad branch names, base_branch guard ----------
+
+
+@pytest.mark.parametrize("branch", ["module/Counter", "main", "adopt/module/Counter"])
+def test_module_for_branch_in_feature_mode_is_none_for_a_branch_of_another_mode(
+    branch: str,
+) -> None:
+    refs, _, _ = make("feature")
+    assert refs.module_for_branch(branch) is None
+
+
+@pytest.mark.parametrize("branch", ["module/", "module/Counter/extra"])
+def test_module_for_branch_without_a_single_module_name_is_none(branch: str) -> None:
+    refs, _, _ = make()
+    assert refs.module_for_branch(branch) is None
+
+
+@pytest.mark.parametrize("value", ["", 5, True])
+def test_trunk_refuses_an_empty_or_non_string_base_branch(value: object) -> None:
+    refs, _, settings = make()
+    settings.app["base_branch"] = value  # type: ignore[assignment]
+    with pytest.raises(StatusError) as caught:
+        refs.trunk()
+    assert "base_branch" in caught.value.message

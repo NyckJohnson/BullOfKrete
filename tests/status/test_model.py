@@ -357,3 +357,52 @@ def test_from_json_accepts_a_zero_scan_count(field: str) -> None:
     scan = status.modules[1].scan
     assert scan is not None
     assert getattr(scan, field) == 0
+
+
+# --- coverage triage: stricter field checks and time handling -----------------------------
+
+
+@pytest.mark.parametrize("value", [5, ["Counter"], True])
+def test_from_json_rejects_a_pause_unit_that_is_not_a_string_or_null(
+    value: object,
+) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["pause", "unit"], value))
+    assert "pause.unit" in caught.value.message
+
+
+def test_from_json_accepts_a_null_pause_unit() -> None:
+    status = model.status_from_json(mutated(["pause", "unit"], None))
+    assert status.pause is not None
+    assert status.pause.unit is None
+
+
+@pytest.mark.parametrize(
+    "text", ["2026-11-07T12:00:00", "2026-11-07 12:00:00", "2026-11-07"]
+)
+def test_from_json_rejects_a_time_without_a_timezone(text: str) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["pause", "since"], text))
+    assert "since" in caught.value.message
+
+
+@pytest.mark.parametrize("value", [2, 0, "1"])
+def test_from_json_rejects_a_format_other_than_1(value: object) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["format"], value))
+    assert "format" in caught.value.message
+
+
+@pytest.mark.parametrize("value", ["stack", "other", 1, None])
+def test_from_json_rejects_a_kind_other_than_app(value: object) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["kind"], value))
+    assert "kind" in caught.value.message
+
+
+def test_to_json_writes_a_naive_time_as_utc_with_z() -> None:
+    status = replace(
+        full_status(), pause=Pause("usage", datetime(2026, 11, 7, 12, 0, 0), None)
+    )
+    data: Any = model.status_to_json(status)
+    assert data["pause"]["since"] == TIME_TEXT

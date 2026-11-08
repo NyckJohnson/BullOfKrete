@@ -426,3 +426,12 @@ def test_store_load_refusal_propagates_from_next(rig: Rig) -> None:
     args = rig.parser.parse_args(["status", "next"])
     with pytest.raises(StatusError, match="not a bull app"):
         args.run(args, io.StringIO())
+
+
+# --- coverage triage: plan needs items or --clear ----------------------------------------
+
+
+def test_plan_without_items_and_without_clear_is_refused(rig: Rig) -> None:
+    with pytest.raises(StatusError):
+        rig.run("plan", "verify")
+    assert called(rig) == []

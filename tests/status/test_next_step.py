@@ -415,3 +415,28 @@ def test_adopt_switch_prefix_names_the_adopt_module_branch() -> None:
     mods = (module("Counter", ModuleState.IN_PROGRESS, (unit(1, UnitState.TESTS),)),)
     text = adopt_step(adopt_status(5, mods), "main").text
     assert text.startswith("switch to adopt/module/Counter, then")
+
+
+# --- coverage triage: nothing can start ----------------------------------------------------
+
+
+def test_stage_5_with_no_module_able_to_start_says_which_are_not_done() -> None:
+    mods = (
+        module("Counter", depends=("Store",)),
+        module("Store", depends=("Counter",)),
+    )
+    assert (
+        step(app(5, mods)).text
+        == "no module can start (not done: Counter, Store): ask the human"
+    )
+
+
+def test_stage_5_stuck_list_leaves_out_finished_modules() -> None:
+    mods = (
+        module("Store", ModuleState.DONE),
+        module("Counter", depends=("Cache",)),
+        module("Cache", depends=("Counter",)),
+    )
+    text = step(app(5, mods)).text
+    assert "not done: Counter, Cache" in text
+    assert "Store" not in text

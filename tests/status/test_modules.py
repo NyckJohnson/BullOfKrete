@@ -577,3 +577,41 @@ def test_add_modules_keeps_a_named_part() -> None:
         sample_status(), [entry("Cache", part="web")], known_parts=("app", "web")
     )
     assert by_name(new, "Cache").part == "web"
+
+
+# --- coverage triage: guards ---------------------------------------------------------------
+
+
+def test_add_modules_refuses_a_module_with_no_part_when_the_app_has_no_parts() -> None:
+    with pytest.raises(StatusError) as caught:
+        modules.add_modules(sample_status(), [entry("Cache")], known_parts=())
+    assert "bull part add" in reason(caught)
+
+
+def test_init_modules_refuses_a_module_with_no_part_when_the_app_has_no_parts() -> None:
+    with pytest.raises(StatusError) as caught:
+        init(memo_of(entry("Store")), known_parts=())
+    assert "bull part add" in reason(caught)
+
+
+def test_add_modules_refuses_a_name_that_already_exists() -> None:
+    with pytest.raises(StatusError) as caught:
+        modules.add_modules(sample_status(), [entry("Store")], known_parts=PARTS)
+    assert "Store" in reason(caught)
+
+
+def test_reopen_refuses_when_no_unit_holds_any_of_the_files() -> None:
+    with pytest.raises(StatusError):
+        modules.reopen(done_store(), "Store", ["nowhere.py"])
+
+
+def test_reopen_refuses_an_empty_file_list() -> None:
+    with pytest.raises(StatusError):
+        modules.reopen(done_store(), "Store", [])
+
+
+def test_reopen_ignores_files_no_unit_holds_when_some_match() -> None:
+    new = modules.reopen(done_store(), "Store", ["store.py", "nowhere.py"])
+    first, second = by_name(new, "Store").units
+    assert first.state == UnitState.PENDING
+    assert second == done_store().modules[0].units[1]
