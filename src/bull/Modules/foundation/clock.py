@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from bull.Modules.foundation.Contracts import Clock
 
 
 class LiveClock(Clock):
     def now(self) -> datetime:
-        raise NotImplementedError(f"{type(self).__name__}.now")
+        return datetime.now(UTC)
