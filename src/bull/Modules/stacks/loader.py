@@ -41,7 +41,7 @@ def load_readers(folder: Path, name: str) -> tuple[StackReaders, OptionalReaders
     )
     module_spec = importlib.util.spec_from_file_location(module_name, path)
     if package_spec is None or module_spec is None or module_spec.loader is None:
-        raise StackError(f"Cannot import {path}.", _FIX)
+        raise StackError(f"Cannot import {path}.", _FIX)  # coverage-exempt: importlib returns a spec for any .py path; None is only a typing guard
     package_spec.submodule_search_locations = [str(folder)]
     package = importlib.util.module_from_spec(package_spec)
     sys.modules[package_name] = package
