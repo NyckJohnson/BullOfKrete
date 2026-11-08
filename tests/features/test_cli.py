@@ -365,8 +365,8 @@ def test_plan_output_has_one_reopened_line_per_module_and_skeleton_line_last(
             skeleton_needed=False,
         ),
     )
-    assert any(l.startswith("Reopened Counter: unit 1") for l in lines)
-    assert any(l.startswith("Reopened Export: unit 2") for l in lines)
+    assert any(line.startswith("Reopened Counter: unit 1") for line in lines)
+    assert any(line.startswith("Reopened Export: unit 2") for line in lines)
     assert lines[-1] == "Skeleton needed: no"
     assert "Nothing to reopen or add." not in lines
 
@@ -381,8 +381,8 @@ def test_plan_output_lists_new_modules_when_there_are_some(rig: Rig) -> None:
             skeleton_needed=True,
         ),
     )
-    assert any(l.startswith("New modules:") and "Export" in l for l in lines)
-    assert not any(l.startswith("Contract changes:") for l in lines)
+    assert any(line.startswith("New modules:") and "Export" in line for line in lines)
+    assert not any(line.startswith("Contract changes:") for line in lines)
     assert "Nothing to reopen or add." not in lines
     assert lines[-1] == "Skeleton needed: yes"
 
@@ -397,8 +397,10 @@ def test_plan_output_lists_contract_changes_when_there_are_some(rig: Rig) -> Non
             skeleton_needed=True,
         ),
     )
-    assert any(l.startswith("Contract changes:") and "Counter" in l for l in lines)
-    assert not any(l.startswith("New modules:") for l in lines)
+    assert any(
+        line.startswith("Contract changes:") and "Counter" in line for line in lines
+    )
+    assert not any(line.startswith("New modules:") for line in lines)
     assert lines[-1] == "Skeleton needed: yes"
 
 
