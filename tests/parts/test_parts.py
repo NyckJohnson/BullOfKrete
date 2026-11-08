@@ -946,3 +946,202 @@ def test_add_at_dot_refused_when_a_moved_root_part_app_is_at_the_root(
     with pytest.raises(BullError):
         make().add(app, "web", "fixture", ".")
     assert snapshot(app.root) == before
+
+
+# ------------------------------------- stack layer handed to the settings loader
+
+
+def _recorded_stack_layer(tmp_path: Path, config: str) -> Any:
+    from bull.Modules.settings.mocks import MockSettingsLoader
+
+    app = new_app(tmp_path, config=config)
+    loader = MockSettingsLoader(loader_with().settings)
+    LiveParts(MockStackRegistry(), loader).all(app)
+    (_, (_, stack_layer)) = loader.calls[-1]
+    return stack_layer
+
+
+def test_stack_layer_for_a_known_stack_is_its_manifest_settings(
+    tmp_path: Path,
+) -> None:
+    layer = _recorded_stack_layer(tmp_path, CONFIG_WITH_STACK)("fixture")
+    expected = MockStackRegistry().get("fixture").manifest.settings
+    assert layer == expected
+    assert layer.values["source_dir"] == "src/fx"
+    assert layer.values["test_dir"] == "tests"
+
+
+def test_stack_layer_for_an_unknown_stack_is_empty(tmp_path: Path) -> None:
+    layer = _recorded_stack_layer(tmp_path, CONFIG_WITH_STACK)("nope")
+    assert layer.schema == ()
+    assert dict(layer.values) == {}
+
+
+def test_check_still_reports_an_unknown_stack(tmp_path: Path) -> None:
+    app = new_app(tmp_path, config='format = 1\nstack = "nope"\n')
+    problems = make().check(app)
+    assert any("unknown stack" in p and "nope" in p for p in problems)
+
+
+# ------------------------------------------------------------ bad app files
+
+
+def test_non_string_stack_in_config_is_a_bull_error(tmp_path: Path) -> None:
+    app = new_app(tmp_path, config="format = 1\nstack = 5\n")
+    with pytest.raises(BullError):
+        make().all(app)
+
+
+def test_malformed_config_toml_is_a_bull_error_naming_the_path(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config="format = = 1\n")
+    with pytest.raises(BullError) as raised:
+        make().all(app)
+    assert str(app.config_file) in str(raised.value)
+
+
+def test_malformed_part_file_is_a_bull_error_naming_the_path(tmp_path: Path) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    app.parts_dir.mkdir(parents=True)
+    bad = app.parts_dir / "web.toml"
+    bad.write_text("stack = = 1\n", encoding="utf-8")
+    with pytest.raises(BullError) as raised:
+        make().all(app)
+    assert str(bad) in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "body", ["stack = 3\ndir = 'w'\n", "stack = 'fixture'\ndir = 3\n"]
+)
+def test_part_file_with_a_non_string_stack_or_dir_is_a_bull_error(
+    tmp_path: Path, body: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    app.parts_dir.mkdir(parents=True)
+    (app.parts_dir / "web.toml").write_text(body, encoding="utf-8")
+    with pytest.raises(BullError):
+        make().all(app)
+
+
+# ------------------------------------------------ implicit move: value types
+
+
+def _registry_with_keys(*keys: str) -> MockStackRegistry:
+    from bull.Modules.settings.Contracts import Setting, SettingType
+
+    registry = MockStackRegistry()
+    stack = registry.stacks["fixture"]
+    layer = stack.manifest.settings
+    extra = tuple(Setting(k, SettingType.STR, None, k) for k in keys)
+    registry.stacks["fixture"] = replace(
+        stack,
+        manifest=replace(
+            stack.manifest, settings=replace(layer, schema=layer.schema + extra)
+        ),
+    )
+    return registry
+
+
+@pytest.mark.parametrize(
+    ("literal", "expected"),
+    [
+        ("true", True),
+        ("false", False),
+        ("7", 7),
+        ("2.5", 2.5),
+        ('["a", "b"]', ["a", "b"]),
+    ],
+)
+def test_implicit_move_writes_each_value_type_and_it_parses_back_equal(
+    tmp_path: Path, literal: str, expected: object
+) -> None:
+    config = f'format = 1\nstack = "fixture"\nextra = {literal}\n'
+    app = new_app(tmp_path, config=config)
+    LiveParts(_registry_with_keys("extra"), loader_with()).add(app, "web", "fixture")
+    assert toml_of(app.parts_dir / "app.toml")["extra"] == expected
+    assert "extra" not in toml_of(app.config_file)
+
+
+def test_implicit_move_of_a_date_value_is_refused_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    config = 'format = 1\nstack = "fixture"\nextra = 2024-01-02\n'
+    app = new_app(tmp_path, config=config, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        LiveParts(_registry_with_keys("extra"), loader_with()).add(
+            app, "web", "fixture"
+        )
+    assert snapshot(app.root) == before
+
+
+# ------------------------------------------------ implicit move: line handling
+
+
+def test_implicit_move_accepts_a_single_line_array_with_a_trailing_comment(
+    tmp_path: Path,
+) -> None:
+    config = 'format = 1\nstack = "fixture"\nextra = ["a", "b"]  # note [x\n'
+    app = new_app(tmp_path, config=config)
+    LiveParts(_registry_with_keys("extra"), loader_with()).add(app, "web", "fixture")
+    assert toml_of(app.parts_dir / "app.toml")["extra"] == ["a", "b"]
+    assert "extra" not in toml_of(app.config_file)
+
+
+def test_implicit_move_refuses_an_unclosed_multi_line_array(tmp_path: Path) -> None:
+    config = 'format = 1\nstack = "fixture"\nextra = [\n  "a",\n  "b",\n]\n'
+    app = new_app(tmp_path, config=config, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError) as raised:
+        LiveParts(_registry_with_keys("extra"), loader_with()).add(
+            app, "web", "fixture"
+        )
+    assert "spans several lines" in str(raised.value)
+    assert snapshot(app.root) == before
+
+
+def test_implicit_move_refuses_a_stack_key_in_a_form_it_cannot_move_cleanly(
+    tmp_path: Path,
+) -> None:
+    # A stack key living inside a table can't be removed line by line.
+    config = 'format = 1\nstack = "fixture"\n[models]\nextra = 1\n'
+    app = new_app(tmp_path, config=config, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        LiveParts(_registry_with_keys("models.extra"), loader_with()).add(
+            app, "web", "fixture"
+        )
+    assert snapshot(app.root) == before
+
+
+# --------------------------------------------- .gitignore without newline
+
+
+def test_gitignore_without_trailing_newline_gets_new_lines_on_their_own_line(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n", gitignore="keep/")
+    make().add(app, "web", "fixture")
+    lines = (app.root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "keep/"
+    assert "web/**/results/" in lines
+
+
+# ------------------------------------------------------ atomic write failure
+
+
+def test_add_with_a_failing_atomic_rename_rolls_back_and_leaves_no_temp_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    before = snapshot(app.root)
+
+    def failing_replace(*args: Any, **kwargs: Any) -> None:
+        raise OSError("rename failed")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError, match="rename failed"):
+        make().add(app, "web", "fixture")
+    monkeypatch.undo()
+    assert snapshot(app.root) == before
