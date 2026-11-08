@@ -40,6 +40,24 @@ def test_write_atomic_replaces_existing_content(tmp_path: Path) -> None:
     assert target.read_text() == "new"
 
 
+def test_write_atomic_new_file_honors_the_process_umask(tmp_path: Path) -> None:
+    target = tmp_path / "a.txt"
+    old = os.umask(0o077)
+    try:
+        LiveFiles().write_atomic(target, "secret")
+    finally:
+        os.umask(old)
+    assert target.stat().st_mode & 0o077 == 0
+
+
+def test_write_atomic_keeps_the_mode_of_an_existing_file(tmp_path: Path) -> None:
+    target = tmp_path / "a.txt"
+    target.write_text("old")
+    target.chmod(0o640)
+    LiveFiles().write_atomic(target, "new")
+    assert target.stat().st_mode & 0o777 == 0o640
+
+
 def test_write_atomic_leaves_no_extra_files_behind(tmp_path: Path) -> None:
     LiveFiles().write_atomic(tmp_path / "a.txt", "hi")
     assert [p.name for p in tmp_path.iterdir()] == ["a.txt"]

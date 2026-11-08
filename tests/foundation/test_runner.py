@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -111,7 +112,32 @@ def test_run_timeout_keeps_output_written_before_the_timeout(tmp_path: Path) -> 
     code = "import sys, time; sys.stderr.write('early\\n'); sys.stderr.flush(); time.sleep(30)"
     result = LiveRunner().run(_py(code), tmp_path, timeout=1.0)
     assert result.returncode == 124
+    assert "early" in result.stderr
     assert result.stderr.rstrip().endswith("s")
+
+
+def test_run_timeout_returns_promptly_even_if_a_grandchild_holds_the_output_pipes(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "grandchild.pid"
+    code = (
+        "import subprocess, sys, time, pathlib\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        f"pathlib.Path({str(pid_file)!r}).write_text(str(child.pid))\n"
+        "time.sleep(30)\n"
+    )
+    start = time.monotonic()
+    try:
+        result = LiveRunner().run(_py(code), tmp_path, timeout=0.5)
+        elapsed = time.monotonic() - start
+        assert result.returncode == 124
+        assert elapsed < 5
+    finally:
+        if pid_file.exists() and pid_file.read_text():
+            try:
+                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_run_without_timeout_waits_for_completion(tmp_path: Path) -> None:
