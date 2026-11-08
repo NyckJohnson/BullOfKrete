@@ -72,9 +72,7 @@ def _threshold(settings: Settings, key: str) -> int:
     value = settings.get(key)
     # The settings schema declares these INT; anything else is a broken settings layer.
     if isinstance(value, bool) or not isinstance(value, int):
-        # coverage-exempt-begin: schema makes usage.pause_* INT; mypy narrowing guard
         raise TypeError(f"setting {key} must be an int, got {value!r}")
-        # coverage-exempt-end
     return value
 
 

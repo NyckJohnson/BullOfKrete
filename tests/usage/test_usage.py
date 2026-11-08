@@ -20,7 +20,7 @@ from bull.Modules.foundation.mocks import (
     MockFiles,
     sample_layout,
 )
-from bull.Modules.settings.Contracts import Layer
+from bull.Modules.settings.Contracts import Layer, SettingValue
 from bull.Modules.settings.mocks import MockSettings
 from bull.Modules.usage.Contracts import Usage, UsageCheck, UsageSample, UsageVerdict
 from bull.Modules.usage.usage import LiveUsage
@@ -384,3 +384,29 @@ def test_naive_timestamp_makes_the_file_unreadable(rig: Rig, field: str) -> None
     check = rig.usage.check()
     assert check.verdict is UsageVerdict.UNKNOWN
     assert check.reason == "no usage data yet"
+
+
+class BadThresholdSettings(MockSettings):
+    """Returns `value` for `bad_key`, as a broken settings layer would."""
+
+    def __init__(self, bad_key: str, value: object) -> None:
+        super().__init__()
+        self.bad_key = bad_key
+        self.bad_value: SettingValue = value  # type: ignore[assignment]
+
+    def get(self, key: str, part: str | None = None) -> SettingValue:
+        if key == self.bad_key:
+            return self.bad_value
+        return super().get(key, part)
+
+
+@pytest.mark.parametrize("key", ["usage.pause_5h", "usage.pause_weekly"])
+@pytest.mark.parametrize("value", ["85", True, 85.5])
+def test_check_raises_type_error_naming_a_non_int_threshold(
+    key: str, value: object
+) -> None:
+    settings = BadThresholdSettings(key, value)
+    usage = LiveUsage(APP, MockFiles(), settings, MockClock(NOW))
+    usage.record(sample(10.0, 10.0))
+    with pytest.raises(TypeError, match=key.replace(".", r"\.")):
+        usage.check()
