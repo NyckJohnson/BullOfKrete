@@ -41,7 +41,11 @@ def test_set_key_replaces_the_key_inside_its_table() -> None:
 def test_set_key_does_not_touch_same_named_key_in_another_table() -> None:
     text = "format = 1\n[other]\npause_5h = 1\n[usage]\npause_5h = 80\n"
     out = set_key(text, "usage.pause_5h", 60)
-    assert _parse(out) == {"format": 1, "other": {"pause_5h": 1}, "usage": {"pause_5h": 60}}
+    assert _parse(out) == {
+        "format": 1,
+        "other": {"pause_5h": 1},
+        "usage": {"pause_5h": 60},
+    }
 
 
 def test_set_key_appends_a_dotted_key_when_absent() -> None:
@@ -64,7 +68,7 @@ def test_set_key_on_empty_text_writes_just_the_key() -> None:
 
 
 def test_set_key_keeps_comments_blank_lines_and_other_keys() -> None:
-    text = "# my config\nformat = 1\n\n# attempts\nmax_attempts = 3  # old\n\nreview_mode = \"split\"\n"
+    text = '# my config\nformat = 1\n\n# attempts\nmax_attempts = 3  # old\n\nreview_mode = "split"\n'
     out = set_key(text, "max_attempts", 4)
     lines = out.splitlines()
     assert lines[0] == "# my config"
@@ -78,7 +82,7 @@ def test_set_key_keeps_comments_blank_lines_and_other_keys() -> None:
 
 
 def test_set_key_appended_key_stays_top_level_when_file_ends_in_a_table() -> None:
-    text = "format = 1\n[models]\nreviewer = \"opus\"\n"
+    text = 'format = 1\n[models]\nreviewer = "opus"\n'
     out = set_key(text, "max_attempts", 5)
     parsed = _parse(out)
     assert parsed["max_attempts"] == 5
@@ -92,7 +96,7 @@ def test_set_key_into_an_existing_table_stays_valid_toml() -> None:
 
 
 def test_set_key_preserves_other_lines_around_a_table_insert() -> None:
-    text = "format = 1\n# keep me\n[usage]\npause_weekly = 90\n[models]\nreviewer = \"opus\"\n"
+    text = 'format = 1\n# keep me\n[usage]\npause_weekly = 90\n[models]\nreviewer = "opus"\n'
     out = set_key(text, "usage.pause_5h", 70)
     assert "# keep me\n" in out
     assert 'reviewer = "opus"' in out

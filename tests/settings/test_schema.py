@@ -68,8 +68,12 @@ def test_review_mode_is_a_choice_of_combined_or_split_in_all_layers() -> None:
     assert _file_layers(s) == FILE_LAYERS
 
 
-@pytest.mark.parametrize(("key", "default"), [("max_attempts", 3), ("max_files_per_unit", 4)])
-def test_count_settings_are_ints_at_least_one_in_all_layers(key: str, default: int) -> None:
+@pytest.mark.parametrize(
+    ("key", "default"), [("max_attempts", 3), ("max_files_per_unit", 4)]
+)
+def test_count_settings_are_ints_at_least_one_in_all_layers(
+    key: str, default: int
+) -> None:
     s = _get(key)
     assert s.type is SettingType.INT
     assert s.default == default
@@ -77,8 +81,12 @@ def test_count_settings_are_ints_at_least_one_in_all_layers(key: str, default: i
     assert _file_layers(s) == FILE_LAYERS
 
 
-@pytest.mark.parametrize(("key", "default"), [("usage.pause_5h", 85), ("usage.pause_weekly", 95)])
-def test_usage_thresholds_are_ints_1_to_100_for_user_and_app(key: str, default: int) -> None:
+@pytest.mark.parametrize(
+    ("key", "default"), [("usage.pause_5h", 85), ("usage.pause_weekly", 95)]
+)
+def test_usage_thresholds_are_ints_1_to_100_for_user_and_app(
+    key: str, default: int
+) -> None:
     s = _get(key)
     assert s.type is SettingType.INT
     assert s.default == default
