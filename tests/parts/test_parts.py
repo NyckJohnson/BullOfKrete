@@ -195,21 +195,21 @@ def test_add_merges_the_stacks_gitignore_lines_under_the_folder(
     make().add(app, "web", "fixture")
     lines = (app.root / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert "node_modules/" in lines
-    assert "web/results/" in lines
+    assert "web/**/results/" in lines
 
 
 def test_add_creates_gitignore_when_missing(tmp_path: Path) -> None:
     app = new_app(tmp_path, config="format = 1\n")
     make().add(app, "web", "fixture", "sites/w")
     lines = (app.root / ".gitignore").read_text(encoding="utf-8").splitlines()
-    assert "sites/w/results/" in lines
+    assert "sites/w/**/results/" in lines
 
 
 def test_add_does_not_duplicate_gitignore_lines(tmp_path: Path) -> None:
-    app = new_app(tmp_path, config="format = 1\n", gitignore="web/results/\n")
+    app = new_app(tmp_path, config="format = 1\n", gitignore="web/**/results/\n")
     make().add(app, "web", "fixture")
     lines = (app.root / ".gitignore").read_text(encoding="utf-8").splitlines()
-    assert lines.count("web/results/") == 1
+    assert lines.count("web/**/results/") == 1
 
 
 def test_add_second_part_keeps_the_first_parts_file(tmp_path: Path) -> None:
