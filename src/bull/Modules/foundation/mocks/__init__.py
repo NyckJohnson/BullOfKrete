@@ -10,6 +10,7 @@ from pathlib import Path
 from bull.Modules.foundation.Contracts import (
     AppLayout,
     Clock,
+    FileFormatError,
     Files,
     Layouts,
     RunResult,
@@ -96,7 +97,15 @@ class MockFiles(Files):
     def read_json(self, path: Path) -> object | None:
         self.calls.append(("read_json", (path,)))
         text = self.texts.get(path)
-        return None if text is None else json.loads(text)
+        if text is None:
+            return None
+        try:
+            data: object = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise FileFormatError(
+                f"{path}: invalid JSON at line {e.lineno}: {e.msg}"
+            ) from e
+        return data
 
     def write_json(self, path: Path, data: object) -> None:
         self.calls.append(("write_json", (path, data)))
