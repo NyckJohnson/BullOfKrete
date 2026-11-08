@@ -143,7 +143,7 @@
       "dependsOn": [
         "foundation"
       ],
-      "state": "in_progress",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T06:43:54-08:00",
+  "updatedAt": "2026-11-08T06:58:22-08:00",
   "features": [],
   "activeFeature": null
 }
