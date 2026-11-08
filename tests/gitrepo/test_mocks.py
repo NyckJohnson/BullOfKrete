@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bull.Modules.gitrepo.Contracts import Git
+import pytest
+
+from bull.Modules.gitrepo.Contracts import Git, GitError
 from bull.Modules.gitrepo.mocks import SAMPLE_SHA, MockGit
 
 ROOT = Path("/tmp/apps/tally")
@@ -111,3 +113,34 @@ def test_mock_records_calls_in_order() -> None:
     git.commit_all(ROOT, "msg")
     assert [name for name, _ in git.calls] == ["is_clean", "commit_all"]
     assert git.calls[1][1] == (ROOT, "msg")
+
+
+def test_mock_tag_on_existing_name_raises_git_error_naming_it() -> None:
+    git = MockGit()
+    git.tag(ROOT, "dupe-tag")
+    with pytest.raises(GitError) as info:
+        git.tag(ROOT, "dupe-tag")
+    assert "dupe-tag" in str(info.value)
+
+
+def test_mock_switch_to_unknown_branch_raises_git_error() -> None:
+    git = MockGit()
+    with pytest.raises(GitError):
+        git.switch(ROOT, "ghost")
+    assert git.current_branch(ROOT) == "main"
+
+
+def test_mock_create_branch_with_existing_name_raises_git_error() -> None:
+    git = MockGit()
+    with pytest.raises(GitError):
+        git.create_branch(ROOT, "main", "main")
+
+
+def test_mock_tag_resolves_to_the_sha_of_its_ref() -> None:
+    git = MockGit()
+    sha = git.commit_all(ROOT, "one")
+    git.commit_all(ROOT, "two")
+    git.tag(ROOT, "v1", sha or "")
+    assert git.head(ROOT, "v1") == sha
+    git.tag(ROOT, "v2")
+    assert git.head(ROOT, "v2") == git.head(ROOT)

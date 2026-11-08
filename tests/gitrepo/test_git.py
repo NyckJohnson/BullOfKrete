@@ -319,6 +319,11 @@ def test_show_file_missing_path_is_none(git: LiveGit, repo: Path) -> None:
     assert git.show_file(repo, "HEAD", "missing.txt") is None
 
 
+def test_show_file_with_unknown_ref_raises_git_error(git: LiveGit, repo: Path) -> None:
+    with pytest.raises(GitError):
+        git.show_file(repo, "no-such-ref", "a.txt")
+
+
 def test_parents_of_root_commit_is_empty(git: LiveGit, repo: Path) -> None:
     assert git.parents(repo, "HEAD") == []
 
@@ -389,6 +394,19 @@ def test_active_hooks_lists_only_executable_non_sample_hooks(
     (hooks / "commit-msg").chmod(0o644)
     (hooks / "pre-push.sample").write_text("#!/bin/sh\n")
     (hooks / "pre-push.sample").chmod(0o755)
+    assert git.active_hooks(repo) == ["pre-commit"]
+
+
+def test_active_hooks_honors_core_hooks_path(
+    git: LiveGit, repo: Path, tmp_path: Path
+) -> None:
+    custom = tmp_path / "custom-hooks"
+    custom.mkdir()
+    (custom / "pre-commit").write_text("#!/bin/sh\n")
+    (custom / "pre-commit").chmod(0o755)
+    (custom / "pre-push.sample").write_text("#!/bin/sh\n")
+    (custom / "pre-push.sample").chmod(0o755)
+    sh(repo, "config", "core.hooksPath", str(custom))
     assert git.active_hooks(repo) == ["pre-commit"]
 
 
