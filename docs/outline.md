@@ -146,8 +146,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
   `bull` command (see **Commands**) and the plugin's slash commands (`/bull:discuss`, `/bull:outline`,
   `/bull:setup`, `/bull:skeleton`, `/bull:prototype`, `/bull:build`, `/bull:verify`,
   `/bull:adopt`, `/bull:feature`, `/bull:resume`, `/bull:status`, `/bull:stack`), whose text the
-  `plugin_text` module holds. Stage 4 (prototype) for this tool: the human tries `bull --help` and
-  each command's help and refusal messages on the skeleton.
+  `plugin_text` module holds. Stage 4 (prototype) is skipped for this tool (see decisions log); the
+  command surface is first checked by the cli module's tests and the Stage 6 journey tests.
 
 ## Commands
 Each command is wired in the named module's `cli.py`; the `cli` module composes them. Every command
@@ -1976,3 +1976,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-07: rewritten v1 Markdown reaches code-writer through source notes. At the start of plugin_text, stack_python_cli and stack_ios, before any unit, the orchestrator writes `docs/process/<module>.md` from the v1 files that **v1 Markdown review** sends there: stack-neutral where the target is, in `bull` terms and v2 formats. The human approves each note like a memo section; test-writer and code-writer briefs list the note, never `reference/`. (Options weighed: code-writer reads named v1 files; the orchestrator writes the Markdown itself.)
 - 2026-11-07: at `/setup`, `.pipeline/config.sh` changes to `APP_PACKAGE="bull"`, `APP_SOURCE_DIR="src/bull"`, `APP_TEST_DIR="tests"` (the human edits it).
 - 2026-11-07: PyPI distribution name is `bullofkrete` (`bull` taken; `bull-pipeline` also free) — approved by Nicholas Johnson
+- 2026-11-07: Stage 4 (prototype) skipped: the skeleton's `bull` entry point is a stub and the python_cli stack has no screen-builder rules, so there is nothing to try. `ui-approved` is tagged without a review; the command surface is first checked in Stage 5 (cli) and Stage 6 (journeys). (Options weighed: review the Commands table on paper; a throwaway help-only shell.)
