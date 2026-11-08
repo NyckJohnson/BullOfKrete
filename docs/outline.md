@@ -1133,7 +1133,7 @@ when `readers.py` defines `detect`.
     `Legacy files` gets a final switch-over unit (no files); existing modules past pending →
     refused unless `replace`. With `replace`, a module still in the memo keeps each unit whose
     number, kind and files are unchanged (state and attempts kept); other units start pending with
-    attempts 1; the module keeps its state when every unit was kept, else becomes `in_progress` if
+    attempts 1; the module keeps its state (and scan record) when every unit was kept, else becomes `in_progress` if
     any unit is past pending, else `pending`. Modules no longer in the memo are dropped.
   - set_module(M, in_progress): every dependency must be done, else refused naming them; unknown
     module → refused with "did you mean `Counter`?" for a case-insensitive match, else the list of

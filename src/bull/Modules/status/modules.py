@@ -91,7 +91,9 @@ def init_modules(
     """Replace the status's modules with the memo's, in build order.
 
     Refused when the memo has `problems` (every one listed with its line), or when a module
-    is already past pending and `replace` is false.
+    is already past pending and `replace` is false. With `replace`, a module still in the
+    memo keeps the progress of its unchanged units (see `_carry_over`); modules no longer in
+    the memo are dropped.
     """
     if problems:
         listed = "; ".join(f"line {p.line}: {p.message}" for p in problems)
@@ -106,8 +108,38 @@ def init_modules(
             "run `bull status init-modules --replace` to start them over",
         )
     adopting = status.adoption is not None
-    built = tuple(_build(e, known_parts, adopting) for e in _in_build_order(memo))
+    old = {m.name: m for m in status.modules}
+    built = tuple(
+        _carry_over(old.get(e.name), _build(e, known_parts, adopting))
+        for e in _in_build_order(memo)
+    )
     return _replace_modules(status, built)
+
+
+def _carry_over(old: ModuleStatus | None, new: ModuleStatus) -> ModuleStatus:
+    """`new` (freshly built, all pending) with `old`'s progress where it still applies.
+
+    A unit is kept (state and attempts) when `old` has a unit with the same number, kind and
+    files. The module keeps `old`'s state (and scan record) when every unit was kept and none
+    was dropped; otherwise it is `in_progress` if any kept unit is past pending, else pending.
+    """
+    if old is None:
+        return new
+    previous = {(u.number, u.kind, u.files): u for u in old.units}
+    units: list[Unit] = []
+    kept = 0
+    for unit in new.units:
+        match = previous.get((unit.number, unit.kind, unit.files))
+        if match is None:
+            units.append(unit)
+        else:
+            units.append(replace(unit, state=match.state, attempts=match.attempts))
+            kept += 1
+    if kept == len(new.units) == len(old.units):
+        return replace(new, state=old.state, units=tuple(units), scan=old.scan)
+    started = any(u.state != UnitState.PENDING for u in units)
+    state = ModuleState.IN_PROGRESS if started else ModuleState.PENDING
+    return replace(new, state=state, units=tuple(units))
 
 
 def _replace_modules(status: Status, modules: tuple[ModuleStatus, ...]) -> Status:
