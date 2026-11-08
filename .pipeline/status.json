@@ -245,7 +245,7 @@
         "settings",
         "stacks"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -253,7 +253,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -262,8 +262,8 @@
             "parts.py",
             "cli.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T09:09:34-08:00",
+  "updatedAt": "2026-11-08T09:26:25-08:00",
   "features": [],
   "activeFeature": null
 }
