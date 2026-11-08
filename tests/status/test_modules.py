@@ -194,11 +194,167 @@ def test_init_modules_refuses_when_a_module_is_done_without_replace() -> None:
         init(sample_memo(), base)
 
 
-def test_init_modules_replaces_started_modules_with_replace() -> None:
-    status = init(sample_memo(), sample_status(), replace_existing=True)
-    assert [m.name for m in status.modules] == ["Store", "Counter"]
-    assert all(m.state == ModuleState.PENDING for m in status.modules)
-    assert all(u.state == UnitState.PENDING for m in status.modules for u in m.units)
+def old_unit(
+    number: int,
+    files: tuple[str, ...],
+    state: UnitState,
+    attempts: int = 1,
+    kind: UnitKind = UnitKind.CODE,
+) -> Unit:
+    return Unit(number, files, kind, state, attempts)
+
+
+def replaced(old: tuple[ModuleStatus, ...], memo: Memo) -> Status:
+    return init(memo, at_modules(old), replace_existing=True)
+
+
+def test_init_modules_with_replace_keeps_state_and_attempts_of_unchanged_units() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (
+            old_unit(1, ("a.py",), UnitState.DONE, attempts=2),
+            old_unit(2, ("b.py",), UnitState.CODE, attempts=3),
+        ),
+    )
+    memo = memo_of(entry("Store", units=(("a.py",), ("b.py",))))
+    units = by_name(replaced((old,), memo), "Store").units
+    assert [(u.number, u.state, u.attempts) for u in units] == [
+        (1, UnitState.DONE, 2),
+        (2, UnitState.CODE, 3),
+    ]
+
+
+def test_init_modules_with_replace_restarts_a_unit_whose_files_changed() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (
+            old_unit(1, ("a.py",), UnitState.DONE, attempts=2),
+            old_unit(2, ("b.py",), UnitState.DONE, attempts=2),
+        ),
+    )
+    memo = memo_of(entry("Store", units=(("a.py",), ("b.py", "c.py"))))
+    units = by_name(replaced((old,), memo), "Store").units
+    assert (units[0].state, units[0].attempts) == (UnitState.DONE, 2)
+    assert units[1].files == ("b.py", "c.py")
+    assert (units[1].state, units[1].attempts) == (UnitState.PENDING, 1)
+
+
+def test_init_modules_with_replace_restarts_a_unit_whose_kind_changed() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (
+            old_unit(1, ("a.py",), UnitState.DONE),
+            old_unit(2, (), UnitState.DONE, attempts=2, kind=UnitKind.CODE),
+        ),
+    )
+    memo = memo_of(entry("Store", legacy_files=("old/store.py",)))
+    base = replace(at_modules((old,)), adoption=Track(2, ()))
+    units = by_name(init(memo, base, replace_existing=True), "Store").units
+    assert units[1].kind == UnitKind.SWITCH_OVER
+    assert (units[1].state, units[1].attempts) == (UnitState.PENDING, 1)
+    assert units[0].state == UnitState.DONE
+
+
+def test_init_modules_with_replace_restarts_a_unit_whose_number_changed() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (old_unit(1, ("b.py",), UnitState.DONE, attempts=2),),
+    )
+    memo = memo_of(entry("Store", units=(("a.py",), ("b.py",))))
+    units = by_name(replaced((old,), memo), "Store").units
+    assert [(u.state, u.attempts) for u in units] == [
+        (UnitState.PENDING, 1),
+        (UnitState.PENDING, 1),
+    ]
+
+
+def test_init_modules_with_replace_starts_new_units_pending() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (old_unit(1, ("a.py",), UnitState.DONE),),
+    )
+    memo = memo_of(entry("Store", units=(("a.py",), ("b.py",))))
+    units = by_name(replaced((old,), memo), "Store").units
+    assert len(units) == 2
+    assert (units[1].state, units[1].attempts) == (UnitState.PENDING, 1)
+
+
+def test_init_modules_with_replace_keeps_module_state_when_every_unit_is_kept() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.DONE,
+        (old_unit(1, ("a.py",), UnitState.DONE),),
+    )
+    status = replaced((old,), memo_of(entry("Store")))
+    assert by_name(status, "Store").state == ModuleState.DONE
+
+
+def test_init_modules_with_replace_is_in_progress_when_a_kept_unit_is_past_pending() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.DONE,
+        (
+            old_unit(1, ("a.py",), UnitState.DONE),
+            old_unit(2, ("b.py",), UnitState.DONE),
+        ),
+    )
+    memo = memo_of(entry("Store", units=(("a.py",), ("changed.py",))))
+    assert by_name(replaced((old,), memo), "Store").state == ModuleState.IN_PROGRESS
+
+
+def test_init_modules_with_replace_is_pending_when_no_unit_is_past_pending() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (old_unit(1, ("a.py",), UnitState.PENDING),),
+    )
+    memo = memo_of(entry("Store", units=(("other.py",),)))
+    assert by_name(replaced((old,), memo), "Store").state == ModuleState.PENDING
+
+
+def test_init_modules_with_replace_is_pending_when_only_changed_units_were_started() -> None:
+    old = module_in(
+        "Store",
+        ModuleState.IN_PROGRESS,
+        (old_unit(1, ("a.py",), UnitState.CODE),),
+    )
+    memo = memo_of(entry("Store", units=(("other.py",),)))
+    status = replaced((old,), memo)
+    assert by_name(status, "Store").state == ModuleState.PENDING
+
+
+def test_init_modules_with_replace_drops_modules_no_longer_in_the_memo() -> None:
+    gone = module_in(
+        "Gone", ModuleState.DONE, (old_unit(1, ("g.py",), UnitState.DONE),)
+    )
+    status = replaced((gone,), memo_of(entry("Store")))
+    assert [m.name for m in status.modules] == ["Store"]
+
+
+def test_init_modules_with_replace_starts_modules_new_to_the_memo_pending() -> None:
+    old = module_in(
+        "Store", ModuleState.DONE, (old_unit(1, ("a.py",), UnitState.DONE),)
+    )
+    memo = memo_of(entry("Store"), entry("Counter", depends=("Store",)))
+    status = replaced((old,), memo)
+    counter = by_name(status, "Counter")
+    assert counter.state == ModuleState.PENDING
+    assert all(u.state == UnitState.PENDING and u.attempts == 1 for u in counter.units)
+    assert by_name(status, "Store").state == ModuleState.DONE
+
+
+def test_init_modules_with_replace_follows_the_memo_build_order() -> None:
+    old = (
+        module_in("Counter", ModuleState.DONE, (old_unit(1, ("a.py",), UnitState.DONE),)),
+        module_in("Store", ModuleState.DONE, (old_unit(1, ("a.py",), UnitState.DONE),)),
+    )
+    memo = memo_of(entry("Store"), entry("Counter", depends=("Store",)))
+    assert [m.name for m in replaced(old, memo).modules] == ["Store", "Counter"]
 
 
 def test_init_modules_replaces_pending_modules_without_replace() -> None:
