@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+from bull.Modules.foundation.Contracts import AppLayout
 from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.stacks.cli import register
 from bull.Modules.stacks.Contracts import CheckItem, StackError
@@ -323,3 +324,104 @@ def test_stack_install_works_without_a_pre_install_check() -> None:
     args = parser.parse_args(["stack", "install", "/tmp/stacks/other"])
     assert args.run(args, io.StringIO()) == 0
     assert ("install", (Path("/tmp/stacks/other"),)) in registry.calls
+
+
+# ----------------------------------------------------------- review rounds
+
+
+def build(
+    rig: Rig, app: AppLayout, settings: FakeSettings | None = None
+) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="bull")
+    register(
+        parser.add_subparsers(dest="command"),
+        lambda: rig.registry,
+        lambda: rig.ops,
+        lambda: app,
+        lambda: settings or rig.settings,
+    )
+    return parser
+
+
+def run_with(parser: argparse.ArgumentParser, *argv: str) -> int:
+    args = parser.parse_args(argv)
+    return int(args.run(args, io.StringIO()))
+
+
+@pytest.mark.parametrize("leaf", [("rules", "reviewer"), ("setup",)])
+def test_stack_rules_and_setup_without_part_name_the_parts_when_parts_exist(
+    rig: Rig, tmp_path: Path, leaf: tuple[str, ...]
+) -> None:
+    app = sample_layout(tmp_path)
+    app.parts_dir.mkdir(parents=True)
+    for name in ("api", "web"):
+        (app.parts_dir / f"{name}.toml").write_text("format = 1\n", encoding="utf-8")
+    parser = build(rig, app)
+    with pytest.raises(StackError) as caught:
+        run_with(parser, "stack", *leaf)
+    text = f"{caught.value.message} {caught.value.fix}"
+    assert "api" in text
+    assert "web" in text
+    assert rig.ops.calls == []
+
+
+@pytest.mark.parametrize("leaf", [("rules", "reviewer"), ("setup",)])
+def test_stack_rules_and_setup_without_part_use_the_apps_stack_when_no_parts(
+    rig: Rig, tmp_path: Path, leaf: tuple[str, ...]
+) -> None:
+    app = sample_layout(tmp_path)
+    app.parts_dir.mkdir(parents=True)
+    assert run_with(build(rig, app), "stack", *leaf) == 0
+    ((_, (stack, *_)),) = rig.ops.calls
+    assert stack is rig.registry.stacks["python_cli"]
+
+
+@pytest.mark.parametrize("leaf", [("rules", "reviewer"), ("setup",)])
+@pytest.mark.parametrize("stack", ["", None])
+def test_stack_rules_and_setup_tell_you_to_select_a_stack_when_none_is_set(
+    rig: Rig, leaf: tuple[str, ...], stack: object
+) -> None:
+    class Unset(FakeSettings):
+        def get(self, key, part=None):  # type: ignore[no-untyped-def]
+            if key == "stack":
+                return stack
+            return super().get(key, part)
+
+    parser = build(rig, APP, Unset({}))
+    with pytest.raises(StackError) as caught:
+        run_with(parser, "stack", *leaf)
+    text = f"{caught.value.message} {caught.value.fix}"
+    assert "bull stack select" in text
+    assert "None" not in text
+    assert rig.ops.calls == []
+
+
+def test_stack_check_text_lines_are_exactly_the_item_lines(rig: Rig) -> None:
+    rig.ops.items = [
+        CheckItem(True, "git on PATH", ""),
+        CheckItem(False, "uv on PATH", "install uv"),
+    ]
+    _, text = rig.run("stack", "check")
+    assert text.splitlines() == ["✓ git on PATH", "✗ uv on PATH — install uv"]
+
+
+def test_stack_install_propagates_a_non_stack_error_and_installs_nothing(
+    rig: Rig,
+) -> None:
+    def explode(path: Path) -> None:
+        raise RuntimeError("self-test crashed")
+
+    parser = argparse.ArgumentParser(prog="bull")
+    register(
+        parser.add_subparsers(dest="command"),
+        lambda: rig.registry,
+        lambda: rig.ops,
+        lambda: APP,
+        lambda: rig.settings,
+        before_install=explode,
+    )
+    args = parser.parse_args(["stack", "install", "/tmp/stacks/my_stack"])
+    with pytest.raises(RuntimeError):
+        args.run(args, io.StringIO())
+    assert not any(name == "install" for name, _ in rig.registry.calls)
+    assert "my_stack" not in rig.registry.stacks

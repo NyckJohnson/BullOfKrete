@@ -119,3 +119,55 @@ def test_setup_guide_with_an_unknown_section_raises(tmp_path: Path) -> None:
     with pytest.raises(StackError) as caught:
         setup_guide(make(tmp_path), "For an adoption")
     assert "For an adoption" in f"{caught.value.message} {caught.value.fix}"
+
+
+FENCED_RULES = """## common
+- COMMON-LINE
+
+## reviewer
+- REVIEWER-LINE
+```
+## code-writer
+- IN-FENCE-LINE
+```
+- AFTER-FENCE-LINE
+
+## outline
+- OUTLINE-LINE
+"""
+
+FENCED_SETUP = """## Real
+- REAL-LINE
+```
+## Fake
+- FAKE-LINE
+```
+- AFTER-FENCE-LINE
+
+## Next
+- NEXT-LINE
+"""
+
+
+def test_rules_does_not_treat_a_heading_inside_a_code_fence_as_a_section(
+    tmp_path: Path,
+) -> None:
+    stack = make(tmp_path, FENCED_RULES)
+    text = rules(stack, "reviewer")
+    assert "IN-FENCE-LINE" in text
+    assert "AFTER-FENCE-LINE" in text
+    assert "OUTLINE-LINE" not in text
+    with pytest.raises(StackError):
+        rules(stack, "code-writer")
+
+
+def test_setup_guide_does_not_treat_a_heading_inside_a_code_fence_as_a_section(
+    tmp_path: Path,
+) -> None:
+    stack = make(tmp_path, setup_text=FENCED_SETUP)
+    text = setup_guide(stack, "Real")
+    assert "FAKE-LINE" in text
+    assert "AFTER-FENCE-LINE" in text
+    assert "NEXT-LINE" not in text
+    with pytest.raises(StackError):
+        setup_guide(stack, "Fake")

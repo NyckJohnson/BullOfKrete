@@ -19,13 +19,20 @@ Shapes chosen here (for the code-writer):
 from __future__ import annotations
 
 import json
+import os
+import stat
 import tomllib
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from bull.Modules.foundation.Contracts import AppLayout, RunResult
+from bull.Modules.foundation.Contracts import (
+    AppLayout,
+    BullError,
+    FileFormatError,
+    RunResult,
+)
 from bull.Modules.foundation.mocks import MockRunner, sample_layout
 from bull.Modules.settings.Contracts import SettingValue
 from bull.Modules.stacks.Contracts import Requirement, StackError
@@ -546,3 +553,313 @@ def test_run_command_with_no_commands_defined_raises(tmp_path: Path) -> None:
     ops = ops_for(registry_with(tmp_path), FakeSettings(APP_VALUES))
     with pytest.raises(StackError):
         ops.run_command(app, "prune")
+
+
+# ------------------------------------------------- review: part resolution
+
+
+def add_parts(app: AppLayout, *names: str) -> None:
+    app.parts_dir.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (app.parts_dir / f"{name}.toml").write_text(
+            f'format = 1\nstack = "fixture"\ndir = "{name}_dir"\n', encoding="utf-8"
+        )
+
+
+SUB_VALUES: dict[str, SettingValue] = {**APP_VALUES, "dir": "sub"}
+
+
+def test_check_with_an_app_part_file_uses_that_parts_dir_and_settings(
+    tmp_path: Path,
+) -> None:
+    rig = CheckRig(tmp_path)
+    rig.settings = FakeSettings(SUB_VALUES)
+    add_parts(rig.app, "app")
+    rig.make_folders(tmp_path / "sub", "src/fx", "tests")
+    items = rig.ops().check(rig.app, "app")
+    (_, (root, settings, _)) = rig.readers.calls[-1]
+    assert root == tmp_path / "sub"
+    assert settings == SUB_VALUES
+    assert failing(items) == []
+
+
+def test_check_with_an_app_part_file_looks_for_folders_inside_its_dir(
+    tmp_path: Path,
+) -> None:
+    rig = CheckRig(tmp_path)
+    rig.settings = FakeSettings(SUB_VALUES)
+    add_parts(rig.app, "app")
+    rig.make_folders(tmp_path, "src/fx", "tests")  # only at the app root
+    assert len(failing(rig.ops().check(rig.app, "app"))) == 2
+
+
+def test_run_command_with_an_app_part_file_uses_that_parts_dir(
+    run_rig: RunRig,
+) -> None:
+    run_rig.settings = FakeSettings(SUB_VALUES)
+    add_parts(run_rig.app, "app")
+    run_rig.ops().run_command(run_rig.app, "prune", "app")
+    _, cwd, env = run_rig.last_run()
+    assert cwd == run_rig.tmp / "sub"
+    assert env["BULL_PART"] == "app"
+    assert env["BULL_PART_ROOT"] == str(run_rig.tmp / "sub")
+    assert env["BULL_APP_ROOT"] == str(run_rig.tmp)
+
+
+def test_check_with_parts_present_and_no_part_names_the_parts(rig: CheckRig) -> None:
+    add_parts(rig.app, "api", "web")
+    with pytest.raises(StackError) as caught:
+        rig.ops().check(rig.app)
+    assert "api" in message(caught.value)
+    assert "web" in message(caught.value)
+    assert rig.readers.calls == []
+
+
+def test_run_command_with_parts_present_and_no_part_names_the_parts(
+    run_rig: RunRig,
+) -> None:
+    add_parts(run_rig.app, "api", "web")
+    with pytest.raises(StackError) as caught:
+        run_rig.ops().run_command(run_rig.app, "prune")
+    assert "api" in message(caught.value)
+    assert "web" in message(caught.value)
+    assert [n for n, _ in run_rig.runner.calls if n == "run"] == []
+
+
+def test_check_of_an_unknown_part_raises(rig: CheckRig) -> None:
+    add_parts(rig.app, "api")
+    with pytest.raises(StackError) as caught:
+        rig.ops().check(rig.app, "ghost")
+    assert "ghost" in message(caught.value)
+
+
+def test_check_of_an_unknown_part_in_an_app_without_parts_raises(
+    rig: CheckRig,
+) -> None:
+    with pytest.raises(StackError):
+        rig.ops().check(rig.app, "ghost")
+
+
+def test_run_command_of_an_unknown_part_raises(run_rig: RunRig) -> None:
+    add_parts(run_rig.app, "api")
+    with pytest.raises(StackError) as caught:
+        run_rig.ops().run_command(run_rig.app, "prune", "ghost")
+    assert "ghost" in message(caught.value)
+    assert [n for n, _ in run_rig.runner.calls if n == "run"] == []
+
+
+def test_the_implicit_app_part_exists_when_the_parts_folder_has_no_toml(
+    rig: CheckRig,
+) -> None:
+    rig.app.parts_dir.mkdir(parents=True)
+    (rig.app.parts_dir / "notes.txt").write_text("x", encoding="utf-8")
+    assert failing(rig.ops().check(rig.app, "app")) == []
+    assert rig.readers.calls[-1][1][0] == rig.tmp
+
+
+# ------------------------------------------------ review: run_command output
+
+
+def test_run_command_writes_captured_stdout_and_stderr_to_the_console(
+    run_rig: RunRig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run_rig.runner.results[PYTHON] = RunResult(
+        (PYTHON,), 4, "hello out\n", "hello err\n", 0.1
+    )
+    code = run_rig.ops().run_command(run_rig.app, "prune")
+    captured = capsys.readouterr()
+    assert code == 4
+    assert captured.out == "hello out\n"
+    assert captured.err == "hello err\n"
+
+
+def test_run_command_with_no_output_writes_nothing(
+    run_rig: RunRig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run_rig.ops().run_command(run_rig.app, "prune")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+# ------------------------------------------------ review: gate-step details
+
+
+def test_run_command_fills_module_and_port_placeholders_with_empty_strings(
+    run_rig: RunRig,
+) -> None:
+    run_rig.registry = registry_with(
+        run_rig.home,
+        commands={
+            "probe": (
+                "{python}",
+                "{module}",
+                "{module_src}",
+                "{module_tests}",
+                "{port}",
+                "{failed_ids}",
+                "end",
+            )
+        },
+    )
+    run_rig.ops().run_command(run_rig.app, "probe")
+    argv, cwd, env = run_rig.last_run()
+    assert argv == (PYTHON, "", "", "", "", "end")
+    assert cwd == run_rig.tmp
+    assert env["BULL_SCOPE_MODULE"] == ""
+
+
+def test_run_command_runs_in_the_part_root_for_a_named_part(run_rig: RunRig) -> None:
+    add_parts(run_rig.app, "api")
+    run_rig.ops().run_command(run_rig.app, "prune", "api")
+    _, cwd, _ = run_rig.last_run()
+    assert cwd == run_rig.tmp / "services" / "api"
+
+
+# --------------------------------------------- review: status and stack errors
+
+
+def test_check_with_a_corrupt_status_file_raises_a_file_format_error(
+    rig: CheckRig,
+) -> None:
+    rig.app.status_file.write_text("{not json", encoding="utf-8")
+    with pytest.raises(FileFormatError):
+        rig.ops().check(rig.app)
+
+
+class NoStackSettings(FakeSettings):
+    def __init__(self, stack: object) -> None:
+        super().__init__(APP_VALUES)
+        self.stack = stack
+
+    def get(self, key: str, part: str | None = None) -> SettingValue:
+        if key == "stack":
+            return self.stack  # type: ignore[return-value]
+        return super().get(key, part)
+
+
+@pytest.mark.parametrize("stack", ["", None])
+def test_check_without_a_stack_set_raises_a_stack_error(
+    rig: CheckRig, stack: object
+) -> None:
+    rig.settings = NoStackSettings(stack)
+    with pytest.raises(StackError):
+        rig.ops().check(rig.app)
+
+
+# ------------------------------------------------------ review: config edits
+
+
+def test_select_keeps_comments_in_the_config(tmp_path: Path) -> None:
+    app = make_app(tmp_path, "# my notes\nformat = 1  # version\n")
+    ops_for(registry_with()).select(app, "fixture")
+    text = app.config_file.read_text(encoding="utf-8")
+    assert "# my notes" in text
+    assert "format = 1  # version" in text
+    assert tomllib.loads(text)["stack"] == "fixture"
+
+
+def test_select_replaces_existing_stack_and_source_dir_lines_in_place(
+    tmp_path: Path,
+) -> None:
+    app = make_app(
+        tmp_path,
+        'format = 1\nstack = "old"\nsource_dir = "old_src"\nmax_attempts = 5\n',
+    )
+    ops_for(registry_with()).select(app, "fixture")
+    text = app.config_file.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert sum(ln.startswith("stack") for ln in lines) == 1
+    assert sum(ln.startswith("source_dir") for ln in lines) == 1
+    data = tomllib.loads(text)
+    assert data["stack"] == "fixture"
+    assert data["source_dir"] == "src/fx"
+    assert data["max_attempts"] == 5
+    assert lines[1].startswith("stack")
+    assert lines[2].startswith("source_dir")
+
+
+def test_select_keeps_a_comment_above_the_first_table_attached_to_it(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path, "format = 1\n\n# sandbox options\n[sandbox]\nx = 1\n")
+    ops_for(registry_with()).select(app, "fixture")
+    text = app.config_file.read_text(encoding="utf-8")
+    assert "# sandbox options\n[sandbox]\n" in text
+    data = tomllib.loads(text)
+    assert data["stack"] == "fixture"
+    assert data["sandbox"] == {"x": 1}
+
+
+def test_select_with_invalid_toml_in_the_config_errors_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path, "format = [\n")
+    (tmp_path / ".gitignore").write_text("keep/\n", encoding="utf-8")
+    with pytest.raises(BullError):
+        ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    assert app.config_file.read_text(encoding="utf-8") == "format = [\n"
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == "keep/\n"
+    assert not (tmp_path / "src").exists()
+
+
+# ------------------------------------------------------- review: file modes
+
+
+def mode(path: Path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+def test_select_keeps_the_existing_files_permission_mode(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    (tmp_path / ".gitignore").write_text("keep/\n", encoding="utf-8")
+    app.config_file.chmod(0o664)
+    (tmp_path / ".gitignore").chmod(0o664)
+    ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    assert "results/" in (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert mode(app.config_file) == 0o664
+    assert mode(tmp_path / ".gitignore") == 0o664
+
+
+def test_select_gives_new_files_a_normal_mode_that_respects_the_umask(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path, config=None)
+    old = os.umask(0o022)
+    try:
+        ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    finally:
+        os.umask(old)
+    assert mode(app.config_file) == 0o644
+    assert mode(tmp_path / ".gitignore") == 0o644
+
+
+# ------------------------------------------------------- review: write order
+
+
+def test_select_leaves_the_config_unchanged_when_a_scaffold_folder_cannot_be_made(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path)
+    (tmp_path / "src").write_text("a file, not a folder", encoding="utf-8")
+    before = app.config_file.read_text(encoding="utf-8")
+    registry = registry_with(scaffold=("src",), gitignore=("results/",))
+    with pytest.raises((OSError, BullError)):
+        ops_for(registry).select(app, "fixture")
+    assert app.config_file.read_text(encoding="utf-8") == before
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_select_leaves_the_config_unchanged_when_gitignore_cannot_be_written(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path)
+    before = app.config_file.read_text(encoding="utf-8")
+    registry = registry_with(scaffold=(), gitignore=("results/",))
+    tmp_path.chmod(0o555)  # .bull stays writable; the app root does not
+    try:
+        with pytest.raises((OSError, BullError)):
+            ops_for(registry).select(app, "fixture")
+    finally:
+        tmp_path.chmod(0o755)
+    assert app.config_file.read_text(encoding="utf-8") == before
