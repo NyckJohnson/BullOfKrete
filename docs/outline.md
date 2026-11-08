@@ -1357,12 +1357,14 @@ when `readers.py` defines `detect`.
   - sources: files under `module_dir` matching `source_glob`, minus those matching any `exclude`
     glob (matched against the path relative to `part_root`), sorted.
   - report: for each source, uncovered lines minus exempted lines; a file without data is reported
-    unless it has a file marker; a file marker never hides uncovered lines in a file that has data;
+    unless it has a file marker; a file marker never hides uncovered lines in a file that has data,
+    and on a file that has data it is reported as an invalid marker (`<path>:<line>: unnecessary
+    file marker`) so it gets removed;
     data for files outside `sources` ignored; `clean` = no uncovered lines, no reported no-data
     files, no invalid markers.
   - render: "coverage clean for <M>" or per file `path: lines 3, 7-9` (ranges collapsed), then
     "without coverage data: …" and invalid markers.
-- Reference tests: v1-tests/test_gates_and_coverage.py::test_declaration_only_file_with_marker_passes, test_file_without_data_and_without_marker_fails, test_marker_does_not_hide_uncovered_code, test_line_and_block_markers, test_exclude_extra_adds_to_default
+- Reference tests: v1-tests/test_gates_and_coverage.py::test_declaration_only_file_with_marker_passes, test_file_without_data_and_without_marker_fails, test_marker_does_not_hide_uncovered_code, test_line_and_block_markers
 - Contract: see `docs/api/coverage.md` (generated; do not edit by hand)
 
 ### api
@@ -1573,11 +1575,14 @@ when `readers.py` defines `detect`.
     paths changed between the branch head and HEAD all lie under `bookkeeping_paths`, record a pass
     for HEAD without running (note "merge holds the gated code"); otherwise run ALL.
   - coverage(M): report from the last full run's data in `.bull/results/<part>/` (none → error "run
-    `bull gates <M>` first").
+    `bull gates <M>` first"). The exclude list passed to coverage is the resolved `coverage.exclude`
+    followed by `coverage.exclude_extra` (extras add to the defaults, never replace them).
   - render: one line per step (`✓`/`✗ gate part [module] — labels`), failing output tails, the
-    coverage report, failed ids, then "recorded" or the note. `--json` gives `GateRun` as JSON.
+    coverage report (when it lists files without coverage data, followed by one hint line naming the
+    marker in the part's stack comment syntax, e.g. `add "# coverage-exempt-file: <reason>" in the
+    first 10 lines of a file that only declares types`), failed ids, then "recorded" or the note. `--json` gives `GateRun` as JSON.
     Exit 0 on pass, 1 on fail, 2 on aborted.
-- Reference tests: v1-tests/test_gate_speed.py::test_skips_when_the_merge_holds_the_gated_code, test_ungated_bookkeeping_commits_on_the_base_still_skip, test_runs_everything_when_the_base_moved, test_runs_everything_without_an_earlier_gated_commit, test_runs_everything_when_another_module_changed, test_runs_everything_when_the_branch_head_was_not_gated, test_reruns_only_what_failed, test_a_passing_run_clears_the_list, test_module_runs_are_scoped_only_while_adopting, test_zero_tests_fail_the_run; v1-tests/test_gates_and_coverage.py::test_only_full_runs_record_a_pass, test_dirty_tree_records_nothing, test_failures; v1-tests/test_parts.py::test_gates_run_the_module_part, test_gates_all_covers_every_part, test_failed_tests_rerun_in_their_part, test_unknown_module_names_the_right_one, test_ui_tests_only_where_the_stack_defines_them; v1-tests/test_adopt_gates.py::test_full_runs_add_journey_tests_while_adopting, test_normal_app_and_stage_6_use_the_normal_gates, test_failing_journey_test_fails_the_run, test_no_modules_yet
+- Reference tests: v1-tests/test_gate_speed.py::test_skips_when_the_merge_holds_the_gated_code, test_ungated_bookkeeping_commits_on_the_base_still_skip, test_runs_everything_when_the_base_moved, test_runs_everything_without_an_earlier_gated_commit, test_runs_everything_when_another_module_changed, test_runs_everything_when_the_branch_head_was_not_gated, test_reruns_only_what_failed, test_a_passing_run_clears_the_list, test_module_runs_are_scoped_only_while_adopting, test_zero_tests_fail_the_run; v1-tests/test_gates_and_coverage.py::test_only_full_runs_record_a_pass, test_dirty_tree_records_nothing, test_failures, test_exclude_extra_adds_to_default; v1-tests/test_parts.py::test_gates_run_the_module_part, test_gates_all_covers_every_part, test_failed_tests_rerun_in_their_part, test_unknown_module_names_the_right_one, test_ui_tests_only_where_the_stack_defines_them; v1-tests/test_adopt_gates.py::test_full_runs_add_journey_tests_while_adopting, test_normal_app_and_stage_6_use_the_normal_gates, test_failing_journey_test_fails_the_run, test_no_modules_yet
 - Contract: see `docs/api/gates.md` (generated; do not edit by hand)
 
 ### stacktest
@@ -2091,3 +2096,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: features — human: a file new to an existing module goes where the feature's memo puts it in the module's `Files` groups (existing group → that unit; new group at the end → new unit), decided per feature. `feature plan` uses `status.init_modules(replace=True)` (keeps unchanged units) then `reopen`; no status change. Closes the open item from status coverage triage. Also: `feature list` position is the queued position `move` takes (`-` otherwise); `start` refuses an existing `feature/<slug>/main` branch before any write.
 - 2026-11-08: features reference scan (covered 5, missed 1, contradicts 0, not-in-spec 4, obsolete 1) — human kept all four v1 behaviors: wrapped list-item continuation lines joined into the description, checkbox items (`[x]` skipped, `[ ]` stripped), `--section` matched case-insensitively, and the start-during-adoption refusal saying it can start after the adoption finishes. Missed: add works during an adoption. Obsolete: v1's (ideas, notes) return pair.
 - 2026-11-08: features coverage triage — human approved specifying and testing 8 code-writer guards and the `plan` output text (listed under features Behavior spec "Guards" and "plan output").
+- 2026-11-08: coverage reference scan (covered 5, missed 0, contradicts 0, not-in-spec 3) — human: a file marker on a file that has coverage data is reported as an invalid marker ("unnecessary file marker") so it gets tidied; gates' render adds a hint line naming the file marker in the stack's comment syntax when files lack coverage data (in gates, since coverage's `render` doesn't know the comment; no contract change); v1's "N declaration-only file(s) exempt" count left out; gates combines `coverage.exclude` + `coverage.exclude_extra` before calling coverage (reference case test_exclude_extra_adds_to_default moved to gates) — approved by Nicholas Johnson
