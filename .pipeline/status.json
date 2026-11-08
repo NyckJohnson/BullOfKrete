@@ -222,7 +222,7 @@
             "loader.py",
             "registry.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T07:42:39-08:00",
+  "updatedAt": "2026-11-08T07:44:59-08:00",
   "features": [],
   "activeFeature": null
 }
