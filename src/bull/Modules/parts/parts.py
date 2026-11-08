@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import fnmatch
 import json
 import os
 import posixpath
@@ -115,6 +117,15 @@ class LiveParts(Parts):
                     f"folder `{folder}` overlaps part `{other.name}` (`{other.dir}`)",
                     "choose a folder outside the other parts with --dir",
                 )
+        root = _root(app, folder)
+        folders = _unique(
+            [
+                root,
+                *(root / sub for sub in found.manifest.scaffold),
+                *(root / inner for inner in new_folders if str(inner) != "."),
+            ]
+        )
+        _require_inside(app, folders)
 
         writes: list[tuple[Path, str]] = []
         implicit = self._implicit_entry(app)
@@ -130,19 +141,24 @@ class LiveParts(Parts):
         if gitignore is not None:
             writes.append(gitignore)
 
-        for path, text in writes:
-            _write_atomic(path, text)
-        root = _root(app, folder)
-        root.mkdir(parents=True, exist_ok=True)
-        for sub in found.manifest.scaffold:
-            (root / sub).mkdir(parents=True, exist_ok=True)
+        _apply(writes, folders)
         return self.get(app, name)
 
     # ---------------------------------------------------------------- checking
 
     def check(self, app: AppLayout) -> list[str]:
-        entries = self._entries(app)
         problems: list[str] = []
+        entries: list[_Entry] = []
+        for entry in self._entries(app):
+            try:
+                _clean_dir(entry.dir)
+            except BullError:
+                problems.append(
+                    f"part `{entry.name}`: folder `{entry.dir}` is absolute "
+                    "or outside the app"
+                )
+                continue
+            entries.append(entry)
         known: dict[str, Stack] = {}
         for entry in entries:
             found = self._stack_or_none(entry.stack)
@@ -164,8 +180,15 @@ class LiveParts(Parts):
                         f"`{second.name}` (`{second.dir}`) overlap"
                     )
         for entry in entries:
-            if not _root(app, entry.dir).is_dir():
+            root = _root(app, entry.dir)
+            if not root.is_dir():
                 problems.append(f"part `{entry.name}`: folder `{entry.dir}` is missing")
+                continue
+            for label, inner in zip(("source", "test"), folders.get(entry.name, ())):
+                if not (root / inner).is_dir():
+                    problems.append(
+                        f"part `{entry.name}`: {label} folder `{inner}` is missing"
+                    )
         return problems
 
     # ------------------------------------------------------------------- paths
@@ -177,13 +200,19 @@ class LiveParts(Parts):
         return part.root / part.test_dir / module
 
     def is_test_path(self, app: AppLayout, path: Path) -> bool:
-        target = path if path.is_absolute() else app.root / path
+        # Resolve both sides (symlinks followed, `..` collapsed) so a path can't slip in
+        # or out of a test folder by spelling.
+        base = app.root.resolve()
+        target = (path if path.is_absolute() else app.root / path).resolve()
+        if not target.is_relative_to(base):
+            return False
         for part in self.all(app):
-            if target.is_relative_to(part.root / part.test_dir):
+            if target.is_relative_to((part.root / part.test_dir).resolve()):
                 return True
             found = self._stack_or_none(part.stack)
             if found is not None and any(
-                target.match(glob) for glob in found.manifest.test_glob
+                fnmatch.fnmatchcase(target.name, glob)
+                for glob in found.manifest.test_glob
             ):
                 return True
         return False
@@ -223,13 +252,13 @@ class LiveParts(Parts):
     def _inner_folders(
         self, app: AppLayout, entries: Sequence[_Entry], known: Mapping[str, Stack]
     ) -> dict[str, tuple[PurePosixPath, ...]]:
-        """Source and test folders of root parts with a known stack (all overlap needs)."""
-        roots = [e for e in entries if _clean_dir(e.dir) == "." and e.name in known]
-        if not roots:
+        """Source and test folders of each part with a known stack, relative to its root."""
+        chosen = [e for e in entries if e.name in known]
+        if not chosen:
             return {}
         settings = self._loader.load(app, self._stack_layer)
         folders: dict[str, tuple[PurePosixPath, ...]] = {}
-        for entry in roots:
+        for entry in chosen:
             key = None if entry.implicit else entry.name
             folders[entry.name] = (
                 _rel(str(settings.get("source_dir", key))),
@@ -386,27 +415,24 @@ _KEY_LINE = re.compile(r"^\s*([^=\[#][^=]*?)\s*=")
 def _remove_top_level_keys(text: str, keys: set[str]) -> str:
     """Drop `key = value` lines for `keys` before the first table header.
 
-    Comments and other lines stay as written. A multi-line array value is dropped up to
-    its closing bracket. The caller verifies the result by parsing it.
+    Comments and other lines stay as written. A value spanning several lines (an open
+    array) is refused with a BullError rather than guessed at. The caller verifies the
+    result by parsing it.
     """
     out: list[str] = []
-    lines = text.splitlines(keepends=True)
-    i = 0
     in_tables = False
-    while i < len(lines):
-        line = lines[i]
+    for line in text.splitlines(keepends=True):
         if line.lstrip().startswith("["):
             in_tables = True
         match = None if in_tables else _KEY_LINE.match(line)
-        if match is not None and _key_name(match.group(1)) in keys:
-            depth = _bracket_depth(line[match.end() :])
-            i += 1
-            while depth > 0 and i < len(lines):
-                depth += _bracket_depth(lines[i])
-                i += 1
+        if match is not None and (key := _key_name(match.group(1))) in keys:
+            if _bracket_depth(line[match.end() :]) != 0:
+                raise BullError(
+                    f"can't move `{key}` out of config.toml: its value spans several lines",
+                    "write it on one line, then retry",
+                )
             continue
         out.append(line)
-        i += 1
     return "".join(out)
 
 
@@ -434,12 +460,23 @@ def _bracket_depth(fragment: str) -> int:
 
 
 def _gitignore_line(folder: str, line: str) -> str:
-    """A stack gitignore line moved under the part's folder (unchanged for a root part)."""
+    """A stack gitignore line moved under the part's folder, keeping its meaning.
+
+    Git matches a pattern with no slash (other than a trailing one) at any depth, so it
+    becomes `<folder>/**/<body>`; a pattern with a slash is anchored to the `.gitignore`
+    folder, so it becomes `<folder>/<body>` (`/<folder><body>` when written with a
+    leading `/`). Lines are unchanged for a root part.
+    """
     if folder == ".":
         return line
     negate = line.startswith("!")
     body = line[1:] if negate else line
-    moved = f"/{folder}{body}" if body.startswith("/") else f"{folder}/{body}"
+    if body.startswith("/"):
+        moved = f"/{folder}{body}"
+    elif "/" in body.rstrip("/"):  # includes `**/x`, which keeps its any-depth meaning
+        moved = f"{folder}/{body}"
+    else:
+        moved = f"{folder}/**/{body}"
     return ("!" if negate else "") + moved
 
 
@@ -466,6 +503,74 @@ def _gitignore_write(
     if current and not current.endswith("\n"):
         current += "\n"
     return path, current + "".join(f"{line}\n" for line in added)
+
+
+def _unique(paths: Sequence[Path]) -> list[Path]:
+    """`paths` without repeats, first occurrence kept."""
+    return list(dict.fromkeys(paths))
+
+
+def _require_inside(app: AppLayout, folders: Sequence[Path]) -> None:
+    """Refuse folders that resolve outside the app or have a non-folder in their way.
+
+    Symlinks are followed, so a link to somewhere outside the app is caught; every
+    existing path from the folder up to the app root must be a folder.
+    """
+    base = app.root.resolve()
+    for folder in folders:
+        if not folder.resolve().is_relative_to(base):
+            raise BullError(
+                f"folder `{folder}` is outside the app (after following links)",
+                "choose a folder inside the app with --dir",
+            )
+        step = folder
+        while step != app.root and app.root in step.parents:
+            if step.exists() and not step.is_dir():
+                raise BullError(
+                    f"`{step}` exists and is not a folder",
+                    "move it away or choose another folder with --dir",
+                )
+            step = step.parent
+
+
+def _make_dirs(folder: Path, created: list[Path]) -> None:
+    """Create `folder` and its missing parents, recording each one made in `created`."""
+    missing: list[Path] = []
+    step = folder
+    while not step.exists() and not step.is_symlink():
+        missing.append(step)
+        step = step.parent
+    for path in reversed(missing):
+        path.mkdir()
+        created.append(path)
+
+
+def _apply(writes: Sequence[tuple[Path, str]], folders: Sequence[Path]) -> None:
+    """Write files and create folders as one step: on any failure, undo all of it.
+
+    Files are restored byte for byte (or removed if they were new) and the folders this
+    call created are removed, then the original error is raised again.
+    """
+    saved = [(path, path.read_bytes() if path.exists() else None) for path, _ in writes]
+    created: list[Path] = []
+    try:
+        for path, text in writes:
+            _make_dirs(path.parent, created)
+            _write_atomic(path, text)
+        for folder in folders:
+            _make_dirs(folder, created)
+    except BaseException:
+        for path, original in reversed(saved):
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(original)
+        for folder in reversed(created):
+            # Best effort: a folder something else has filled since is left in place
+            # rather than masking the original error.
+            with contextlib.suppress(OSError):
+                folder.rmdir()
+        raise
 
 
 def _write_atomic(path: Path, text: str) -> None:
