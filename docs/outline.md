@@ -754,6 +754,7 @@ when `readers.py` defines `detect`.
       journeys: tuple[Journey, ...]; interfaces: tuple[InterfaceEntry, ...]
       parts: tuple[str, ...]; unmapped_reference_tests: tuple[str, ...]
       legacy: LegacySection | None
+      parse_problems: tuple[MemoProblem, ...] = ()   # found while parsing (e.g. duplicate sections)
 
   @dataclass(frozen=True)
   class MemoProblem:
@@ -780,7 +781,12 @@ when `readers.py` defines `detect`.
     <part> / <Module>`, `- Consumers: <part> / <Module>, …`, `- Contract changes (<slug>): …`.
   - parse `## Constraints`: `- Parts: a (stack), b (stack)` → parts; absent → `()`.
   - parse `## Unmapped reference tests` and `## Legacy code` (`App shell:`, `App shell tests:`,
-    `Legacy folders:`, `Renames: A → LegacyA, …`); a missing section → empty / None.
+    `Legacy folders:`, `Renames: A → LegacyA, …`; other lines, including slugged keys such as
+    `Changes (<slug>)`, are ignored); a missing section → empty / None.
+  - A `## <heading>` that appears twice: the first section wins; the second is recorded in
+    `parse_problems` as "duplicate section `## <heading>`" on its line.
+  - An interface side without `/` parses as an empty part; a `- File:` without `(<format>)` parses as
+    an empty format.
   - section_items(text, heading): top-level `- ` items under `## <heading>` (heading matched ignoring case; text after `- `,
     continuation lines joined); missing heading → `[]`.
   - problems, each with its line: module in build order without a `###` block or the reverse;
@@ -789,8 +795,10 @@ when `readers.py` defines `detect`.
     without `Files`; a unit with more than `max_files` files; with parts: a module or journey part
     not in `known_parts`, a module without `Part` when there are several parts, a dependency on a
     module of another part ("`web / Import` depends on `cli / Export` in another part; use an
-    interface"); an interface side naming an unknown module or part; `Changes (<slug>)` naming a
-    file not in the module's `Files`.
+    interface"); an interface side naming an unknown module or part, or written without `<part> / ` ("`<Module>`
+    needs `<part> / <Module>`"); an interface `File` without `(<format>)`; `Changes (<slug>)` naming a
+    file not in the module's `Files`; every entry of `memo.parse_problems`. Interface problems use line
+    0 (InterfaceEntry carries no line).
   - Templates: names `outline`, `backlog`; text returns the file; unknown name → `BullError` listing
     names. The outline template documents every line format above (stack-neutral wording).
   - cli: `bull template <name>` prints the template.
@@ -1991,3 +1999,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: module `cli.py` convention (first set by settings; every later module follows it): `register(commands: argparse._SubParsersAction[argparse.ArgumentParser], <collaborators as zero-argument providers typed by protocol, e.g. settings: Callable[[], Settings]>) -> None` adds the module's command parsers; each leaf parser does `set_defaults(run=<fn>)` with `run(args: argparse.Namespace, out: TextIO) -> int` (exit code; `--json` writes JSON only to `out`). Providers, not instances, because `cli.main` builds the parser before it checks formats and loads settings. `cli.wiring` calls each `register`; `cli.main` calls `args.run(args, sys.stdout)`. Errors are raised as `BullError`/`ConfigError`, never printed by the module.
 - 2026-11-08: formats spec clarifications (follow from the foundation contract and the Commands table; flagged to the human at the module boundary): an app file that isn't valid JSON/TOML → foundation's `FileFormatError` naming the path from `inspect`/`check`/`migrate`; a non-integer `format` (incl. `true`) counts as missing (None, migrated from 0); `bull migrate` prints `migrated <path>` per changed file; a missing migration step's fix is the upgrade command.
 - 2026-11-08: memo reference scan — `section_items` matches the `## <heading>` ignoring case (v1's test_sections_and_lists did; added to the spec) — approved by Nicholas Johnson
+- 2026-11-08: memo coverage triage — duplicate `## <heading>`: first wins and it is reported through a new contract field `Memo.parse_problems` (contract change approved; no dependent module built yet); an interface side without `<part> / ` and an interface `File` without `(<format>)` are reported by `problems()`; slugged or unknown lines in `## Legacy code` are ignored (spec'd) — approved by Nicholas Johnson
