@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping, Sequence
 
 from bull.Modules.memo.Contracts import (
@@ -396,3 +397,68 @@ def test_parsed_memo_with_missing_block_reports_build_order_line() -> None:
     )
     problems = reader.problems(reader.parse(text), [], 5)
     assert [(p.line, "B" in p.message) for p in problems] == [(3, True)]
+
+
+def test_interface_side_without_part_is_reported_with_module_name() -> None:
+    memo = _two_part_memo(_iface(SideRef("", "Export"), (SideRef("web", "Import"),)))
+    problems = _problems(memo, known_parts=["cli", "web"])
+    assert any(
+        "needs `<part> / <Module>`" in p.message and "Export" in p.message
+        for p in problems
+    )
+
+
+def test_interface_consumer_without_part_is_reported_with_module_name() -> None:
+    memo = _two_part_memo(_iface(SideRef("cli", "Export"), (SideRef("", "Import"),)))
+    problems = _problems(memo, known_parts=["cli", "web"])
+    assert any(
+        "needs `<part> / <Module>`" in p.message and "Import" in p.message
+        for p in problems
+    )
+
+
+def test_interface_file_without_format_is_reported_mentioning_format() -> None:
+    iface = InterfaceEntry(
+        name="feed",
+        file="docs/feed.json",
+        format="",
+        provider=SideRef("cli", "Export"),
+        consumers=(SideRef("web", "Import"),),
+        contract_changes={},
+    )
+    problems = _problems(_two_part_memo(iface), known_parts=["cli", "web"])
+    assert len(problems) == 1
+    assert "format" in problems[0].message
+
+
+def test_parse_problems_are_included_with_their_lines() -> None:
+    memo = dataclasses.replace(
+        _clean(),
+        parse_problems=(
+            MemoProblem(7, "duplicate section `## Modules`"),
+            MemoProblem(9, "another"),
+        ),
+    )
+    problems = _problems(memo)
+    assert MemoProblem(7, "duplicate section `## Modules`") in problems
+    assert MemoProblem(9, "another") in problems
+
+
+def test_duplicate_section_in_parsed_text_appears_in_problems() -> None:
+    reader = LiveMemoReader()
+    text = "## Unmapped reference tests\n- a\n\n## Unmapped reference tests\n- b\n"
+    problems = reader.problems(reader.parse(text), [], 5)
+    assert [(p.line, "duplicate section" in p.message) for p in problems] == [(4, True)]
+
+
+def test_block_not_in_build_order_with_unknown_dependency_reports_both() -> None:
+    memo = _memo(
+        [BuildEntry("Store", (), 2)],
+        [_module("Store", 10), _module("X", 20, depends=("Y", "Store"))],
+    )
+    problems = _problems(memo)
+    assert any(p.line == 20 and "not in the build order" in p.message for p in problems)
+    assert any(
+        p.line == 20 and "depends on unknown module `Y`" in p.message for p in problems
+    )
+    assert not any("`Store`" in p.message for p in problems)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from bull.Modules.memo.Contracts import SideRef
 from bull.Modules.memo.parser import LiveMemoReader
 
 FENCE = "```"
@@ -309,3 +310,69 @@ def test_section_items_heading_match_ignores_case(heading: str) -> None:
 def test_section_items_case_insensitive_match_ignores_other_sections() -> None:
     text = "## Other\n- nope\n\n## LATER features\n- Only this\n\n## More\n- no\n"
     assert LiveMemoReader().section_items(text, "later FEATURES") == ["Only this"]
+
+
+def test_duplicate_section_first_wins_and_is_reported_on_second_heading() -> None:
+    text = (
+        "## Unmapped reference tests\n"
+        "- v1/first.py::test_a\n"
+        "\n"
+        "## Unmapped reference tests\n"
+        "- v1/second.py::test_b\n"
+    )
+    memo = LiveMemoReader().parse(text)
+    assert memo.unmapped_reference_tests == ("v1/first.py::test_a",)
+    assert len(memo.parse_problems) == 1
+    problem = memo.parse_problems[0]
+    assert problem.line == 4
+    assert problem.message == "duplicate section `## Unmapped reference tests`"
+
+
+def test_duplicate_modules_section_keeps_only_first_sections_blocks() -> None:
+    text = "## Modules\n### A\n- Files: a.py\n\n## Modules\n### B\n- Files: b.py\n"
+    memo = LiveMemoReader().parse(text)
+    assert [m.name for m in memo.modules] == ["A"]
+    assert [p.line for p in memo.parse_problems] == [5]
+
+
+def test_no_duplicate_sections_gives_empty_parse_problems() -> None:
+    text = (
+        "## Build order\n1. a (depends on: none)\n\n## Modules\n### a\n- Files: a.py\n"
+    )
+    assert LiveMemoReader().parse(text).parse_problems == ()
+
+
+def test_interface_side_without_slash_parses_as_empty_part() -> None:
+    text = (
+        "## Interfaces\n"
+        "### feed\n"
+        "- File: data/x.json (json)\n"
+        "- Provider: Export\n"
+        "- Consumers: Import\n"
+    )
+    i = LiveMemoReader().parse(text).interfaces[0]
+    assert i.provider == SideRef(part="", module="Export")
+    assert i.consumers == (SideRef(part="", module="Import"),)
+
+
+def test_interface_file_without_format_keeps_file_and_empty_format() -> None:
+    text = "## Interfaces\n### feed\n- File: data/x.json\n- Provider: cli / Export\n"
+    i = LiveMemoReader().parse(text).interfaces[0]
+    assert i.file == "data/x.json"
+    assert i.format == ""
+
+
+def test_legacy_code_ignores_slugged_and_unknown_keys_but_parses_known() -> None:
+    text = (
+        "## Legacy code\n"
+        "- App shell: App.swift\n"
+        "- Changes (dark-mode): App.swift\n"
+        "- Mystery: whatever\n"
+        "- Legacy folders: Old/\n"
+    )
+    legacy = LiveMemoReader().parse(text).legacy
+    assert legacy is not None
+    assert legacy.app_shell == ("App.swift",)
+    assert legacy.legacy_folders == ("Old/",)
+    assert legacy.app_shell_tests == ()
+    assert dict(legacy.renames) == {}

@@ -54,6 +54,7 @@ _FIELDS: dict[type, list[str]] = {
         "parts",
         "unmapped_reference_tests",
         "legacy",
+        "parse_problems",
     ],
     MemoProblem: ["line", "message"],
 }
@@ -151,6 +152,25 @@ def test_memo_holds_all_values_and_legacy_may_be_none() -> None:
     assert memo.legacy is None
     assert memo.parts == ("cli (python_cli)",)
     assert memo.unmapped_reference_tests == ("x",)
+
+
+def test_memo_parse_problems_defaults_to_empty_tuple() -> None:
+    memo = Memo(
+        build_order=(),
+        modules=(),
+        journeys=(),
+        interfaces=(),
+        parts=(),
+        unmapped_reference_tests=(),
+        legacy=None,
+    )
+    assert memo.parse_problems == ()
+
+
+def test_memo_parse_problems_holds_given_problems() -> None:
+    problem = MemoProblem(2, "x")
+    memo = Memo((), (), (), (), (), (), None, parse_problems=(problem,))
+    assert memo.parse_problems == (problem,)
 
 
 def test_memo_reader_protocol_declares_parse_section_items_and_problems() -> None:
