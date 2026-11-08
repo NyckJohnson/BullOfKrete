@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 
 from bull.Modules.foundation.Contracts import AppLayout, Clock, Files
@@ -44,7 +45,12 @@ class LiveUsage(Usage):
 
     def latest(self) -> UsageSample | None:
         """The recorded sample, or None when the file is missing or unreadable."""
-        text = self._files.read_text(self._path)
+        try:
+            text = self._files.read_text(self._path)
+        except (OSError, UnicodeDecodeError):
+            return (
+                None  # unreadable file (permissions, a directory, bad bytes) per spec
+            )
         if text is None:
             return None
         try:
@@ -164,4 +170,7 @@ def _opt_percent(value: object) -> float | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise _Malformed
-    return float(value)
+    percent = float(value)
+    if not math.isfinite(percent):  # json.loads accepts NaN / Infinity
+        raise _Malformed
+    return percent
