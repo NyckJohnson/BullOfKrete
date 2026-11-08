@@ -314,7 +314,12 @@ class LiveMemoReader(MemoReader):
         )
 
     def section_items(self, text: str, heading: str) -> list[str]:
-        return _items(_sections(text).get(heading, []))
+        # The heading match ignores case; the first matching section wins.
+        wanted = heading.casefold()
+        for name, lines in _sections(text).items():
+            if name.casefold() == wanted:
+                return _items(lines)
+        return []
 
     def problems(
         self, memo: Memo, known_parts: Sequence[str], max_files: int
