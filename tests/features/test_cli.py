@@ -11,8 +11,10 @@ Shapes chosen here (for the code-writer), following the decisions-log `cli.py` c
     `ideas.read(text, section)`, then `backlog.import_ideas(ideas)`; prints the added titles.
     `--dry-run` prints the ideas that would be added (not already in the backlog by slug or
     case-insensitive title) and calls neither `add` nor `import_ideas`.
-  - `feature list` prints one line per item: position, slug, state, title (positions 1-based).
-    `list --json` writes a list of objects with `slug`, `title`, `state` (state value string).
+  - `feature list` prints one line per item in file order: position, slug, state, title. The
+    position is the 1-based position among queued items (what `move` takes); `-` when not queued.
+    `list --json` writes a list of objects with `position` (null when not queued), `slug`,
+    `state` (state value string), `title`.
   - `move <slug> <pos>`, `drop <slug>` call the backlog; `start [<slug>]`, `plan`, `accept`,
     `abandon` call the cycle; each prints the slug (or plan summary) and returns 0.
   - Refusals are raised (`BullError`), never printed.
@@ -28,8 +30,15 @@ from typing import Any
 
 import pytest
 
-from bull.Modules.features.Contracts import Idea
-from bull.Modules.features.mocks import MockBacklog, MockFeatureCycle, MockIdeaReader
+from dataclasses import replace
+
+from bull.Modules.features.Contracts import Idea, ItemState
+from bull.Modules.features.mocks import (
+    MockBacklog,
+    MockFeatureCycle,
+    MockIdeaReader,
+    sample_item,
+)
 from bull.Modules.foundation.Contracts import BullError
 
 
@@ -191,6 +200,55 @@ def test_list_json_writes_only_the_items_as_json(rig: Rig) -> None:
     assert [d["slug"] for d in data] == ["reset-button", "dark-mode"]
     assert [d["title"] for d in data] == ["Reset button", "Dark mode"]
     assert [d["state"] for d in data] == ["queued", "queued"]
+
+
+def _with_dropped_first(rig: Rig) -> None:
+    rig.backlog.backlog = [
+        replace(sample_item("old-idea", "Old idea"), state=ItemState.DROPPED),
+        sample_item("reset-button", "Reset button"),
+        replace(sample_item("shipped", "Shipped"), state=ItemState.ACCEPTED),
+        sample_item("dark-mode", "Dark mode"),
+    ]
+
+
+def test_list_numbers_queued_items_only_and_marks_others_with_a_dash(rig: Rig) -> None:
+    _with_dropped_first(rig)
+    _, text = rig.run("list")
+    lines = {
+        slug: next(line for line in text.splitlines() if slug in line)
+        for slug in ("old-idea", "reset-button", "shipped", "dark-mode")
+    }
+    assert lines["old-idea"].split()[0] == "-"
+    assert lines["shipped"].split()[0] == "-"
+    assert lines["reset-button"].split()[0] == "1"
+    assert lines["dark-mode"].split()[0] == "2"
+    order = [text.index(slug) for slug in lines]
+    assert order == sorted(order)
+
+
+def test_list_json_carries_position_null_when_not_queued(rig: Rig) -> None:
+    _with_dropped_first(rig)
+    _, text = rig.run("list", "--json")
+    data = json.loads(text)
+    assert [d["slug"] for d in data] == [
+        "old-idea",
+        "reset-button",
+        "shipped",
+        "dark-mode",
+    ]
+    assert [d["position"] for d in data] == [None, 1, None, 2]
+    assert [d["state"] for d in data] == ["dropped", "queued", "accepted", "queued"]
+    assert [d["title"] for d in data] == [
+        "Old idea",
+        "Reset button",
+        "Shipped",
+        "Dark mode",
+    ]
+
+
+def test_list_json_positions_of_queued_items_are_one_based(rig: Rig) -> None:
+    _, text = rig.run("list", "--json")
+    assert [d["position"] for d in json.loads(text)] == [1, 2]
 
 
 def test_list_of_an_empty_backlog_succeeds(rig: Rig) -> None:

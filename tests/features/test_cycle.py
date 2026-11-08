@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from dataclasses import replace as dataclass_replace
 from typing import Any
 
 import pytest
@@ -20,9 +21,18 @@ from bull.Modules.features.cycle import LiveFeatureCycle
 from bull.Modules.foundation.Contracts import BullError
 from bull.Modules.foundation.mocks import MockFiles, sample_layout
 from bull.Modules.gitrepo.mocks import MockGit
-from bull.Modules.memo.Contracts import ModuleEntry
+from bull.Modules.memo.Contracts import Memo, ModuleEntry
 from bull.Modules.memo.mocks import MockMemoReader, sample_memo
-from bull.Modules.status.Contracts import ActiveFeature, Status, Track
+from bull.Modules.status.Contracts import (
+    ActiveFeature,
+    ModuleState,
+    ModuleStatus,
+    Status,
+    Track,
+    Unit,
+    UnitKind,
+    UnitState,
+)
 from bull.Modules.status.mocks import MockRefs, MockStatusStore, sample_status
 
 LAYOUT = sample_layout()
@@ -169,7 +179,11 @@ def _refused_cases() -> list[tuple[str, Any]]:
     def feature_active(rig: Rig) -> None:
         rig.store.status = _with_feature(rig.store.status, "other", 3)
 
+    def branch_exists(rig: Rig) -> None:
+        rig.git.branches.add("feature/reset-button/main")
+
     return [
+        ("branch-exists", branch_exists),
         ("dirty", dirty),
         ("off-trunk", off_trunk),
         ("not-accepted", not_accepted),
@@ -193,6 +207,17 @@ def test_start_is_refused_and_changes_nothing_when_a_precondition_fails(
     assert rig.git_calls("commit_all") == []
     assert rig.git_calls("create_branch") == []
     assert rig.files.texts[LAYOUT.backlog_file] == before
+
+
+def test_start_with_slug_is_refused_when_that_feature_branch_exists() -> None:
+    rig = Rig()
+    rig.git.branches.add("feature/dark-mode/main")
+    with pytest.raises(BullError):
+        rig.cycle.start("dark-mode")
+    assert rig.states() == {"reset-button": "queued", "dark-mode": "queued"}
+    assert rig.store_calls("start_feature") == []
+    assert rig.git_calls("commit_all") == []
+    assert rig.git_calls("create_branch") == []
 
 
 def test_start_is_refused_when_nothing_is_queued() -> None:
@@ -219,6 +244,46 @@ def test_start_is_refused_for_a_slug_that_is_not_queued() -> None:
 # --- plan --------------------------------------------------------------------------------
 
 
+class ReplacingStore(MockStatusStore):
+    """`init_modules(replace=True)` as the spec describes: unchanged units keep their progress,
+    changed or new units start pending, modules not yet in status are appended."""
+
+    def __init__(self, status: Status) -> None:
+        super().__init__(status)
+        self.refuse = False
+
+    def init_modules(self, memo: Memo, replace: bool = False) -> Status:
+        self.calls.append(("init_modules", (memo, replace)))
+        if self.refuse:
+            raise BullError("The memo has problems.", "Fix them first.")
+        modules = list(self.status.modules)
+        for entry in memo.modules:
+            known = next((m for m in modules if m.name == entry.name), None)
+            old = known.units if known is not None else ()
+            units = tuple(
+                old[n - 1]
+                if n <= len(old) and old[n - 1].files == files
+                else Unit(n, files, UnitKind.CODE, UnitState.PENDING, 1)
+                for n, files in enumerate(entry.units, start=1)
+            )
+            if known is None:
+                modules.append(
+                    ModuleStatus(
+                        entry.name,
+                        entry.part or "app",
+                        entry.depends,
+                        ModuleState.PENDING,
+                        units,
+                        False,
+                        None,
+                    )
+                )
+            else:
+                modules[modules.index(known)] = dataclass_replace(known, units=units)
+        self.status = dataclass_replace(self.status, modules=tuple(modules))
+        return self.status
+
+
 def _entry(name: str, **fields: Any) -> ModuleEntry:
     base = sample_memo().modules[1]
     return replace(base, name=name, **fields)
@@ -228,6 +293,10 @@ def _planning_rig(*entries: ModuleEntry) -> Rig:
     rig = Rig(
         [_raw("reset-button", "active"), _raw("dark-mode")],
         _with_feature(_accepted_app(), "reset-button", 2),
+    )
+    rig.store = ReplacingStore(rig.store.status)
+    rig.cycle = LiveFeatureCycle(
+        LAYOUT, rig.files, rig.git, rig.memo, rig.store, rig.refs
     )
     rig.on_feature_branch()
     base = sample_memo()
@@ -263,13 +332,30 @@ def test_plan_ignores_changes_marked_for_another_slug() -> None:
     assert plan.skeleton_needed is False
 
 
+def test_plan_runs_init_modules_with_replace_on_the_parsed_memo() -> None:
+    rig = _planning_rig(_entry("Counter"))
+    rig.cycle.plan()
+    assert rig.store_calls("init_modules") == [(rig.memo.memo, True)]
+
+
+def test_plan_does_not_use_add_modules_directly() -> None:
+    rig = _planning_rig(_entry("Export", depends=("Store",), units=(("export.fx",),)))
+    rig.cycle.plan()
+    assert rig.store_calls("add_modules") == []
+
+
+def test_plan_initialises_modules_before_reopening() -> None:
+    counter = _entry("Counter", changes={"reset-button": ("counter.fx",)})
+    rig = _planning_rig(counter)
+    rig.cycle.plan()
+    order = [n for n, _ in rig.store.calls if n in ("init_modules", "reopen")]
+    assert order == ["init_modules", "reopen"]
+
+
 def test_plan_adds_modules_not_yet_in_status() -> None:
     export = _entry("Export", depends=("Store",), units=(("export.fx",),))
     rig = _planning_rig(export)
     plan = rig.cycle.plan()
-    added = rig.store_calls("add_modules")
-    assert len(added) == 1
-    assert [e.name for e in added[0][0]] == ["Export"]  # type: ignore[attr-defined]
     assert plan.new_modules == ("Export",)
     assert "Export" in {m.name for m in rig.store.status.modules}
 
@@ -281,6 +367,60 @@ def test_plan_does_not_add_modules_already_in_status() -> None:
     plan = rig.cycle.plan()
     assert plan.new_modules == ()
     assert [m.name for m in rig.store.status.modules] == before
+
+
+def test_plan_reopens_a_file_new_to_an_existing_module_placed_in_an_existing_group() -> (
+    None
+):
+    # The memo puts new.fx in Counter's second group (unit 2), next to cli.fx.
+    counter = _entry(
+        "Counter",
+        units=(("Contracts/counter.fx", "counter.fx"), ("cli.fx", "new.fx")),
+        changes={"reset-button": ("new.fx",)},
+    )
+    rig = _planning_rig(counter)
+    plan = rig.cycle.plan()
+    assert rig.store_calls("reopen") == [("Counter", ("new.fx",))]
+    assert plan.reopened == {"Counter": (2,)}
+    units = {
+        u.number: u
+        for u in next(m for m in rig.store.status.modules if m.name == "Counter").units
+    }
+    assert units[1].state is UnitState.TESTS  # unchanged unit keeps its progress
+    assert units[2].files == ("cli.fx", "new.fx")
+    assert units[2].state is UnitState.PENDING
+    assert plan.new_modules == ()
+
+
+def test_plan_reopens_a_file_new_to_an_existing_module_placed_in_a_new_group() -> None:
+    counter = _entry(
+        "Counter",
+        units=(
+            ("Contracts/counter.fx", "counter.fx"),
+            ("cli.fx",),
+            ("new.fx",),
+        ),
+        changes={"reset-button": ("new.fx",)},
+    )
+    rig = _planning_rig(counter)
+    plan = rig.cycle.plan()
+    assert rig.store_calls("reopen") == [("Counter", ("new.fx",))]
+    assert plan.reopened == {"Counter": (3,)}
+    module = next(m for m in rig.store.status.modules if m.name == "Counter")
+    assert [u.files for u in module.units][-1] == ("new.fx",)
+    assert module.units[0].state is UnitState.TESTS
+
+
+def test_plan_memo_problems_refused_by_init_modules_reopen_nothing() -> None:
+    counter = _entry("Counter", changes={"reset-button": ("counter.fx",)})
+    rig = _planning_rig(counter)
+    assert isinstance(rig.store, ReplacingStore)
+    rig.store.refuse = True
+    before = rig.store.status
+    with pytest.raises(BullError):
+        rig.cycle.plan()
+    assert rig.store_calls("reopen") == []
+    assert rig.store.status == before
 
 
 def test_plan_lists_modules_with_contract_changes_for_the_slug() -> None:
@@ -334,7 +474,7 @@ def test_plan_is_refused_off_the_feature_branch() -> None:
     with pytest.raises(BullError):
         rig.cycle.plan()
     assert rig.store_calls("reopen") == []
-    assert rig.store_calls("add_modules") == []
+    assert rig.store_calls("init_modules") == []
 
 
 def test_plan_is_refused_when_no_feature_is_active() -> None:
