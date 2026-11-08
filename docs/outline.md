@@ -1208,6 +1208,7 @@ when `readers.py` defines `detect`.
     NextStep` (`branch` = current git branch, None when unknown). summary.py (unit 4) holds
     `LiveProgress(store: StatusStore, refs: Refs, git: Git)`, which calls it.
   - summary.py: `LiveProgress(app: AppLayout, store: StatusStore, refs: Refs, git: Git)`;
+    each call loads the status once and derives the mode from it;
     next_step uses `git.current_branch(app.root)`; tags uses `git.tags(app.root, …)`.
   - cli.py (decisions-log convention): `register(commands, store: Callable[[], StatusStore], refs:
     Callable[[], Refs], progress: Callable[[], Progress], usage: Callable[[], Usage], memo:
@@ -1215,11 +1216,11 @@ when `readers.py` defines `detect`.
     Routing `status` to stackflow in a stack repo is `cli.wiring`'s job; here a stack repo is
     refused through `store.load()`.
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
-    `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
-  - Guards (coverage triage, approved 2026-11-08): a naive time is written as UTC; a module with
+    one `store.load()` (mode derived from that status, as `mode` does), the trunk from `settings.get("base_branch", None)`.
+  - Guards (coverage triage, approved 2026-11-08): a naive time (e.g. from the clock) is treated as UTC, so the change saves; a module with
     no part when the app has no parts → refused ("add a part with `bull part add`"); reopen with no
     unit holding any of the files → refused (files no unit holds are otherwise ignored);
-    add_modules with an existing name → refused; no module in progress, none can start, not all
+    add_modules with an existing name → refused; build-order names match module blocks case-insensitively (as memo problems do; the block's name is used); a build-order entry with no module block → refused; no module in progress, none can start, not all
     done → "no module can start (not done: <M>, …): ask the human"; `base_branch` empty or not a
     string → refused; `max_attempts` / `max_files_per_unit` not an integer → refused; end_feature
     and mark_contract_applied with no active feature → refused; mark_contract_applied twice →
@@ -2062,3 +2063,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: status `attempt` at the limit saves the `blocked` state, then refuses (store raises after writing); found by the unit 2 code-writer.
 - 2026-11-08: status reference scan (covered 14, missed 0, contradicts 0, not-in-spec 4, obsolete 4) — human: `init-modules --replace` keeps unchanged units' progress (v1 behavior; spec line added under init_modules); `bull status` shows no per-part lines (`bull part list` covers it); finish's "not adopted"/legacy-left refusals belong to the adoption module, already specified there.
 - 2026-11-08: status coverage triage — human approved specifying and testing 12 code-writer guards (listed under status Behavior spec "Guards"). Open for the features module: a `Changes` line naming a file new to an existing module (no unit holds it yet) is refused by `reopen`; features must decide how new files join a module.
+- 2026-11-08: status exemption review — refs and LiveProgress derive mode from one load; naive clock times are treated as UTC (they made every save fail); build order matches module blocks case-insensitively like memo problems. No contract change.
