@@ -183,6 +183,14 @@ small **fixture stack** (fast, no real toolchain) unless a journey says otherwis
    both parts pass `stack check`; `gates --all` runs each part, then journeys.
    - Failure: a memo where a `web` module depends on a `cli` module is refused by `init-modules`.
    - Failure: overlapping part folders reported by `part check`.
+   - Talking through an interface: the memo's `## Interfaces` names `interfaces/tally-events.json`
+     (json-schema), provider `cli / Export`, consumer `web / Import`. The interface gets a snapshot;
+     the `interface` gate checks each side with its own stack; `web / Import` is built against mocks
+     from the file before `cli / Export` exists. A fixture-service part declares start/ready/stop:
+     before a journey that crosses parts, bull starts it, passes its address, and stops it afterwards
+     even when the journey fails, leaving no process.
+   - Failure: the provider writes a field the schema doesn't have → the `interface` gate fails on the
+     provider side; editing the interface file fails the `api` gate until approved.
 8. **A contract change stops the pipeline.** During `Counter` unit 2, the code-writer changes a
    method in `Counter/Contracts/`. `bull gates Counter --fast` fails the `api` gate with a diff of
    the contract against `docs/api/Counter.md`. The orchestrator sets the pipeline to waiting for
@@ -232,6 +240,12 @@ Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the
 - Reference tests for rewrites (journey 12): `Reference tests:` memo lines, `## Unmapped reference
   tests`, the scan step, the reference-protection hook.
 - Parts: several parts per app, each with its own stack and folder.
+- Interfaces between parts (decided 2026-11-07, from v1's `docs/stacks.md` design): interface files
+  in `interfaces/` written before code, snapshots and approval like contracts, an `interface` gate
+  checking each side through its own stack, consumer mocks from the interface, `## Interfaces` memo
+  section; running parts together (stack-declared start/ready/stop, addresses passed to the UI part,
+  always stopped). Core tested with fixture stacks; **python_cli supports `json-schema` interfaces**
+  for real. OpenAPI and service running get their first real stack with a service stack (later).
 - Stacks: manifest + Python readers, self-test (`stack test`, `--static`), maturity
   (`experimental`/`verified`), installable stacks, the staged stack workflow (`init --stack`).
 - Built-in stacks: `python_cli`, `ios` (built now); `bash_shell` (through the stack workflow, or
@@ -251,6 +265,7 @@ Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the
 - Time report: `bull status time` totals by stage, module, unit, agent and gate step, from the event log (roadmap item 4).
 - Settings page: GUI or screen for settings, beyond `bull config show/set` (roadmap item 5).
 - Other AI providers: implementations behind the provider seam (roadmap item 6).
+- Service stack: a stack whose part runs as a service (e.g. a Python HTTP service), giving OpenAPI interfaces and running parts together their first real stack.
 - Store readiness: optional stack release hook plus the iOS checks (privacy manifest, icons, permission strings, store-guidelines review) (roadmap item 7).
 - Token report: tokens per stage, module, unit and agent (roadmap item 8).
 - Automatic orchestrator restarts at module boundaries: bull drives `claude` from outside; needs its own design.
@@ -275,4 +290,4 @@ paths through one helper, notifications behind a seam.
 - Changes to v1 beyond bug fixes: v1 is frozen from memo approval on.
 - Adopting a multi-part app: not needed yet; adoption of one-part apps comes first.
 - Splitting a part into its own app: not needed yet.
-- Interfaces shared between apps: not needed yet.
+- Interfaces shared between apps (an interface whose provider is another app): needs a way to point at another repo's file; not needed yet.
