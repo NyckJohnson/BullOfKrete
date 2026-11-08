@@ -23,6 +23,7 @@
 - `Memo.journeys: tuple[Journey, ...]`
 - `Memo.legacy: LegacySection | None`
 - `Memo.modules: tuple[ModuleEntry, ...]`
+- `Memo.parse_problems: tuple[MemoProblem, ...]`
 - `Memo.parts: tuple[str, ...]`
 - `Memo.unmapped_reference_tests: tuple[str, ...]`
 - `MemoProblem.line: int`

@@ -143,7 +143,7 @@
       "dependsOn": [
         "foundation"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -151,7 +151,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -160,7 +160,7 @@
             "parser.py",
             "problems.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -171,7 +171,7 @@
             "templates/backlog.md",
             "cli.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T01:10:58-08:00",
+  "updatedAt": "2026-11-08T06:43:54-08:00",
   "features": [],
   "activeFeature": null
 }

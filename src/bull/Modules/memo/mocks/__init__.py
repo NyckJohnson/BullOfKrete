@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from bull.Modules.foundation.Contracts import BullError
 from bull.Modules.memo.Contracts import (
     BuildEntry,
     Journey,
@@ -84,6 +85,8 @@ class MockMemoReader(MemoReader):
 
 
 class MockTemplates(Templates):
+    """Serves `texts` by name; an unknown name raises `BullError` listing the names."""
+
     def __init__(self) -> None:
         self.texts: dict[str, str] = {
             "outline": "# <App> outline\n\n## Purpose\n",
@@ -97,4 +100,10 @@ class MockTemplates(Templates):
 
     def text(self, name: str) -> str:
         self.calls.append(("text", (name,)))
-        return self.texts[name]
+        try:
+            return self.texts[name]
+        except KeyError:
+            raise BullError(
+                f"No template named {name!r}.",
+                f"Use one of: {', '.join(sorted(self.texts))}.",
+            ) from None
