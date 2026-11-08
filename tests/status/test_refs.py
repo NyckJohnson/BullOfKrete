@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from bull.Modules.settings.mocks import MockSettings
-from bull.Modules.status.Contracts import StatusError
+from bull.Modules.status.Contracts import Mode, StatusError
 from bull.Modules.status.mocks import MockStatusStore, sample_status
 from bull.Modules.status.refs import LiveRefs
 
@@ -189,3 +189,18 @@ def test_trunk_refuses_an_empty_or_non_string_base_branch(value: object) -> None
     with pytest.raises(StatusError) as caught:
         refs.trunk()
     assert "base_branch" in caught.value.message
+
+
+class DisagreeingStore(MockStatusStore):
+    """`mode()` claims FEATURE while `load()` has neither a feature nor an adoption."""
+
+    def mode(self) -> Mode:
+        return Mode.FEATURE
+
+
+def test_refs_follow_the_loaded_status_when_mode_disagrees() -> None:
+    refs = LiveRefs(MockSettings(), DisagreeingStore(sample_status()))
+    assert refs.base() == "main"
+    assert refs.module_branch("Counter") == "module/Counter"
+    assert refs.tag("skeleton") == "skeleton"
+    assert refs.module_for_branch("module/Counter") == "Counter"

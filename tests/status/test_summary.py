@@ -257,3 +257,21 @@ def test_as_json_with_an_adoption_has_the_adopt_mode_and_adoption_track() -> Non
         "stage": 3,
         "checkpoints": ["outline-approved", "setup"],
     }
+
+
+class DisagreeingStore(MockStatusStore):
+    """`mode()` claims FEATURE while `load()` has neither a feature nor an adoption."""
+
+    def mode(self) -> Mode:
+        return Mode.FEATURE
+
+
+def test_progress_follows_the_loaded_status_when_mode_disagrees() -> None:
+    store = DisagreeingStore()
+    expected = LiveProgress(
+        app=APP, store=MockStatusStore(), refs=MockRefs(), git=MockGit()
+    )
+    actual = LiveProgress(app=APP, store=store, refs=MockRefs(), git=MockGit())
+    assert actual.summary() == expected.summary()
+    assert actual.next_step() == expected.next_step()
+    assert actual.as_json() == expected.as_json()

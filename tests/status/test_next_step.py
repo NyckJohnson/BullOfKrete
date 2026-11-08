@@ -16,6 +16,7 @@ from bull.Modules.status.Contracts import (
     Pause,
     ScanRecord,
     Status,
+    StatusError,
     Track,
     Unit,
     UnitKind,
@@ -440,3 +441,13 @@ def test_stage_5_stuck_list_leaves_out_finished_modules() -> None:
     text = step(app(5, mods)).text
     assert "not done: Counter, Cache" in text
     assert "Store" not in text
+
+
+def test_adopt_mode_without_an_adoption_is_refused() -> None:
+    with pytest.raises(StatusError):
+        next_step_module.next_step(EMPTY, Mode.ADOPT, MockRefs("adopt/"), None)
+
+
+def test_feature_mode_without_a_feature_is_refused() -> None:
+    with pytest.raises(StatusError):
+        next_step_module.next_step(EMPTY, Mode.FEATURE, MockRefs(), None)

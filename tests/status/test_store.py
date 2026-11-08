@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 from dataclasses import replace
 from typing import Any
 
@@ -869,3 +870,23 @@ def test_init_modules_refuses_a_max_files_per_unit_setting_that_is_not_an_intege
         env.store.init_modules(env.reader.memo)
     assert "max_files_per_unit" in caught.value.message
     assert env.status_writes() == []
+
+
+def test_pause_with_a_naive_clock_time_is_saved_as_utc_with_z() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store = LiveStatusStore(
+        LAYOUT,
+        env.files,
+        env.events,
+        MockClock(datetime(2026, 11, 7, 12, 0, 0)),
+        env.settings,
+        env.parts,
+        env.reader,
+    )
+    env.store.pause("usage limit")
+    assert env.on_disk()["pause"]["since"] == "2026-11-07T12:00:00Z"
+    loaded = env.store.load().pause
+    assert loaded is not None
+    assert loaded.since == datetime(2026, 11, 7, 12, 0, 0, tzinfo=UTC)
+    assert loaded.since.utcoffset() == UTC.utcoffset(None)
