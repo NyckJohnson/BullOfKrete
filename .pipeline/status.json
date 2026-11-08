@@ -306,7 +306,7 @@
             "modules.py",
             "next_step.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T12:55:06-08:00",
+  "updatedAt": "2026-11-08T12:58:39-08:00",
   "features": [],
   "activeFeature": null
 }

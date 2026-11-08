@@ -32,6 +32,8 @@ from bull.Modules.status.Contracts import (
 
 FORMAT = 1
 KIND = "app"
+MIN_STAGE = 0
+MAX_STAGE = 6
 
 _T = TypeVar("_T")
 _E = TypeVar("_E", bound=Enum)
@@ -165,10 +167,17 @@ class _Obj:
             )
         return self._data[key]
 
-    def int_(self, key: str) -> int:
+    def int_(self, key: str, low: int | None = None, high: int | None = None) -> int:
+        """The integer at `key`, refused outside `low`..`high` (each bound optional)."""
         value = self._get(key)
         if isinstance(value, bool) or not isinstance(value, int):
             raise _bad(self._path(key), "an integer")
+        if (low is not None and value < low) or (high is not None and value > high):
+            if high is None:
+                raise _bad(self._path(key), f"an integer of at least {low}")
+            if low is None:
+                raise _bad(self._path(key), f"an integer of at most {high}")
+            raise _bad(self._path(key), f"an integer from {low} to {high}")
         return value
 
     def bool_(self, key: str) -> bool:
@@ -238,21 +247,21 @@ class _Obj:
 
 def _read_unit(obj: _Obj) -> Unit:
     return Unit(
-        number=obj.int_("number"),
+        number=obj.int_("number", low=1),
         files=obj.strs("files"),
         kind=obj.enum("kind", UnitKind),
         state=obj.enum("state", UnitState),
-        attempts=obj.int_("attempts"),
+        attempts=obj.int_("attempts", low=1),
     )
 
 
 def _read_scan(obj: _Obj) -> ScanRecord:
     return ScanRecord(
         time=obj.time("time"),
-        covered=obj.int_("covered"),
-        missed=obj.int_("missed"),
-        contradicts=obj.int_("contradicts"),
-        not_in_spec=obj.int_("not_in_spec"),
+        covered=obj.int_("covered", low=0),
+        missed=obj.int_("missed", low=0),
+        contradicts=obj.int_("contradicts", low=0),
+        not_in_spec=obj.int_("not_in_spec", low=0),
     )
 
 
@@ -295,7 +304,10 @@ def _read_plan(obj: _Obj) -> Plan:
 
 
 def _read_track(obj: _Obj) -> Track:
-    return Track(stage=obj.int_("stage"), checkpoints=obj.strs("checkpoints"))
+    return Track(
+        stage=obj.int_("stage", low=MIN_STAGE, high=MAX_STAGE),
+        checkpoints=obj.strs("checkpoints"),
+    )
 
 
 def _read_feature(obj: _Obj) -> ActiveFeature:

@@ -4,7 +4,9 @@
 load → apply → validate → atomic write → one `status` event (`what` = the method name).
 The apply step is a pure function in `transitions` or `modules`, called through the module
 (not imported by name) so it can be replaced in tests. A refusal raises `StatusError` from
-that function before anything is written or logged.
+that function before anything is written or logged. A change that leaves the status as it
+was (a no-op) writes and logs nothing. The one refusal that saves its change is `attempt`
+at the limit: the unit is saved `blocked`, then `StatusError` is raised.
 """
 
 from __future__ import annotations
@@ -107,15 +109,27 @@ class LiveStatusStore(StatusStore):
         self._files.write_atomic(self._app.status_file, text)
         self._events.append(EventKind.STATUS, what=what, **data)
 
+    def _apply(
+        self,
+        what: str,
+        apply: Callable[[Status], Status],
+        **data: EventValue,
+    ) -> tuple[Status, bool]:
+        """Apply, and write and log unless nothing changed; returns (new, written)."""
+        old = self.load()
+        new = apply(old)
+        if new == old:
+            return old, False
+        self._write(new, what, data)
+        return new, True
+
     def _change(
         self,
         what: str,
         apply: Callable[[Status], Status],
         **data: EventValue,
     ) -> Status:
-        new = apply(self.load())
-        self._write(new, what, data)
-        return new
+        return self._apply(what, apply, **data)[0]
 
     def _int_setting(self, key: str) -> int:
         value = self._settings.get(key, None)
@@ -169,20 +183,31 @@ class LiveStatusStore(StatusStore):
         )
 
     def attempt(self, name: str, number: int) -> Unit:
+        """Start another attempt at a unit and return it.
+
+        At `max_attempts` the unit is saved `blocked` (written and logged) and then
+        `StatusError` "unit n blocked after <max_attempts> attempts; ask the human" is raised.
+        """
         max_attempts = self._int_setting("max_attempts")
-        new, unit = transitions.attempt(
-            self.load(), name, number, max_attempts=max_attempts
-        )
-        self._write(
-            new,
-            "attempt",
-            {
-                "module": name,
-                "unit": number,
-                "state": unit.state.value,
-                "attempts": unit.attempts,
-            },
-        )
+        old = self.load()
+        new, unit = transitions.attempt(old, name, number, max_attempts=max_attempts)
+        if new != old:
+            self._write(
+                new,
+                "attempt",
+                {
+                    "module": name,
+                    "unit": number,
+                    "state": unit.state.value,
+                    "attempts": unit.attempts,
+                },
+            )
+        if unit.state == UnitState.BLOCKED:
+            raise StatusError(
+                f"unit {number} blocked after {max_attempts} attempts; ask the human",
+                f"once the human decides, `bull status unblock {name} {number}` "
+                "starts it again",
+            )
         return unit
 
     def unblock(self, name: str, number: int) -> Status:
@@ -195,20 +220,20 @@ class LiveStatusStore(StatusStore):
 
     def pause(self, reason: str) -> Status:
         now = self._clock.now()
-        new = self._change(
+        new, written = self._apply(
             "pause", lambda s: transitions.pause(s, reason, now=now), reason=reason
         )
-        self._events.append(
-            EventKind.PAUSE,
-            reason=reason,
-            unit=None if new.pause is None else new.pause.unit,
-        )
+        if written:
+            self._events.append(
+                EventKind.PAUSE,
+                reason=reason,
+                unit=None if new.pause is None else new.pause.unit,
+            )
         return new
 
     def resume(self) -> Status:
-        was_paused = self.load().pause is not None
-        new = self._change("resume", transitions.resume)
-        if was_paused:
+        new, written = self._apply("resume", transitions.resume)
+        if written:
             self._events.append(EventKind.RESUME)
         return new
 
@@ -223,19 +248,22 @@ class LiveStatusStore(StatusStore):
 
     def approve(self, module: str, note: str) -> Status:
         now = self._clock.now()
-        new = self._change(
+        new, written = self._apply(
             "approve",
             lambda s: transitions.approve(s, module, note, now=now),
             module=module,
         )
-        self._events.append(
-            EventKind.DECISION, what="approve", module=module, note=note
-        )
+        if written:
+            self._events.append(
+                EventKind.DECISION, what="approve", module=module, note=note
+            )
         return new
 
     def take_approval(self, module: str) -> Approval | None:
-        new, approval = transitions.take_approval(self.load(), module)
-        self._write(new, "take_approval", {"module": module})
+        old = self.load()
+        new, approval = transitions.take_approval(old, module)
+        if new != old:
+            self._write(new, "take_approval", {"module": module})
         return approval
 
     def record_scan(
