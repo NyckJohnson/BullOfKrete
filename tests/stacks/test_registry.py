@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -223,3 +226,143 @@ def test_install_of_an_invalid_stack_raises_and_copies_nothing(
     with pytest.raises(StackError):
         _registry(tmp_path).install(src)
     assert not (_installed_root(tmp_path) / "rg_invalid").exists()
+
+
+def _readers_returning(value: str, helper: bool = False) -> str:
+    if helper:
+        return REQUIRED_READERS.replace(
+            "from __future__ import annotations\n",
+            "from __future__ import annotations\n\nfrom .helper import VALUE\n",
+        ).replace('return ["decl"]', "return [VALUE]")
+    return REQUIRED_READERS.replace('"decl"', repr(value))
+
+
+def test_failed_copy_raises_stack_error_and_leaves_no_staging_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src = write_stack(tmp_path / "src", "rg_cpfail")
+
+    def failing_copytree(source: Any, dest: Any, *args: Any, **kwargs: Any) -> None:
+        Path(dest).mkdir(parents=True)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(shutil, "copytree", failing_copytree)
+    with pytest.raises(StackError):
+        _registry(tmp_path).install(src)
+    leftovers = list(_installed_root(tmp_path).iterdir())
+    assert leftovers == []
+
+
+def test_failed_reinstall_keeps_the_earlier_install_intact_and_loadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _registry(tmp_path)
+    v1 = write_stack(
+        tmp_path / "v1", "rg_keep", readers=_readers_returning("version-one")
+    )
+    registry.install(v1)
+    v2 = write_stack(
+        tmp_path / "v2", "rg_keep", readers=_readers_returning("version-two")
+    )
+
+    def failing_copytree(source: Any, dest: Any, *args: Any, **kwargs: Any) -> None:
+        Path(dest).mkdir(parents=True)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(shutil, "copytree", failing_copytree)
+    with pytest.raises(StackError):
+        registry.install(v2)
+    assert [p.name for p in _installed_root(tmp_path).iterdir()] == ["rg_keep"]
+    stack = registry.get("rg_keep")
+    assert stack.readers.contract_declarations(tmp_path) == ["version-one"]
+
+
+def test_successful_install_leaves_only_the_target_and_copies_no_pycache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    src = write_stack(
+        tmp_path / "src",
+        "rg_clean",
+        extra_files={"notes.txt": "hello"},
+    )
+    (src / "__pycache__").mkdir()
+    (src / "__pycache__" / "readers.cpython-311.pyc").write_bytes(b"junk")
+    _registry(tmp_path).install(src)
+    assert [p.name for p in _installed_root(tmp_path).iterdir()] == ["rg_clean"]
+    installed = _installed_root(tmp_path) / "rg_clean"
+    assert (installed / "notes.txt").read_text() == "hello"
+    assert list(installed.rglob("__pycache__")) == []
+
+
+@pytest.mark.parametrize("folder_name", ["_template", ".hidden"])
+def test_template_and_hidden_folders_are_skipped_in_builtin_roots(
+    tmp_path: Path, folder_name: str
+) -> None:
+    root = tmp_path / "builtin"
+    _make(root, "rg_visible")
+    write_stack(root, folder_name, manifest=manifest_text("rg_hidden_x"))
+    registry = _registry(tmp_path, root)
+    names = [s.manifest.name for s in registry.all(include_test=True)]
+    assert names == ["rg_visible"]
+    with pytest.raises(StackError):
+        registry.get(folder_name)
+
+
+@pytest.mark.parametrize("folder_name", ["_template", ".hidden"])
+def test_template_and_hidden_folders_are_skipped_in_the_installed_dir(
+    tmp_path: Path, folder_name: str
+) -> None:
+    _make(_installed_root(tmp_path), "rg_inst_visible")
+    write_stack(
+        _installed_root(tmp_path), folder_name, manifest=manifest_text("rg_hidden_y")
+    )
+    registry = _registry(tmp_path)
+    names = [s.manifest.name for s in registry.all(include_test=True)]
+    assert names == ["rg_inst_visible"]
+    with pytest.raises(StackError):
+        registry.get(folder_name)
+
+
+def test_builtin_wins_over_a_hand_placed_installed_stack_of_the_same_name(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "builtin"
+    _make(root, "rg_dupe")
+    _make(_installed_root(tmp_path), "rg_dupe")
+    registry = _registry(tmp_path, root)
+    assert registry.get("rg_dupe").builtin is True
+    assert registry.get("rg_dupe").home == root / "rg_dupe"
+    assert [s.manifest.name for s in registry.all()] == ["rg_dupe"]
+
+
+def test_refused_install_of_a_builtin_name_leaves_the_builtin_loaded_as_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    root = tmp_path / "builtin"
+    builtin_folder = write_stack(
+        root,
+        "rg_shadow",
+        readers=_readers_returning("", helper=True),
+        extra_files={"helper.py": "VALUE = 'builtin'\n"},
+    )
+    registry = _registry(tmp_path, root)
+    assert registry.get("rg_shadow").readers.contract_declarations(tmp_path) == [
+        "builtin"
+    ]
+    imposter = write_stack(
+        tmp_path / "imposter",
+        "rg_shadow",
+        readers=_readers_returning("", helper=True),
+        extra_files={"helper.py": "VALUE = 'imposter'\n"},
+    )
+    with pytest.raises(StackError):
+        registry.install(imposter)
+
+    helper = sys.modules["bull_stack_rg_shadow.helper"]
+    assert Path(helper.__file__ or "").parent == builtin_folder
+    assert helper.VALUE == "builtin"
+    stack = registry.get("rg_shadow")
+    assert stack.builtin is True
+    assert stack.readers.contract_declarations(tmp_path) == ["builtin"]

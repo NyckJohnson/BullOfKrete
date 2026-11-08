@@ -304,3 +304,38 @@ def test_missing_stack_toml_raises_stack_error(tmp_path: Path) -> None:
     folder.mkdir()
     with pytest.raises(StackError):
         parse_manifest(folder)
+
+
+@pytest.mark.parametrize(
+    "description", ["Scans for todo comments", "TODOLIST tool", "A TODOs-free stack"]
+)
+def test_values_merely_containing_todo_letters_are_accepted(
+    tmp_path: Path, description: str
+) -> None:
+    text = manifest_text(
+        "sample",
+        replace={
+            'description = "A sample stack for tests."': f'description = "{description}"'
+        },
+    )
+    assert _parse(tmp_path, "sample", text).name == "sample"
+
+
+@pytest.mark.parametrize("description", ["TODO", "TODO: describe", "Fix this TODO now"])
+def test_whole_word_todo_in_a_value_is_rejected(
+    tmp_path: Path, description: str
+) -> None:
+    text = manifest_text(
+        "sample",
+        replace={
+            'description = "A sample stack for tests."': f'description = "{description}"'
+        },
+    )
+    assert "TODO" in _problems(tmp_path, "sample", text)
+
+
+def test_manifest_that_is_not_valid_utf8_raises_stack_error(tmp_path: Path) -> None:
+    folder = write_stack(tmp_path, "sample")
+    (folder / "stack.toml").write_bytes(b'format = 1\n[stack]\nname = "\xff\xfe"\n')
+    with pytest.raises(StackError):
+        parse_manifest(folder)

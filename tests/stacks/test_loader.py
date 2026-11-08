@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -115,3 +116,94 @@ def test_readers_that_fail_to_import_raise_stack_error(tmp_path: Path) -> None:
     folder = write_stack(tmp_path, "ld_broken", readers="raise RuntimeError('boom')\n")
     with pytest.raises(StackError):
         load_readers(folder, "ld_broken")
+
+
+def _helper_readers(helper_attr: str) -> str:
+    return (
+        "from __future__ import annotations\n\n"
+        "from .helper import VALUE\n\n\n"
+        "def contract_declarations(path):\n    return [VALUE]\n\n\n"
+        "def test_results(results):\n    return None\n\n\n"
+        "def uncovered(part_root, sources, results):\n    return None\n\n\n"
+        "def check(part_root, settings, adopting):\n    return []\n"
+    )
+
+
+def _keys(name: str) -> list[str]:
+    prefix = f"bull_stack_{name}"
+    return [k for k in sys.modules if k == prefix or k.startswith(prefix + ".")]
+
+
+def test_reloading_after_rewriting_readers_and_sibling_gives_new_behavior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    name = "ld_reload"
+    folder = write_stack(
+        tmp_path,
+        name,
+        readers=_helper_readers("VALUE"),
+        extra_files={"helper.py": "VALUE = 'first'\n"},
+    )
+    readers, _ = load_readers(folder, name)
+    assert readers.contract_declarations(tmp_path) == ["first"]
+
+    (folder / "helper.py").write_text("VALUE = 'second-version'\n", encoding="utf-8")
+    (folder / "readers.py").write_text(
+        _helper_readers("VALUE").replace("return [VALUE]", "return [VALUE, 'extra']"),
+        encoding="utf-8",
+    )
+    readers, _ = load_readers(folder, name)
+    assert readers.contract_declarations(tmp_path) == ["second-version", "extra"]
+
+
+def test_failed_load_with_missing_function_leaves_no_sys_modules_keys(
+    tmp_path: Path,
+) -> None:
+    name = "ld_fail_missing"
+    text = _helper_readers("VALUE").replace(
+        "def check(part_root, settings, adopting):\n    return []\n", ""
+    )
+    folder = write_stack(
+        tmp_path, name, readers=text, extra_files={"helper.py": "VALUE = 1\n"}
+    )
+    with pytest.raises(StackError):
+        load_readers(folder, name)
+    assert _keys(name) == []
+
+
+def test_failed_load_with_import_error_leaves_no_sys_modules_keys(
+    tmp_path: Path,
+) -> None:
+    name = "ld_fail_import"
+    text = "from .helper import VALUE\nimport no_such_module_anywhere\n"
+    folder = write_stack(
+        tmp_path, name, readers=text, extra_files={"helper.py": "VALUE = 1\n"}
+    )
+    with pytest.raises(StackError):
+        load_readers(folder, name)
+    assert _keys(name) == []
+
+
+def test_loading_a_second_name_leaves_the_first_names_modules_untouched(
+    tmp_path: Path,
+) -> None:
+    first = write_stack(
+        tmp_path,
+        "ld_first",
+        readers=_helper_readers("VALUE"),
+        extra_files={"helper.py": "VALUE = 'a'\n"},
+    )
+    load_readers(first, "ld_first")
+    before: dict[str, Any] = {k: sys.modules[k] for k in _keys("ld_first")}
+    assert before
+    second = write_stack(
+        tmp_path,
+        "ld_second",
+        readers=_helper_readers("VALUE"),
+        extra_files={"helper.py": "VALUE = 'b'\n"},
+    )
+    load_readers(second, "ld_second")
+    after = {k: sys.modules.get(k) for k in before}
+    assert after == before
+    assert _keys("ld_second")
