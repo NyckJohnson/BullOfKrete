@@ -209,6 +209,15 @@ def test_start_is_refused_and_changes_nothing_when_a_precondition_fails(
     assert rig.files.texts[LAYOUT.backlog_file] == before
 
 
+def test_start_during_an_adoption_is_refused_with_a_message_about_after_it_finishes() -> (
+    None
+):
+    rig = Rig()
+    rig.store.status = replace(rig.store.status, adoption=Track(2, ("setup",)))
+    with pytest.raises(BullError, match="after the adoption finishes"):
+        rig.cycle.start()
+
+
 def test_start_with_slug_is_refused_when_that_feature_branch_exists() -> None:
     rig = Rig()
     rig.git.branches.add("feature/dark-mode/main")

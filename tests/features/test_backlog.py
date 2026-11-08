@@ -177,6 +177,17 @@ def test_add_writes_the_brief_file() -> None:
         assert heading in text
 
 
+def test_add_queues_the_item_and_writes_its_brief_while_an_adoption_is_in_progress() -> (
+    None
+):
+    # The backlog never consults status, so an adoption in progress cannot stop add.
+    backlog, files, _ = _make([_raw("a")])
+    item = backlog.add(Idea("Reset button", "zero"))
+    assert item.state is ItemState.QUEUED
+    assert _queued(backlog) == ["a", "reset-button"]
+    assert (LAYOUT.features_dir / "reset-button.md") in files.texts
+
+
 # import_ideas
 
 

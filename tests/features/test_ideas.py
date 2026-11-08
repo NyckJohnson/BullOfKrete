@@ -68,6 +68,32 @@ def test_section_filter_with_missing_heading_returns_empty() -> None:
     assert READER.read("## Now\n- A: b\n", section="Later") == []
 
 
+def test_indented_continuation_line_is_joined_to_the_description_with_a_newline() -> (
+    None
+):
+    text = "- Reset button: sets the counter\n  back to zero\n- Dark mode: darker\n"
+    assert READER.read(text) == [
+        Idea("Reset button", "sets the counter\nback to zero"),
+        Idea("Dark mode", "darker"),
+    ]
+
+
+def test_checked_checkbox_items_are_skipped() -> None:
+    text = "- [x] Done thing: already shipped\n- [ ] Open thing: still to do\n"
+    assert [i.title for i in READER.read(text)] == ["Open thing"]
+
+
+def test_unchecked_checkbox_item_is_read_as_a_plain_item() -> None:
+    assert READER.read("- [ ] B\n") == [Idea("B", "")]
+    assert READER.read("- [ ] B: the description\n") == [Idea("B", "the description")]
+
+
+def test_section_filter_matches_the_heading_case_insensitively() -> None:
+    text = "## Now\n- A: a\n## Later Ideas\n- B: b\n"
+    assert READER.read(text, section="later ideas") == [Idea("B", "b")]
+    assert READER.read(text, section="NOW") == [Idea("A", "a")]
+
+
 @pytest.mark.parametrize(
     "text", ["", "\n\n", "Just a paragraph.\n\nAnother one.\n", "# Only a title\n"]
 )
