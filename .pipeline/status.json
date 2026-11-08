@@ -2,7 +2,9 @@
   "stage": 2,
   "paused": false,
   "pauseReason": null,
-  "checkpoints": {},
+  "checkpoints": {
+    "outline-approved": "2026-11-07T23:20:19-08:00"
+  },
   "modules": [
     {
       "name": "foundation",
@@ -1053,7 +1055,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-07T23:20:14-08:00",
+  "updatedAt": "2026-11-07T23:20:19-08:00",
   "features": [],
   "activeFeature": null
 }
