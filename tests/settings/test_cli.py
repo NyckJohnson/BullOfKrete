@@ -16,12 +16,21 @@ from __future__ import annotations
 import argparse
 import io
 import json
+from pathlib import Path
 
 import pytest
 
 from bull.Modules.foundation.Contracts import BullError
+from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.settings.cli import register
-from bull.Modules.settings.Contracts import Layer, Settings
+from bull.Modules.settings.Contracts import (
+    Layer,
+    Setting,
+    Settings,
+    SettingType,
+    StackLayer,
+)
+from bull.Modules.settings.loader import LiveSettingsLoader
 from bull.Modules.settings.mocks import SAMPLE_SCHEMA, MockSettings
 
 
@@ -168,3 +177,38 @@ def test_config_set_requires_key_and_value() -> None:
     parser, _ = build(MockSettings())
     with pytest.raises(SystemExit):
         parser.parse_args(["config", "set", "max_attempts"])
+
+
+# --- bool and list values through the live settings -------------------------
+
+
+def _live(tmp_path: Path, app_text: str) -> Settings:
+    layout = sample_layout(tmp_path / "app")
+    layout.config_file.parent.mkdir(parents=True, exist_ok=True)
+    layout.config_file.write_text(app_text)
+    stack = StackLayer(
+        schema=(Setting("verbose", SettingType.BOOL, False, "Chatty output"),),
+        values={},
+    )
+    return LiveSettingsLoader(tmp_path / "home" / "config.toml").load(
+        layout, lambda name: stack
+    )
+
+
+@pytest.mark.parametrize("flag", ["true", "false"])
+def test_config_show_prints_a_bool_value_as_true_or_false(
+    tmp_path: Path, flag: str
+) -> None:
+    settings = _live(tmp_path, f'format = 1\nstack = "s"\nverbose = {flag}\n')
+    _, text = run(settings, "config", "show")
+    assert f"verbose = {flag} (app)" in text.splitlines()
+
+
+def test_config_set_and_show_print_a_list_value_joined_with_commas(
+    tmp_path: Path,
+) -> None:
+    settings = _live(tmp_path, 'format = 1\nstack = "s"\n')
+    _, text = run(settings, "config", "set", "coverage.exclude_extra", "a,b")
+    assert text.strip() == "coverage.exclude_extra = a, b (app)"
+    _, shown = run(settings, "config", "show")
+    assert "coverage.exclude_extra = a, b (app)" in shown.splitlines()

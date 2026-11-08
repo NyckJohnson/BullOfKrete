@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from bull.Modules.foundation.Contracts import BullError
 from bull.Modules.settings.toml_edit import create_if_missing, find_line, set_key
 
 
@@ -220,3 +221,121 @@ def test_create_if_missing_leaves_an_existing_file_untouched(tmp_path: Path) -> 
     path.write_text("format = 1\n# mine\nmax_attempts = 9\n")
     create_if_missing(path)
     assert path.read_text() == "format = 1\n# mine\nmax_attempts = 9\n"
+
+
+# --- key forms and layout --------------------------------------------------
+
+
+def test_set_key_replaces_a_key_with_leading_whitespace_and_spaced_dots() -> None:
+    out = set_key("format = 1\n  a . b = 1\nz = 2\n", "a.b", 5)
+    assert out == "format = 1\n  a . b = 5\nz = 2\n"
+
+
+def test_set_key_replaces_a_quoted_key_segment() -> None:
+    out = set_key('format = 1\n"models"."x" = 1\n', "models.x", 2)
+    assert out == 'format = 1\n"models"."x" = 2\n'
+    assert _parse(out)["models"] == {"x": 2}
+
+
+def test_set_key_replaces_a_quoted_key_with_an_escape() -> None:
+    out = set_key('format = 1\n"a\\tb" = 1\n', "a\tb", 2)
+    assert out == 'format = 1\n"a\\tb" = 2\n'
+
+
+def test_set_key_with_a_bad_escape_in_a_quoted_key_is_a_bull_error() -> None:
+    with pytest.raises(BullError):
+        set_key('format = 1\n"\\q" = 1\n', "other", 1)
+
+
+def test_set_key_replaces_a_literal_quoted_key() -> None:
+    out = set_key("format = 1\n'a'.'b' = 1\n", "a.b", 2)
+    assert out == "format = 1\n'a'.'b' = 2\n"
+    assert _parse(out)["a"] == {"b": 2}
+
+
+def test_set_key_replaces_a_multi_line_array_and_keeps_its_neighbours() -> None:
+    text = "format = 1\nxs = [\n  'a',\n  'b',\n]\nafter = 1\n"
+    out = set_key(text, "xs", ("c",))
+    assert out == 'format = 1\nxs = ["c"]\nafter = 1\n'
+
+
+def test_set_key_keeps_comments_and_blank_lines_and_still_finds_the_key() -> None:
+    text = "# top\n\nformat = 1\n\n# about a\na = 1\n\n# about b\nb = 2\n"
+    out = set_key(text, "b", 3)
+    assert out == "# top\n\nformat = 1\n\n# about a\na = 1\n\n# about b\nb = 3\n"
+    assert find_line(text, "b") == 9
+
+
+def test_set_key_with_an_unterminated_value_is_a_bull_error() -> None:
+    with pytest.raises(BullError):
+        set_key("format = 1\na = [1,\n", "b", 2)
+
+
+def test_set_key_with_an_unparseable_line_is_a_bull_error() -> None:
+    with pytest.raises(BullError):
+        set_key("format = 1\n???\n", "a", 1)
+
+
+def test_set_key_on_an_already_invalid_file_says_not_valid_toml_with_a_fix() -> None:
+    with pytest.raises(BullError) as info:
+        set_key("format = 1\nformat = 2\n", "a", 1)
+    assert "would not be valid TOML" in info.value.message
+    assert info.value.fix
+
+
+@pytest.mark.parametrize(
+    ("value", "escaped"),
+    [
+        ("a\nb", "\\n"),
+        ("a\tb", "\\t"),
+        ("a\rb", "\\r"),
+        ("a\x01b", "\\u0001"),
+        ("a\x7fb", "\\u007F"),
+    ],
+)
+def test_set_key_escapes_control_characters_in_strings(
+    value: str, escaped: str
+) -> None:
+    out = set_key("format = 1\n", "s", value)
+    assert escaped in out
+    assert _parse(out)["s"] == value
+
+
+# --- create_if_missing failures --------------------------------------------
+
+
+def test_create_if_missing_failing_to_replace_leaves_no_file_or_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr("os.replace", boom)
+    path = tmp_path / "dir" / "config.toml"
+    with pytest.raises(BullError):
+        create_if_missing(path)
+    assert not path.exists()
+    assert list(path.parent.iterdir()) == []
+
+
+def test_create_if_missing_with_a_file_as_parent_is_a_bull_error(
+    tmp_path: Path,
+) -> None:
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x")
+    with pytest.raises(BullError):
+        create_if_missing(blocker / "config.toml")
+
+
+def test_create_if_missing_interrupted_cleans_up_and_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("os.replace", boom)
+    path = tmp_path / "dir" / "config.toml"
+    with pytest.raises(KeyboardInterrupt):
+        create_if_missing(path)
+    assert not path.exists()
+    assert list(path.parent.iterdir()) == []

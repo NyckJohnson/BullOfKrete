@@ -340,3 +340,87 @@ def test_every_problem_in_every_file_is_collected_into_one_error(env: Env) -> No
         (part, "review_mode"),
         (part, "format"),
     }
+
+
+# --- unreadable and invalid files ------------------------------------------
+
+
+def test_a_config_path_that_is_a_directory_is_a_cannot_read_problem(env: Env) -> None:
+    env.app.config_file.mkdir(parents=True)
+    [problem] = env.problems()
+    assert problem.file == env.app.config_file
+    assert problem.line == 0
+    assert "cannot read" in problem.message
+
+
+def test_a_file_with_invalid_utf8_is_a_cannot_read_problem(env: Env) -> None:
+    env.app.config_file.parent.mkdir(parents=True, exist_ok=True)
+    env.app.config_file.write_bytes(b"format = 1\nbase_branch = '\xff\xfe'\n")
+    [problem] = env.problems()
+    assert problem.file == env.app.config_file
+    assert problem.line == 0
+    assert "cannot read" in problem.message
+
+
+def test_invalid_toml_is_a_problem_on_the_line_that_fails(env: Env) -> None:
+    path = env.app_file("format = 1\nmax_attempts = 3\na = \n")
+    [problem] = env.problems()
+    assert problem.file == path
+    assert problem.line == 3
+    assert "not valid TOML" in problem.message
+
+
+def test_invalid_toml_with_no_line_in_the_message_is_reported_at_line_zero(
+    env: Env,
+) -> None:
+    # The decoder says "at end of document" here, with no line number.
+    path = env.app_file("format = 1\nabc")
+    [problem] = env.problems()
+    assert problem.file == path
+    assert problem.line == 0
+    assert "not valid TOML" in problem.message
+
+
+# --- stack layer failures --------------------------------------------------
+
+
+def test_a_stack_layer_error_is_a_problem_on_the_stack_line(env: Env) -> None:
+    def failing(name: str) -> StackLayer:
+        raise BullError(f"no such stack {name}")
+
+    path = env.app_file('format = 1\n\nstack = "nope"\n')
+    with pytest.raises(ConfigError) as info:
+        LiveSettingsLoader(env.user_file).load(env.app, failing)
+    [problem] = info.value.problems
+    assert problem.file == path
+    assert problem.key == "stack"
+    assert problem.line == 3
+    assert "no such stack nope" in problem.message
+
+
+def test_a_stack_named_in_two_files_is_requested_once(env: Env) -> None:
+    env.stacks["shared"] = stack_with(source_dir="s")
+    env.app_file("format = 1\n")
+    env.part("api", 'format = 1\nstack = "shared"\n')
+    env.part("web", 'format = 1\nstack = "shared"\n')
+    env.load()
+    assert env.requested == ["shared"]
+
+
+def test_a_stack_named_in_the_app_and_a_part_is_requested_once(env: Env) -> None:
+    env.stacks["shared"] = stack_with(source_dir="s")
+    env.app_file('format = 1\nstack = "shared"\n')
+    env.part("api", 'format = 1\nstack = "shared"\n')
+    env.load()
+    assert env.requested == ["shared"]
+
+
+@pytest.mark.parametrize("bad", ['"yes"', "1"])
+def test_a_stack_bool_given_a_string_or_int_is_a_problem(env: Env, bad: str) -> None:
+    env.stacks["flagged"] = StackLayer(
+        schema=(Setting("verbose", SettingType.BOOL, False, "Chatty"),), values={}
+    )
+    env.app_file(f'format = 1\nstack = "flagged"\nverbose = {bad}\n')
+    [problem] = env.problems()
+    assert problem.key == "verbose"
+    assert "verbose must be true or false" in problem.message

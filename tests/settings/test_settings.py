@@ -342,3 +342,110 @@ def test_schema_lists_bull_and_stack_keys(env: Env) -> None:
     env.write(env.app.config_file, 'format = 1\nstack = "python_cli"\n')
     keys = {s.key for s in env.load().schema()}
     assert {"max_attempts", "source_dir"} <= keys
+
+
+# --- unset keys and stack defaults -----------------------------------------
+
+
+def test_get_a_known_key_that_nothing_sets_is_a_bull_error_with_a_fix(
+    env: Env,
+) -> None:
+    with pytest.raises(BullError) as info:
+        env.load().get("stack")
+    assert "stack" in info.value.message
+    assert info.value.fix
+
+
+def test_a_stack_default_for_a_stack_key_is_reported_with_the_stack_layer(
+    env: Env,
+) -> None:
+    stack = StackLayer(
+        schema=(Setting("jobs", SettingType.INT, 4, "Parallel jobs"),), values={}
+    )
+    env.write(env.app.config_file, 'format = 1\nstack = "s"\n')
+    settings = LiveSettingsLoader(env.user_file).load(env.app, lambda name: stack)
+    assert settings.get("jobs") == 4
+    by_key = {r.key: r for r in settings.show()}
+    assert by_key["jobs"].value == 4
+    assert by_key["jobs"].layer is Layer.STACK
+    assert by_key["jobs"].source is None
+
+
+# --- set without an app, or on an unusable target --------------------------
+
+
+def test_set_in_the_app_layer_without_an_app_is_a_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as info:
+        env.load(app=False).set("max_attempts", "5", Layer.APP)
+    assert "app" in info.value.message
+
+
+def test_set_in_a_part_layer_without_an_app_is_a_bull_error(env: Env) -> None:
+    with pytest.raises(BullError):
+        env.load(app=False).set("max_attempts", "5", Layer.PART, part="x")
+
+
+def test_set_when_the_target_is_a_directory_is_a_cannot_read_error(env: Env) -> None:
+    settings = env.load()
+    env.app.config_file.mkdir(parents=True)
+    with pytest.raises(BullError) as info:
+        settings.set("max_attempts", "5")
+    assert "cannot read" in info.value.message
+    assert env.app.config_file.is_dir()
+
+
+def test_set_when_the_target_is_not_utf8_leaves_it_untouched(env: Env) -> None:
+    settings = env.load()
+    env.app.config_file.parent.mkdir(parents=True, exist_ok=True)
+    raw = b"format = 1\n# \xff\xfe\n"
+    env.app.config_file.write_bytes(raw)
+    with pytest.raises(BullError) as info:
+        settings.set("max_attempts", "5")
+    assert "cannot read" in info.value.message
+    assert env.app.config_file.read_bytes() == raw
+
+
+# --- atomic write failures -------------------------------------------------
+
+
+def _fail_replace(exc: BaseException, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise exc
+
+    monkeypatch.setattr("os.replace", boom)
+
+
+def test_set_failing_to_replace_leaves_the_original_and_no_temp_file(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = "format = 1\nmax_attempts = 3\n"
+    env.write(env.app.config_file, original)
+    settings = env.load()
+    _fail_replace(OSError(28, "No space left on device"), monkeypatch)
+    with pytest.raises(BullError):
+        settings.set("max_attempts", "5")
+    assert env.app.config_file.read_text() == original
+    assert [p.name for p in env.app.config_file.parent.iterdir()] == ["config.toml"]
+
+
+def test_set_with_an_uncreatable_parent_folder_is_a_bull_error(env: Env) -> None:
+    settings = env.load()
+    blocker = env.user_file.parent
+    blocker.parent.mkdir(parents=True, exist_ok=True)
+    blocker.write_text("i am a file, not a folder")
+    with pytest.raises(BullError):
+        settings.set("max_attempts", "5", Layer.USER)
+    assert blocker.read_text() == "i am a file, not a folder"
+
+
+def test_set_interrupted_while_replacing_cleans_up_and_propagates(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = "format = 1\n"
+    env.write(env.app.config_file, original)
+    settings = env.load()
+    _fail_replace(KeyboardInterrupt(), monkeypatch)
+    with pytest.raises(KeyboardInterrupt):
+        settings.set("max_attempts", "5")
+    assert env.app.config_file.read_text() == original
+    assert [p.name for p in env.app.config_file.parent.iterdir()] == ["config.toml"]

@@ -238,3 +238,17 @@ def test_parse_bool_rejects_other_text(raw: str) -> None:
 def test_parse_works_for_a_stack_declared_setting() -> None:
     s = Setting(key="source_dir", type=SettingType.STR, default="src", description="d")
     assert parse_value(s, "lib") == "lib"
+
+
+def test_parse_int_with_only_a_maximum_names_the_upper_bound() -> None:
+    setting = Setting("n", SettingType.INT, 1, "n", maximum=9)
+    with pytest.raises(BullError) as info:
+        parse_value(setting, "10")
+    assert "must be an integer ≤ 9" in info.value.message
+
+
+def test_parse_int_without_bounds_says_must_be_an_integer() -> None:
+    setting = Setting("n", SettingType.INT, 1, "n")
+    with pytest.raises(BullError) as info:
+        parse_value(setting, "abc")
+    assert info.value.message == "n must be an integer"
