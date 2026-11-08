@@ -72,7 +72,7 @@
             "mocks/__init__.py",
             "event_log.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T00:34:10-08:00",
+  "updatedAt": "2026-11-08T00:34:53-08:00",
   "features": [],
   "activeFeature": null
 }
