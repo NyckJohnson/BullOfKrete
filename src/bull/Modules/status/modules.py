@@ -59,18 +59,22 @@ def _build(
 
 
 def _in_build_order(memo: Memo) -> list[ModuleEntry]:
-    """The memo's modules in build order; modules the build order omits come last."""
-    by_name = {entry.name: entry for entry in memo.modules}
+    """The memo's modules in build order; modules the build order omits come last.
+
+    Build-order names match module blocks ignoring case (as memo problems do); the block's
+    name is the one kept.
+    """
+    by_name = {entry.name.casefold(): entry for entry in memo.modules}
     ordered: list[ModuleEntry] = []
     for step in memo.build_order:
-        entry = by_name.pop(step.name, None)
+        entry = by_name.pop(step.name.casefold(), None)
         if entry is None:
-            raise StatusError(  # coverage-exempt: memo problems refuse a build-order entry without a module block first
+            raise StatusError(
                 f"build order line {step.line}: {step.name} has no module section",
                 "fix the memo, then run `bull status init-modules` again",
             )
         ordered.append(entry)
-    ordered.extend(entry for entry in memo.modules if entry.name in by_name)
+    ordered.extend(entry for entry in memo.modules if entry.name.casefold() in by_name)
     return ordered
 
 

@@ -16,6 +16,7 @@ from bull.Modules.foundation.Contracts import FileFormatError
 from bull.Modules.status.Contracts import (
     ActiveFeature,
     Approval,
+    Mode,
     ModuleState,
     ModuleStatus,
     Pause,
@@ -37,6 +38,27 @@ MAX_STAGE = 6
 
 _T = TypeVar("_T")
 _E = TypeVar("_E", bound=Enum)
+
+
+# --- mode ------------------------------------------------------------------------------
+
+
+def mode_of(status: Status) -> Mode:
+    """ADOPT while an adoption is active, else FEATURE while a feature is, else APP."""
+    if status.adoption is not None:
+        return Mode.ADOPT
+    if status.feature is not None:
+        return Mode.FEATURE
+    return Mode.APP
+
+
+def track_of(status: Status) -> Track:
+    """The track of the current mode: the adoption's, the feature's, or the app's."""
+    if status.adoption is not None:
+        return status.adoption
+    if status.feature is not None:
+        return status.feature.track
+    return status.app
 
 
 # --- writing ---------------------------------------------------------------------------
@@ -167,18 +189,19 @@ class _Obj:
             )
         return self._data[key]
 
-    def int_(self, key: str, low: int | None = None, high: int | None = None) -> int:
-        """The integer at `key`, refused outside `low`..`high` (each bound optional)."""
+    def int_(self, key: str, low: int | None = None) -> int:
+        """The integer at `key`, refused below `low` when given."""
         value = self._get(key)
         if isinstance(value, bool) or not isinstance(value, int):
             raise _bad(self._path(key), "an integer")
-        if (low is not None and value < low) or (high is not None and value > high):
-            if high is None:
-                raise _bad(self._path(key), f"an integer of at least {low}")
-            if low is None:
-                # coverage-exempt-begin: no caller passes a bound of high alone; defensive helper branch
-                raise _bad(self._path(key), f"an integer of at most {high}")
-                # coverage-exempt-end
+        if low is not None and value < low:
+            raise _bad(self._path(key), f"an integer of at least {low}")
+        return value
+
+    def int_range(self, key: str, low: int, high: int) -> int:
+        """The integer at `key`, refused outside `low`..`high`."""
+        value = self.int_(key)
+        if not low <= value <= high:
             raise _bad(self._path(key), f"an integer from {low} to {high}")
         return value
 
@@ -307,7 +330,7 @@ def _read_plan(obj: _Obj) -> Plan:
 
 def _read_track(obj: _Obj) -> Track:
     return Track(
-        stage=obj.int_("stage", low=MIN_STAGE, high=MAX_STAGE),
+        stage=obj.int_range("stage", MIN_STAGE, MAX_STAGE),
         checkpoints=obj.strs("checkpoints"),
     )
 

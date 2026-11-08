@@ -7,30 +7,27 @@ Prefix per mode: none (APP), `feature/<slug>/` (FEATURE), `adopt/` (ADOPT). The 
 from __future__ import annotations
 
 from bull.Modules.settings.Contracts import Settings
-from bull.Modules.status.Contracts import Mode, Refs, StatusError, StatusStore
+from bull.Modules.status.Contracts import Refs, StatusError, StatusStore
 
 _MODULE = "module/"
 _UNPREFIXED_TAGS = frozenset({"adopted"})
 
 
 class LiveRefs(Refs):
-    """Names derived from the settings and the store's current mode."""
+    """Names derived from the settings and the mode of the stored status."""
 
     def __init__(self, settings: Settings, store: StatusStore) -> None:
         self._settings = settings
         self._store = store
 
     def _prefix(self) -> str:
-        mode = self._store.mode()
-        if mode == Mode.ADOPT:
+        """The prefix for the mode, read from one `store.load()` (not `store.mode()`, so
+        the mode and the feature slug always come from the same status)."""
+        status = self._store.load()
+        if status.adoption is not None:
             return "adopt/"
-        if mode == Mode.FEATURE:
-            feature = self._store.load().feature
-            if feature is None:
-                raise StatusError(  # coverage-exempt: mode comes from the same status, so a feature is always present
-                    "feature mode without an active feature in status.json"
-                )
-            return f"feature/{feature.slug}/"
+        if status.feature is not None:
+            return f"feature/{status.feature.slug}/"
         return ""
 
     def trunk(self) -> str:

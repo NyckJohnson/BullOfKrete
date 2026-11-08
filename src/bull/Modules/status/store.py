@@ -1,7 +1,7 @@
 """The status store: reads, validates and writes `.bull/status.json`.
 
 `LiveStatusStore` owns create, load, mode and the write path. Every other change goes
-load → apply → validate → atomic write → one `status` event (`what` = the method name).
+load → apply → validate (read back) → atomic write → one `status` event (`what` = the method name).
 The apply step is a pure function in `transitions` or `modules`, called through the module
 (not imported by name) so it can be replaced in tests. A refusal raises `StatusError` from
 that function before anything is written or logged. A change that leaves the status as it
@@ -84,30 +84,28 @@ class LiveStatusStore(StatusStore):
         status = Status(
             model.FORMAT, Track(0, ()), (), None, None, (), None, None, None
         )
-        self._write(status, "create", {})
-        return status
+        return self._write(status, "create", {})
 
     def mode(self) -> Mode:
         """ADOPT while an adoption is active, else FEATURE while a feature is, else APP."""
-        status = self.load()
-        if status.adoption is not None:
-            return Mode.ADOPT
-        if status.feature is not None:
-            return Mode.FEATURE
-        return Mode.APP
+        return model.mode_of(self.load())
 
     # --- the write path ---------------------------------------------------------------
 
-    def _write(self, status: Status, what: str, data: dict[str, EventValue]) -> None:
+    def _write(self, status: Status, what: str, data: dict[str, EventValue]) -> Status:
+        """Validate, write atomically and log; returns the status as it now reads back.
+
+        Validation is the read side: what is written must read back through
+        `model.status_from_json` (which raises `FileFormatError` naming a bad field) before
+        anything is written. The status read back is returned, so callers see what a later
+        `load` will (e.g. a naive clock time comes back as UTC).
+        """
         payload = model.status_to_json(status)
-        # Validate: what we write must read back as the same status.
-        if model.status_from_json(payload) != status:
-            raise StatusError(  # coverage-exempt: round-trip check cannot fail for a status the transitions produce
-                f"{what}: the new status does not round-trip; nothing written"
-            )
+        saved = model.status_from_json(payload)
         text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         self._files.write_atomic(self._app.status_file, text)
         self._events.append(EventKind.STATUS, what=what, **data)
+        return saved
 
     def _apply(
         self,
@@ -120,8 +118,7 @@ class LiveStatusStore(StatusStore):
         new = apply(old)
         if new == old:
             return old, False
-        self._write(new, what, data)
-        return new, True
+        return self._write(new, what, data), True
 
     def _change(
         self,

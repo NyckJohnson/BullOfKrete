@@ -618,17 +618,13 @@ def test_reopen_ignores_files_no_unit_holds_when_some_match() -> None:
 
 
 def test_init_modules_matches_a_build_order_name_to_its_block_ignoring_case() -> None:
-    memo = replace(
-        memo_of(entry("foo")), build_order=(BuildEntry("Foo", (), 1),)
-    )
+    memo = replace(memo_of(entry("foo")), build_order=(BuildEntry("Foo", (), 1),))
     status = init(memo)
     assert [m.name for m in status.modules] == ["foo"]
 
 
-def test_init_modules_called_directly_refuses_a_build_order_name_without_a_block() -> None:
-    memo = replace(
-        memo_of(entry("foo")), build_order=(BuildEntry("Bar", (), 7),)
-    )
+def test_init_modules_refuses_a_build_order_name_without_a_block() -> None:
+    memo = replace(memo_of(entry("foo")), build_order=(BuildEntry("Bar", (), 7),))
     with pytest.raises(StatusError) as error:
         init(memo, problems=())
     assert "Bar" in reason(error)

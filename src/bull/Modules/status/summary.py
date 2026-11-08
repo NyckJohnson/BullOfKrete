@@ -12,12 +12,10 @@ from bull.Modules.status.Contracts import (
     Progress,
     Refs,
     Status,
-    StatusError,
     StatusStore,
-    Track,
     UnitState,
 )
-from bull.Modules.status.model import status_to_json
+from bull.Modules.status.model import mode_of, status_to_json, track_of
 from bull.Modules.status.next_step import next_step
 
 # Every checkpoint name of every mode (app, feature, adopt).
@@ -49,22 +47,6 @@ def _unit_counts(status: Status) -> tuple[int, int]:
     return sum(1 for u in units if u.state == UnitState.DONE), len(units)
 
 
-def _track(status: Status, mode: Mode) -> Track:
-    if mode == Mode.ADOPT:
-        if status.adoption is None:
-            # coverage-exempt-begin: mode comes from the same status, so an adoption is always present
-            raise StatusError("adopt mode without an active adoption in status.json")
-            # coverage-exempt-end
-        return status.adoption
-    if mode == Mode.FEATURE:
-        if status.feature is None:
-            # coverage-exempt-begin: mode comes from the same status, so a feature is always present
-            raise StatusError("feature mode without an active feature in status.json")
-            # coverage-exempt-end
-        return status.feature.track
-    return status.app
-
-
 def _mode_label(status: Status, mode: Mode) -> str:
     if mode == Mode.FEATURE and status.feature is not None:
         return f"feature {status.feature.slug}"
@@ -83,8 +65,9 @@ class LiveProgress(Progress):
         self._git = git
 
     def _current(self) -> tuple[Status, Mode, NextStep]:
+        # One load; the mode comes from that status, never a second read.
         status = self._store.load()
-        mode = self._store.mode()
+        mode = mode_of(status)
         branch = self._git.current_branch(self._app.root)
         return status, mode, next_step(status, mode, self._refs, branch)
 
@@ -93,7 +76,7 @@ class LiveProgress(Progress):
 
     def summary(self) -> str:
         status, mode, step = self._current()
-        track = _track(status, mode)
+        track = track_of(status)
         done, total = _unit_counts(status)
         lines = [
             f"stage {track.stage} ({_mode_label(status, mode)}) · units {done}/{total}",
