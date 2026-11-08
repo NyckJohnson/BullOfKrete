@@ -329,7 +329,7 @@
         "memo",
         "status"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -337,7 +337,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -347,7 +347,7 @@
             "ideas.py",
             "briefs.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -356,8 +356,8 @@
             "cycle.py",
             "cli.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 2
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T13:27:29-08:00",
+  "updatedAt": "2026-11-08T14:00:20-08:00",
   "features": [],
   "activeFeature": null
 }
