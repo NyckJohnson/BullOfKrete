@@ -203,9 +203,7 @@ def test_import_skips_idea_whose_title_matches_case_insensitively() -> None:
 
 
 def test_import_skips_ideas_matching_dropped_or_accepted_items() -> None:
-    backlog, _, _ = _make(
-        [_raw("old-one", "dropped"), _raw("done-one", "accepted")]
-    )
+    backlog, _, _ = _make([_raw("old-one", "dropped"), _raw("done-one", "accepted")])
     assert backlog.import_ideas([Idea("Old one", ""), Idea("Done one", "")]) == []
 
 
