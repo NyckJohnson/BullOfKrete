@@ -4,13 +4,26 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
+import secrets
 from pathlib import Path
 
 from bull.Modules.foundation.Contracts import FileFormatError, Files
 
-# Mode for newly created files (mkstemp creates them 0600).
-_NEW_FILE_MODE = 0o644
+# Requested mode for a new temp file; the kernel applies the process umask to it.
+_NEW_FILE_MODE = 0o666
+_TEMP_ATTEMPTS = 100
+
+
+def _create_temp(path: Path) -> tuple[int, Path]:
+    """Create a fresh, exclusive temp file beside `path`; returns its descriptor and path."""
+    for _ in range(_TEMP_ATTEMPTS):
+        temp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
+        try:
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, _NEW_FILE_MODE)
+        except FileExistsError:
+            continue
+        return fd, temp
+    raise FileExistsError(f"could not create a temp file beside {path}")
 
 
 class LiveFiles(Files):
@@ -30,19 +43,17 @@ class LiveFiles(Files):
         """
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            mode = path.stat().st_mode & 0o777
+            existing_mode: int | None = path.stat().st_mode & 0o7777
         except FileNotFoundError:
-            mode = _NEW_FILE_MODE
-        fd, temp_name = tempfile.mkstemp(
-            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
-        )
-        temp = Path(temp_name)
+            existing_mode = None  # new file: keep the umask-applied mode from creation
+        fd, temp = _create_temp(path)
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
                 handle.write(text)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.chmod(temp, mode)
+            if existing_mode is not None:
+                os.chmod(temp, existing_mode)
             os.replace(temp, path)
         except BaseException:
             temp.unlink(missing_ok=True)

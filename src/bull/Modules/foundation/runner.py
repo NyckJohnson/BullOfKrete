@@ -65,6 +65,9 @@ class LiveSpawned(Spawned):
     def __init__(self, process: subprocess.Popen[bytes]) -> None:
         self._process = process
         self.pid = process.pid
+        # Set once the group may no longer be signalled: after a stop, or when the
+        # leader was already reaped (its pid, and so the pgid, may have been reused).
+        self._group_gone = False
 
     def alive(self) -> bool:
         return self._process.poll() is None
@@ -72,8 +75,13 @@ class LiveSpawned(Spawned):
     def stop(self, grace: float = 5.0) -> None:
         """SIGTERM the whole group, wait up to `grace` seconds for it to empty, then SIGKILL.
 
-        Safe to call on a process that has already exited, and more than once.
+        Safe to call on a process that has already exited, and more than once: once
+        the leader has been reaped the group is never signalled again, so a reused
+        pid is never hit.
         """
+        if self._group_gone or self._process.returncode is not None:
+            self._group_gone = True
+            return
         pgid = self.pid
         deadline = time.monotonic() + grace
         _signal_group(pgid, signal.SIGTERM)
@@ -86,6 +94,7 @@ class LiveSpawned(Spawned):
         if _group_exists(pgid):
             _signal_group(pgid, signal.SIGKILL)
         self._process.wait()
+        self._group_gone = True
 
 
 class LiveRunner(Runner):
@@ -114,6 +123,8 @@ class LiveRunner(Runner):
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                # Own group, so a timeout can kill grandchildren holding the pipes.
+                start_new_session=True,
             )
         except FileNotFoundError as error:
             raise _tool_missing(args, cwd, error) from error
@@ -122,6 +133,7 @@ class LiveRunner(Runner):
                 stdout, stderr = process.communicate(timeout=timeout)
                 returncode = process.returncode
             except subprocess.TimeoutExpired:
+                _signal_group(process.pid, signal.SIGKILL)
                 process.kill()
                 stdout, stderr = process.communicate()
                 if stderr and not stderr.endswith("\n"):
