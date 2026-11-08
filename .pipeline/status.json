@@ -329,7 +329,7 @@
         "memo",
         "status"
       ],
-      "state": "in_progress",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T14:00:20-08:00",
+  "updatedAt": "2026-11-08T14:02:48-08:00",
   "features": [],
   "activeFeature": null
 }
