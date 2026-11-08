@@ -32,7 +32,7 @@ import pytest
 
 from dataclasses import replace
 
-from bull.Modules.features.Contracts import Idea, ItemState
+from bull.Modules.features.Contracts import FeaturePlan, Idea, ItemState
 from bull.Modules.features.mocks import (
     MockBacklog,
     MockFeatureCycle,
@@ -332,3 +332,85 @@ def test_cycle_refusals_are_raised_not_printed(rig: Rig) -> None:
     rig.cycle.start = refuse  # type: ignore[method-assign]
     with pytest.raises(BullError):
         rig.run("start")
+
+
+def test_import_of_an_unreadable_file_is_refused_naming_the_path(
+    rig: Rig, tmp_path: Path
+) -> None:
+    path = tmp_path / "ideas.md"
+    path.write_bytes(b"## Idea\n\xff\xfe\x80 not utf-8\n")
+    with pytest.raises(BullError) as caught:
+        rig.run("import", str(path))
+    assert str(path) in caught.value.message
+    assert rig.backlog.calls == []
+
+
+# --- plan output -------------------------------------------------------------------------
+
+
+def _plan_lines(rig: Rig, plan: FeaturePlan) -> list[str]:
+    rig.cycle.feature_plan = plan
+    _, text = rig.run("plan")
+    return [line for line in text.splitlines() if line.strip()]
+
+
+def test_plan_output_has_one_reopened_line_per_module_and_skeleton_line_last(
+    rig: Rig,
+) -> None:
+    lines = _plan_lines(
+        rig,
+        FeaturePlan(
+            reopened={"Counter": (1,), "Export": (2,)},
+            new_modules=(),
+            contract_changes=(),
+            skeleton_needed=False,
+        ),
+    )
+    assert any(l.startswith("Reopened Counter: unit 1") for l in lines)
+    assert any(l.startswith("Reopened Export: unit 2") for l in lines)
+    assert lines[-1] == "Skeleton needed: no"
+    assert "Nothing to reopen or add." not in lines
+
+
+def test_plan_output_lists_new_modules_when_there_are_some(rig: Rig) -> None:
+    lines = _plan_lines(
+        rig,
+        FeaturePlan(
+            reopened={},
+            new_modules=("Export",),
+            contract_changes=(),
+            skeleton_needed=True,
+        ),
+    )
+    assert any(l.startswith("New modules:") and "Export" in l for l in lines)
+    assert not any(l.startswith("Contract changes:") for l in lines)
+    assert "Nothing to reopen or add." not in lines
+    assert lines[-1] == "Skeleton needed: yes"
+
+
+def test_plan_output_lists_contract_changes_when_there_are_some(rig: Rig) -> None:
+    lines = _plan_lines(
+        rig,
+        FeaturePlan(
+            reopened={},
+            new_modules=(),
+            contract_changes=("Counter",),
+            skeleton_needed=True,
+        ),
+    )
+    assert any(l.startswith("Contract changes:") and "Counter" in l for l in lines)
+    assert not any(l.startswith("New modules:") for l in lines)
+    assert lines[-1] == "Skeleton needed: yes"
+
+
+def test_plan_output_says_nothing_to_reopen_when_everything_is_empty(rig: Rig) -> None:
+    lines = _plan_lines(
+        rig,
+        FeaturePlan(
+            reopened={},
+            new_modules=(),
+            contract_changes=(),
+            skeleton_needed=False,
+        ),
+    )
+    assert lines == ["Nothing to reopen or add.", "Skeleton needed: no"]

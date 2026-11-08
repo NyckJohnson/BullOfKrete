@@ -18,7 +18,7 @@ import pytest
 
 from bull.Modules.features.Contracts import FeaturePlan, ItemState
 from bull.Modules.features.cycle import LiveFeatureCycle
-from bull.Modules.foundation.Contracts import BullError
+from bull.Modules.foundation.Contracts import BullError, FileFormatError
 from bull.Modules.foundation.mocks import MockFiles, sample_layout
 from bull.Modules.gitrepo.mocks import MockGit
 from bull.Modules.memo.Contracts import Memo, ModuleEntry
@@ -636,3 +636,46 @@ def test_abandon_is_refused_when_no_feature_is_active() -> None:
     rig.store.status = _accepted_app()
     with pytest.raises(BullError):
         rig.cycle.abandon()
+
+
+# --- guards (coverage triage) -------------------------------------------------------------
+
+
+def test_plan_without_a_memo_file_is_refused_and_changes_nothing() -> None:
+    rig = _planning_rig(_entry("Counter", changes={"reset-button": ("cli.fx",)}))
+    del rig.files.texts[LAYOUT.memo_file]
+    with pytest.raises(BullError) as caught:
+        rig.cycle.plan()
+    assert (
+        "write the memo first" in f"{caught.value.message} {caught.value.fix}".lower()
+    )
+    assert rig.store_calls("init_modules") == []
+    assert rig.store_calls("reopen") == []
+
+
+def test_accept_is_refused_when_the_active_slug_is_not_in_the_backlog() -> None:
+    rig = _accepting_rig(6, "accepted")
+    rig.set_backlog([_raw("dark-mode")])
+    with pytest.raises(BullError):
+        rig.cycle.accept()
+    assert rig.store_calls("end_feature") == []
+
+
+def test_abandon_is_refused_when_the_active_slug_is_not_in_the_backlog() -> None:
+    rig = _abandoning_rig()
+    rig.set_backlog([_raw("dark-mode")])
+    with pytest.raises(BullError):
+        rig.cycle.abandon()
+    assert rig.store_calls("end_feature") == []
+
+
+def test_abandon_with_invalid_json_on_the_feature_branch_names_branch_and_path() -> (
+    None
+):
+    rig = _abandoning_rig()
+    rig.git.files_at[("feature/reset-button/main", BACKLOG_PATH)] = "{not json"
+    with pytest.raises(
+        FileFormatError, match=f"feature/reset-button/main:{BACKLOG_PATH}"
+    ):
+        rig.cycle.abandon()
+    assert rig.store_calls("end_feature") == []

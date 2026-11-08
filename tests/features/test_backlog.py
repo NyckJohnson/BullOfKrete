@@ -10,9 +10,12 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+import pytest
+
 from bull.Modules.features.backlog import LiveBacklog
 from bull.Modules.features.Contracts import BacklogItem, Idea, ItemState
 from bull.Modules.features.mocks import MockIdeaReader
+from bull.Modules.foundation.Contracts import BullError, FileFormatError
 from bull.Modules.foundation.mocks import (
     SAMPLE_TIME,
     MockClock,
@@ -297,3 +300,62 @@ def test_drop_removes_item_from_the_queue() -> None:
     backlog, _, _ = _make([_raw("a"), _raw("b")])
     backlog.drop("a")
     assert _queued(backlog) == ["b"]
+
+
+# --- guards (coverage triage) -------------------------------------------------------------
+
+
+def _bad_files() -> dict[str, str]:
+    good = _raw("a")
+    return {
+        "not-an-object": json.dumps([good]),
+        "format-2": json.dumps({"format": 2, "items": [good]}),
+        "format-missing": json.dumps({"items": [good]}),
+        "items-not-a-list": json.dumps({"format": 1, "items": {"a": good}}),
+        "items-missing": json.dumps({"format": 1}),
+        "item-not-an-object": json.dumps({"format": 1, "items": ["a"]}),
+        "missing-field": json.dumps(
+            {"format": 1, "items": [{k: v for k, v in good.items() if k != "brief"}]}
+        ),
+        "non-string-field": json.dumps({"format": 1, "items": [{**good, "title": 7}]}),
+        "unknown-state": json.dumps(
+            {"format": 1, "items": [{**good, "state": "paused"}]}
+        ),
+        "bad-time": json.dumps(
+            {"format": 1, "items": [{**good, "added": "yesterday"}]}
+        ),
+    }
+
+
+@pytest.mark.parametrize("text", list(_bad_files().values()), ids=list(_bad_files()))
+def test_malformed_backlog_file_raises_file_format_error_naming_the_file(
+    text: str,
+) -> None:
+    backlog, files, _ = _make()
+    files.texts[LAYOUT.backlog_file] = text
+    with pytest.raises(FileFormatError, match="backlog.json"):
+        backlog.items()
+
+
+@pytest.mark.parametrize("op", ["move", "drop"])
+@pytest.mark.parametrize("slug", ["ghost", "old", "done"])
+def test_move_and_drop_refuse_unknown_and_non_queued_slugs(op: str, slug: str) -> None:
+    backlog, files, _ = _make(
+        [_raw("a"), _raw("old", "dropped"), _raw("done", "accepted")]
+    )
+    before = files.texts[LAYOUT.backlog_file]
+    with pytest.raises(BullError, match=rf"No queued feature.*{slug}"):
+        if op == "move":
+            backlog.move(slug, 1)
+        else:
+            backlog.drop(slug)
+    assert files.texts[LAYOUT.backlog_file] == before
+
+
+@pytest.mark.parametrize("position", [0, 3, -1])
+def test_move_refuses_a_position_outside_one_to_queued_count(position: int) -> None:
+    backlog, files, _ = _make([_raw("a"), _raw("b"), _raw("x", "dropped")])
+    before = files.texts[LAYOUT.backlog_file]
+    with pytest.raises(BullError):
+        backlog.move("a", position)
+    assert files.texts[LAYOUT.backlog_file] == before

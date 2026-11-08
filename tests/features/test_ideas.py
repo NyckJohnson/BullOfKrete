@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from bull.Modules.features.Contracts import Idea
+from bull.Modules.foundation.Contracts import BullError
 from bull.Modules.features.ideas import LiveIdeaReader
 
 READER = LiveIdeaReader()
@@ -139,3 +140,9 @@ def test_taken_slug_and_suffix_2_gets_suffix_3() -> None:
 
 def test_slug_not_taken_has_no_suffix_even_when_others_are_taken() -> None:
     assert READER.slug("Dark mode", {"reset-button"}) == "dark-mode"
+
+
+@pytest.mark.parametrize("title", ["", "!!!", "  --  ", "***"])
+def test_slug_of_a_title_with_no_letters_or_digits_is_refused(title: str) -> None:
+    with pytest.raises(BullError):
+        READER.slug(title, set())
