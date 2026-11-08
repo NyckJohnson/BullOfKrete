@@ -52,22 +52,32 @@ class LiveStackRegistry(StackRegistry):
         return self._load(path, builtin)
 
     def install(self, path: Path) -> Stack:
-        source = self._load(path, builtin=False)
-        name = source.manifest.name
+        # Check the name from the manifest alone first: a refused install must not import the
+        # stack's readers, which would replace a built-in stack's package in `sys.modules`.
+        name = parse_manifest(path).name
         if name in self._builtin_folders():
             raise StackError(
                 f"Cannot install {name!r}: a built-in stack has that name.",
                 "Rename the stack (its folder and stack.toml `name`) and install it again.",
             )
+        self._load(path, builtin=False)
         target = self._installed_root / name
         staging = self._installed_root / f".{name}.installing"
-        self._installed_root.mkdir(parents=True, exist_ok=True)
-        if staging.exists():
-            shutil.rmtree(staging)
-        shutil.copytree(path, staging, ignore=shutil.ignore_patterns("__pycache__"))
-        if target.exists():
-            shutil.rmtree(target)
-        staging.rename(target)
+        backup = self._installed_root / f".{name}.previous"
+        try:
+            self._installed_root.mkdir(parents=True, exist_ok=True)
+            _remove(staging)
+            _remove(backup)
+            shutil.copytree(path, staging, ignore=shutil.ignore_patterns("__pycache__"))
+            _swap_into_place(staging, target, backup)
+        except OSError as error:
+            raise StackError(
+                f"Cannot install {name!r} into {target}: {error}",
+                "Check the folder's permissions and free disk space, then install it again.",
+            ) from error
+        finally:
+            _remove_quietly(staging)
+        _remove_quietly(backup)
         return self._load(target, builtin=False)
 
     # -- helpers -----------------------------------------------------------------------------
@@ -120,3 +130,37 @@ def _stack_folders(root: Path) -> list[Path]:
         and child.name != _TEMPLATE_FOLDER
         and (child / MANIFEST_FILE).is_file()
     )
+
+
+def _remove(folder: Path) -> None:
+    """Delete `folder` and its contents if it exists; raises `OSError` on failure."""
+    if folder.exists():
+        shutil.rmtree(folder)
+
+
+def _remove_quietly(folder: Path) -> None:
+    """Best-effort cleanup of a leftover staging or backup folder.
+
+    Used only after the outcome of an install is settled: a folder that cannot be removed is
+    hidden (its name starts with `.`) and is ignored by every scan, so it is left behind rather
+    than turning a finished install, or the error being reported, into a different error.
+    """
+    if folder.exists():
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _swap_into_place(staging: Path, target: Path, backup: Path) -> None:
+    """Move `staging` to `target`, keeping any earlier `target` until the move succeeds.
+
+    The earlier install is renamed to `backup` first and renamed back if the move fails, so a
+    failed reinstall leaves the earlier install intact. Raises `OSError` on failure.
+    """
+    if not target.exists():
+        staging.rename(target)
+        return
+    target.rename(backup)
+    try:
+        staging.rename(target)
+    except OSError:
+        backup.rename(target)
+        raise

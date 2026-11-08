@@ -47,6 +47,8 @@ SURVEYOR_AGENT = "surveyor"
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _TEMPLATE_NAME = "_template"
 _PLACEHOLDER = "TODO"
+# The placeholder counts only as a whole, case-sensitive word ("TODOLIST" is fine).
+_PLACEHOLDER_RE = re.compile(r"\bTODO\b")
 _REQUIRED_SETTINGS = ("source_dir", "test_dir")
 _GATE_KEYS = (
     "preflight",
@@ -78,6 +80,8 @@ def parse_manifest(folder: Path) -> StackManifest:
         raise StackError(f"Cannot read {path}: {error}", _FIX) from error
     except tomllib.TOMLDecodeError as error:
         raise StackError(f"{path} is not valid TOML: {error}", _FIX) from error
+    except UnicodeDecodeError as error:
+        raise StackError(f"{path} is not valid UTF-8: {error}", _FIX) from error
 
     parser = _Parser(folder)
     manifest = parser.parse(data)
@@ -187,7 +191,7 @@ class _Parser:
     def _check_placeholders(self, value: object, where: str) -> None:
         """Report every string value that still holds the template's `TODO` placeholder."""
         if isinstance(value, str):
-            if _PLACEHOLDER in value:
+            if _PLACEHOLDER_RE.search(value):
                 self.problem(
                     f"{where or 'value'}: placeholder {_PLACEHOLDER!r} left in {value!r}"
                 )
