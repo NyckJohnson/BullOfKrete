@@ -1177,6 +1177,23 @@ when `readers.py` defines `detect`.
     `adopted`), sorted.
   - cli: every `bull status …` command in **Commands**; refusals exit 1 with the reason; `usage-check`
     prints `OK|PAUSE|UNKNOWN: <reason>` (exit 0 for all three; `--json` gives the fields).
+- Construction (internal; not contracts):
+  - model.py: `status_from_json(data: object) -> Status` (malformed → `FileFormatError` naming
+    the field) and `status_to_json(status: Status) -> dict[str, object]`; times are ISO 8601 UTC
+    with `Z`.
+  - store.py: `LiveStatusStore(app: AppLayout, files: Files, events: EventLog, clock: Clock,
+    settings: Settings, parts: Parts, memo_reader: MemoReader)`. It owns create, load, mode and the
+    write path (load → apply → validate → atomic write → one `status` event, whose `what` is the
+    method name). Every other change method delegates to a pure function in transitions.py or
+    modules.py with the same name and arguments, taking the current `Status` first and keyword-only
+    context (`now: datetime`, `max_attempts: int`, `known_parts`, `max_files`, `problems`) as it
+    needs, returning the new `Status` (`attempt` → `tuple[Status, Unit]`, `take_approval` →
+    `tuple[Status, Approval | None]`) and raising `StatusError` on refusal. modules.py holds
+    init_modules, set_module, reopen, add_modules; transitions.py holds the rest. Unit 2 may add
+    those functions as `NotImplementedError` stubs; unit 3 implements and tests them (directly and
+    through the store).
+  - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
+    `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
 - Anticipated operations (not built yet): time totals from the event log.
 - Reference tests: v1-tests/test_adopt_status.py (all cases except test_start_needs_a_clean_tree_on_the_trunk, test_finish_waits_for_verify, test_abandon_keeps_the_trunk_and_carries_the_backlog, test_app_shell_tests_are_not_old_tests, which map to adoption); v1-tests/test_parts.py::test_modules_get_their_part; v1-tests/test_gate_speed.py::test_wrong_case_suggests_the_module, test_unknown_module_lists_the_modules
 - Contract: see `docs/api/status.md` (generated; do not edit by hand)
@@ -2010,3 +2027,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: stacks spec clarifications from coverage triage (flagged to the human at the module boundary): `select` refuses with `StackError`, writing nothing, when `config.toml` can't be edited safely; `rules` without a `## common` section returns the agent's section alone, and `rules(stack, "common")` returns that section once.
 - 2026-11-08: parts spec clarifications from review (flagged to the human at the module boundary): a stack's slash-free `.gitignore` line keeps its any-depth meaning under a part folder (`__pycache__/` → `web/**/__pycache__/`; middle-slash lines → `web/<line>`; `/x` → `/web/x`); `part add` refuses a folder that resolves outside the app (symlinks followed), rolls back every write on failure, and creates the part's source and test folders; `part check` also reports missing source/test folders and bad `dir` values; `is_test_path` resolves paths and is false outside the app.
 - 2026-11-08: parts reference scan (covered 8, missed 2, contradicts 2, not-in-spec 3, obsolete 1) — `part check` prints `no problems` on success; a stack's unanchored gitignore lines stay scoped to the part (`web/**/x`, not v1's unchanged copy); the spec line about moving `/`-anchored `.gitignore` lines on the first `part add` is deleted (v1 never did it; a no-op at `.`); `part add` refuses `dir` at or inside `.bull`, `.git`, `docs`, `interfaces` — approved by Nicholas Johnson
+- 2026-11-08: status construction (store/refs constructors, model.py functions, store delegating to pure functions in transitions.py/modules.py) set in the status § "Construction" line; internal wiring, no contract change.
