@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,6 +9,7 @@ import pytest
 
 from bull.Modules.foundation.Contracts import (
     Clock,
+    FileFormatError,
     Files,
     Layouts,
     Runner,
@@ -143,8 +143,19 @@ def test_mock_files_read_json_parses_stored_text() -> None:
 
 def test_mock_files_write_json_uses_sorted_indented_with_newline() -> None:
     m = MockFiles()
-    m.write_json(Path("/a.json"), {"b": 1, "a": 2})
-    assert m.texts[Path("/a.json")] == json.dumps({"a": 2, "b": 1}, indent=2) + "\n"
+    m.write_json(Path("/a.json"), {"b": {"z": 1, "y": 2}, "a": [3]})
+    assert m.texts[Path("/a.json")] == (
+        '{\n  "a": [\n    3\n  ],\n  "b": {\n    "y": 2,\n    "z": 1\n  }\n}\n'
+    )
+
+
+def test_mock_files_read_json_invalid_raises_format_error_naming_path() -> None:
+    m = MockFiles()
+    path = Path("/bad/file.json")
+    m.texts[path] = "{not json"
+    with pytest.raises(FileFormatError) as info:
+        m.read_json(path)
+    assert str(path) in info.value.message
 
 
 def test_mock_files_json_round_trips() -> None:
