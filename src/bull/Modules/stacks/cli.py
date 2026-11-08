@@ -53,8 +53,20 @@ def register(
     )
     leaves = stack.add_subparsers(dest="stack_command", required=True)
 
+    def known_part(part: str | None) -> str | None:
+        """`part` unchanged if the app has it (`app` when there are no part files)."""
+        if part is not None:
+            known = part_names(app()) or ["app"]
+            if part not in known:
+                raise StackError(
+                    f"this app has no part `{part}`; its parts: " + ", ".join(known),
+                    "pass `--part` with one of: " + ", ".join(known),
+                )
+        return part
+
     def part_stack(part: str | None) -> Stack:
         """The stack of `part`; with parts present, a part must be named."""
+        known_part(part)
         if part is None:
             names = part_names(app())
             if names:
@@ -108,13 +120,40 @@ def register(
     check.add_argument("--json", action="store_true", help="Print JSON")
 
     def run_check(args: argparse.Namespace, out: TextIO) -> int:
-        items = ops().check(app(), args.part)
+        part = known_part(args.part)
+        names = part_names(app()) if part is None else []
+        if names:
+            return check_every_part(names, args.json, out)
+        items = ops().check(app(), part)
         if args.json:
             json.dump([_check_json(i) for i in items], out, indent=2)
             out.write("\n")
         else:
             out.writelines(_check_line(i) + "\n" for i in items)
         return 0 if all(i.ok for i in items) else 1
+
+    def check_every_part(names: list[str], as_json: bool, out: TextIO) -> int:
+        """Check each part in turn (sorted), even after one fails; exit 1 if any failed."""
+        results: list[tuple[str, str, list[CheckItem]]] = []
+        for name in names:
+            results.append(
+                (name, _part_stack_name(settings(), name), ops().check(app(), name))
+            )
+        if as_json:
+            json.dump(
+                [
+                    {"part": n, "stack": st, "items": [_check_json(i) for i in items]}
+                    for n, st, items in results
+                ],
+                out,
+                indent=2,
+            )
+            out.write("\n")
+        else:
+            for n, st, items in results:
+                out.write(f"part {n} ({st})\n")
+                out.writelines(_check_line(i) + "\n" for i in items)
+        return 0 if all(i.ok for _, _, items in results for i in items) else 1
 
     check.set_defaults(run=run_check)
 
@@ -123,7 +162,7 @@ def register(
     run.add_argument("--part", help="Run it for this part")
 
     def run_run(args: argparse.Namespace, out: TextIO) -> int:
-        return ops().run_command(app(), args.name, args.part)
+        return ops().run_command(app(), args.name, known_part(args.part))
 
     run.set_defaults(run=run_run)
 
@@ -139,6 +178,12 @@ def register(
         return 0
 
     install.set_defaults(run=run_install)
+
+
+def _part_stack_name(settings: Settings, part: str) -> str:
+    """The part's `stack` setting for a check heading; `no stack set` when it is missing."""
+    name = settings.get("stack", part)
+    return name if isinstance(name, str) and name else "no stack set"
 
 
 def _write_text(out: TextIO, text: str) -> None:
