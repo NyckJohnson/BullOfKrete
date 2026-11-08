@@ -1,10 +1,1059 @@
 {
-  "stage": 1,
+  "stage": 2,
   "paused": false,
   "pauseReason": null,
   "checkpoints": {},
-  "modules": [],
-  "updatedAt": "2026-11-05T13:16:37-08:00",
+  "modules": [
+    {
+      "name": "foundation",
+      "path": "src/myapp/Modules/foundation",
+      "dependsOn": [],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "layout.py",
+            "files.py",
+            "runner.py",
+            "clock.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "gitrepo",
+      "path": "src/myapp/Modules/gitrepo",
+      "dependsOn": [
+        "foundation"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "git.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "events",
+      "path": "src/myapp/Modules/events",
+      "dependsOn": [
+        "foundation"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "event_log.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "path": "src/myapp/Modules/settings",
+      "dependsOn": [
+        "foundation"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "schema.py",
+            "toml_edit.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "loader.py",
+            "settings.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "formats",
+      "path": "src/myapp/Modules/formats",
+      "dependsOn": [
+        "foundation",
+        "gitrepo"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "formats.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "memo",
+      "path": "src/myapp/Modules/memo",
+      "dependsOn": [
+        "foundation"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "parser.py",
+            "problems.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "templates.py",
+            "templates/outline.md",
+            "templates/backlog.md",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "usage",
+      "path": "src/myapp/Modules/usage",
+      "dependsOn": [
+        "foundation",
+        "settings"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "usage.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stacks",
+      "path": "src/myapp/Modules/stacks",
+      "dependsOn": [
+        "foundation",
+        "settings"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "manifest.py",
+            "loader.py",
+            "registry.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "select.py",
+            "docs.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "parts",
+      "path": "src/myapp/Modules/parts",
+      "dependsOn": [
+        "foundation",
+        "settings",
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "parts.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "path": "src/myapp/Modules/status",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "events",
+        "settings",
+        "memo",
+        "parts"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "model.py",
+            "store.py",
+            "refs.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "transitions.py",
+            "modules.py",
+            "next_step.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "summary.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "features",
+      "path": "src/myapp/Modules/features",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "memo",
+        "status"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "backlog.py",
+            "ideas.py",
+            "briefs.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "cycle.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "coverage",
+      "path": "src/myapp/Modules/coverage",
+      "dependsOn": [
+        "foundation",
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "markers.py",
+            "triage.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "api",
+      "path": "src/myapp/Modules/api",
+      "dependsOn": [
+        "foundation",
+        "memo",
+        "stacks",
+        "parts",
+        "status"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "snapshots.py",
+            "approval.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "interfaces",
+      "path": "src/myapp/Modules/interfaces",
+      "dependsOn": [
+        "foundation",
+        "memo",
+        "stacks",
+        "parts",
+        "api"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "interfaces.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "adoption",
+      "path": "src/myapp/Modules/adoption",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "memo",
+        "stacks",
+        "parts",
+        "status",
+        "features"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "detect.py",
+            "adopt.py",
+            "legacy.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "gates",
+      "path": "src/myapp/Modules/gates",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "events",
+        "settings",
+        "memo",
+        "stacks",
+        "parts",
+        "status",
+        "coverage",
+        "api",
+        "interfaces"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "steps.py",
+            "passes.py",
+            "failed.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "driver.py",
+            "after_merge.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "journeys.py",
+            "report.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stacktest",
+      "path": "src/myapp/Modules/stacktest",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "cases.py",
+            "static.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "runner.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stackflow",
+      "path": "src/myapp/Modules/stackflow",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "stacks",
+        "stacktest"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "workflow.py",
+            "template/DESIGN.md",
+            "template/stack.toml",
+            "template/cases.json"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "install.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "hooks",
+      "path": "src/myapp/Modules/hooks",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "events",
+        "settings",
+        "memo",
+        "usage",
+        "stacks",
+        "parts",
+        "status",
+        "gates"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "merge_guard.py",
+            "protection.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "usage_guard.py",
+            "session.py",
+            "dispatch.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "plugin_text",
+      "path": "src/myapp/Modules/plugin_text",
+      "dependsOn": [],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py",
+            "plugin_files.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "orchestrator.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "commands/discuss.md",
+            "commands/outline.md",
+            "commands/setup.md",
+            "commands/skeleton.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "commands/prototype.md",
+            "commands/build.md",
+            "commands/verify.md",
+            "commands/feature.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 5,
+          "files": [
+            "commands/adopt.md",
+            "commands/resume.md",
+            "commands/status.md",
+            "commands/stack.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 6,
+          "files": [
+            "agents/skeleton-builder.md",
+            "agents/screen-builder.md",
+            "agents/test-writer.md",
+            "agents/code-writer.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 7,
+          "files": [
+            "agents/reviewer.md",
+            "agents/coverage-analyst.md",
+            "agents/journey-test-writer.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 8,
+          "files": [
+            "agents/surveyor.md",
+            "agents/legacy-test-scanner.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "claude_code",
+      "path": "src/myapp/Modules/claude_code",
+      "dependsOn": [
+        "foundation",
+        "settings",
+        "usage",
+        "hooks",
+        "plugin_text"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "plugin.py",
+            "hooks_json.py",
+            "launch.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "hook_io.py",
+            "statusline.py",
+            "app_files.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "appinit",
+      "path": "src/myapp/Modules/appinit",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "settings",
+        "formats",
+        "stacks",
+        "status",
+        "adoption",
+        "stackflow",
+        "claude_code"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "mocks/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "init.py",
+            "doctor.py",
+            "cli.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "cli",
+      "path": "src/myapp/Modules/cli",
+      "dependsOn": [
+        "foundation",
+        "gitrepo",
+        "events",
+        "settings",
+        "formats",
+        "memo",
+        "usage",
+        "stacks",
+        "parts",
+        "status",
+        "features",
+        "coverage",
+        "api",
+        "interfaces",
+        "adoption",
+        "gates",
+        "stacktest",
+        "stackflow",
+        "hooks",
+        "plugin_text",
+        "claude_code",
+        "appinit"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "wiring.py",
+            "main.py",
+            "help.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stack_fixture",
+      "path": "src/myapp/Modules/stack_fixture",
+      "dependsOn": [
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py",
+            "tool.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "fixture/stack.toml",
+            "fixture/readers.py",
+            "fixture/rules.md",
+            "fixture/setup.md"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "fixture/cases.json",
+            "fixture/fixture/"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "fixture_service/stack.toml",
+            "fixture_service/readers.py",
+            "fixture_service/serve.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 5,
+          "files": [
+            "fixture_service/rules.md",
+            "fixture_service/setup.md",
+            "fixture_service/cases.json",
+            "fixture_service/fixture/"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stack_python_cli",
+      "path": "src/myapp/Modules/stack_python_cli",
+      "dependsOn": [
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "python_cli/stack.toml",
+            "python_cli/readers.py",
+            "python_cli/gates.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "python_cli/schema_check.py",
+            "python_cli/rules.md",
+            "python_cli/setup.md",
+            "python_cli/lint/ruff.toml"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "python_cli/DESIGN.md",
+            "python_cli/cases.json",
+            "python_cli/fixture/"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    },
+    {
+      "name": "stack_ios",
+      "path": "src/myapp/Modules/stack_ios",
+      "dependsOn": [
+        "stacks"
+      ],
+      "state": "pending",
+      "units": [
+        {
+          "number": 1,
+          "files": [
+            "Contracts/__init__.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 2,
+          "files": [
+            "ios/stack.toml",
+            "ios/readers.py",
+            "ios/swift_scan.py",
+            "ios/pbxproj.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 3,
+          "files": [
+            "ios/xcresults.py",
+            "ios/gates.py",
+            "ios/simulator.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 4,
+          "files": [
+            "ios/detect.py",
+            "ios/inventory.py"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 5,
+          "files": [
+            "ios/rules.md",
+            "ios/setup.md",
+            "ios/lint/swiftlint.yml",
+            "ios/lint/swift-format.json"
+          ],
+          "state": "pending",
+          "attempts": 0
+        },
+        {
+          "number": 6,
+          "files": [
+            "ios/cases.json",
+            "ios/fixture/"
+          ],
+          "state": "pending",
+          "attempts": 0
+        }
+      ]
+    }
+  ],
+  "updatedAt": "2026-11-07T23:20:14-08:00",
   "features": [],
   "activeFeature": null
 }

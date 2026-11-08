@@ -1674,8 +1674,8 @@ when `readers.py` defines `detect`.
     matches the **Commands** table, `/bull:<name>` matches a command file, `models.<agent>` an
     agent); no v1 names (`ios-pipeline`, `.pipeline/`, `pipeline-resume`, `ui-test-writer`); no
     language, toolchain or platform words (the `cli` module's banned list).
-  - Content: rewritten from v1's Markdown per **v1 Markdown review** (source material prepared as
-    described in the Decisions log): the orchestrator rules (golden rules, briefs, asking the
+  - Content: rewritten from v1's Markdown per **v1 Markdown review** (source: the approved note
+    `docs/process/plugin_text.md`): the orchestrator rules (golden rules, briefs, asking the
     human, the Stage 5 loop with the reference-test scan step, feature cycle, adoption, parts and
     interfaces, handing off), one command per stage plus adopt, feature, resume, status and the
     stack workflow (`/bull:stack`, which refuses outside a stack repo), and the nine agents (v1's
@@ -1877,7 +1877,7 @@ when `readers.py` defines `detect`.
     `Contracts` must declare a dataclass named after the schema's `title`; field names and types
     (`str`/`int`/`float`/`bool`/`list[...]`/`X | None` for non-required) must match `properties`;
     each mismatch is an item naming the field and role.
-  - rules.md, setup.md, DESIGN.md: rewritten from v1's python_cli files per **v1 Markdown review**
+  - rules.md, setup.md, DESIGN.md: rewritten from the approved note `docs/process/stack_python_cli.md`
     (module folders `Modules/<module>/Contracts/`, `mocks/`; `pyproject.toml` template; journeys as
     subprocess tests; how mocks for a consumed json-schema interface are written).
   - The fixture (a one-module counter CLI) and `cases.json` (every required id plus `journey`,
@@ -1923,7 +1923,7 @@ when `readers.py` defines `detect`.
   - readers.check: Xcode present, project and scheme exist, Swift 6 (Swift 5 allowed only while
     adopting), test targets include their folders, synchronized folders (groups fail), no nested git
     repos.
-  - rules.md, setup.md, fixture SETUP.md: rewritten from v1's iOS files per **v1 Markdown review**.
+  - rules.md, setup.md, fixture SETUP.md: rewritten from the approved note `docs/process/stack_ios.md`.
   - The fixture's Xcode project is made once by hand (SETUP.md, at the start of this module); `bull
     stack test ios` passes every case on a Mac with Xcode (the test skips elsewhere).
 - Reference tests: v1-tests/test_adopt_detect.py::test_parses_quotes_comments_and_settings, test_target_settings_fall_back_to_the_project, test_malformed_input_raises, test_no_project, test_synchronized_swift5_app, test_setup_fixes, test_unsupported_dependencies_block, test_types_and_references, test_finds_declarations_not_mentions; v1-tests/test_adopt_gates.py::test_only_module_and_module_test_warnings_count, test_swift5_is_allowed_only_while_adopting, test_test_targets_must_include_their_folders, test_groups_and_nested_repos_fail; v1-tests/test_gate_speed.py::test_failed_ids, test_count, test_a_runner_that_failed_to_launch_is_not_a_test, test_asks_xccov_for_the_path_the_bundle_recorded, test_other_modules_suites; v1-tests/test_cli_misc.py::test_selection, test_diagnostics_flag_only_when_set, test_busy_simulator_is_waited_for_and_retried, test_busy_retries_stop_after_three_attempts, test_xcode_launch_noise_is_hidden_but_logged; v1-tests/test_stack_test.py::test_the_real_ios_stack_passes
@@ -1967,11 +1967,12 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-05: stacks built in their own repos (`bull init --stack`), installable by path — approved by Nicholas Johnson
 - 2026-11-05: one Python package holds the command and the plugin; `bull open` launches Claude Code with the plugin from the installed package; state in `.bull/` (status and backlog separate, JSON; config TOML) — approved by Nicholas Johnson
 - 2026-11-07: journeys, MVP features, constraints and interfaces between parts in v2.0 — approved by Nicholas Johnson
-- 2026-11-07 (proposed): the core enforces "no tests ran" and reads failures from the stack's readers, so a stack can't pass an empty run by mistake.
-- 2026-11-07 (proposed): `bull feature …` and `bull adopt …` are top-level commands (journey text uses them; `bull feature plan` replaces `status feature plan`).
-- 2026-11-07 (proposed): contract approvals are recorded (`bull status wait/approve`) and `bull api --write` refuses a changed snapshot without one; a feature's listed contract change pre-approves exactly one write per module.
-- 2026-11-07 (proposed): the merge guard also blocks merging a module branch whose reference-test scan isn't recorded (journey 12).
-- 2026-11-07 (proposed): `CLAUDE.md` imports `@.bull/plugin/orchestrator.md`, rendered by `bull open` (git-ignored), so no committed file holds a machine-specific path.
-- 2026-11-07 (proposed): fixture stacks (`fixture`, `fixture_service`) ship as built-in stacks of maturity `test`, hidden unless `bull stacks --all`.
-- 2026-11-07 (proposed): README, CONTRIBUTING, LICENSE, `docs/guide.md` and `docs/stacks.md` are written in Stage 6 (code-writer from this memo; the human reviews), not as a module.
-- 2026-11-07 (open): how rewritten v1 Markdown reaches the agents that write plugin_text and the stacks' rules/setup text, given that code-writer never reads `reference/` — see the question at approval.
+- 2026-11-07: the core enforces "no tests ran" and reads failures from the stack's readers, so a stack can't pass an empty run by mistake.
+- 2026-11-07: `bull feature …` and `bull adopt …` are top-level commands (journey text uses them; `bull feature plan` replaces `status feature plan`).
+- 2026-11-07: contract approvals are recorded (`bull status wait/approve`) and `bull api --write` refuses a changed snapshot without one; a feature's listed contract change pre-approves exactly one write per module.
+- 2026-11-07: the merge guard also blocks merging a module branch whose reference-test scan isn't recorded (journey 12).
+- 2026-11-07: `CLAUDE.md` imports `@.bull/plugin/orchestrator.md`, rendered by `bull open` (git-ignored), so no committed file holds a machine-specific path.
+- 2026-11-07: fixture stacks (`fixture`, `fixture_service`) ship as built-in stacks of maturity `test`, hidden unless `bull stacks --all`.
+- 2026-11-07: README, CONTRIBUTING, LICENSE, `docs/guide.md` and `docs/stacks.md` are written in Stage 6 (code-writer from this memo; the human reviews), not as a module.
+- 2026-11-07: rewritten v1 Markdown reaches code-writer through source notes. At the start of plugin_text, stack_python_cli and stack_ios, before any unit, the orchestrator writes `docs/process/<module>.md` from the v1 files that **v1 Markdown review** sends there: stack-neutral where the target is, in `bull` terms and v2 formats. The human approves each note like a memo section; test-writer and code-writer briefs list the note, never `reference/`. (Options weighed: code-writer reads named v1 files; the orchestrator writes the Markdown itself.)
+- 2026-11-07: at `/setup`, `.pipeline/config.sh` changes to `APP_PACKAGE="bull"`, `APP_SOURCE_DIR="src/bull"`, `APP_TEST_DIR="tests"` (the human edits it).
