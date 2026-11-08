@@ -1192,6 +1192,9 @@ when `readers.py` defines `detect`.
     init_modules, set_module, reopen, add_modules; transitions.py holds the rest. Unit 2 may add
     those functions as `NotImplementedError` stubs; unit 3 implements and tests them (directly and
     through the store).
+  - attempt at the limit: `transitions.attempt` returns the new `Status` with the unit `blocked`;
+    the store writes it and logs the `status` event, then raises `StatusError` "unit n blocked
+    after <max_attempts> attempts; ask the human" (the one refusal that saves its change).
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
     `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
 - Anticipated operations (not built yet): time totals from the event log.
@@ -2028,3 +2031,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: parts spec clarifications from review (flagged to the human at the module boundary): a stack's slash-free `.gitignore` line keeps its any-depth meaning under a part folder (`__pycache__/` → `web/**/__pycache__/`; middle-slash lines → `web/<line>`; `/x` → `/web/x`); `part add` refuses a folder that resolves outside the app (symlinks followed), rolls back every write on failure, and creates the part's source and test folders; `part check` also reports missing source/test folders and bad `dir` values; `is_test_path` resolves paths and is false outside the app.
 - 2026-11-08: parts reference scan (covered 8, missed 2, contradicts 2, not-in-spec 3, obsolete 1) — `part check` prints `no problems` on success; a stack's unanchored gitignore lines stay scoped to the part (`web/**/x`, not v1's unchanged copy); the spec line about moving `/`-anchored `.gitignore` lines on the first `part add` is deleted (v1 never did it; a no-op at `.`); `part add` refuses `dir` at or inside `.bull`, `.git`, `docs`, `interfaces` — approved by Nicholas Johnson
 - 2026-11-08: status construction (store/refs constructors, model.py functions, store delegating to pure functions in transitions.py/modules.py) set in the status § "Construction" line; internal wiring, no contract change.
+- 2026-11-08: status `attempt` at the limit saves the `blocked` state, then refuses (store raises after writing); found by the unit 2 code-writer.
