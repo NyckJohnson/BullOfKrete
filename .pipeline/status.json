@@ -368,7 +368,7 @@
         "foundation",
         "stacks"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T14:02:48-08:00",
+  "updatedAt": "2026-11-08T14:13:28-08:00",
   "features": [],
   "activeFeature": null
 }
