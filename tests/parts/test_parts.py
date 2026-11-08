@@ -9,6 +9,7 @@ defaults) and `loader: SettingsLoader` (`loader.load(app, stack_layer).get("sour
 
 from __future__ import annotations
 
+import os
 import shutil
 import tomllib
 from dataclasses import replace
@@ -467,3 +468,368 @@ def test_is_test_path_false_for_source_files(tmp_path: Path) -> None:
 def test_is_test_path_false_when_there_are_no_parts(tmp_path: Path) -> None:
     app = new_app(tmp_path, config="format = 1\n")
     assert not make().is_test_path(app, app.root / "tests/a.fx")
+
+
+# ------------------------------------------------ review-driven additions
+
+CONFIG_WITH_STACK = 'format = 1\nstack = "fixture"\n'
+
+
+def snapshot(root: Path) -> dict[str, str]:
+    """Every entry under `root` (symlinks not followed) mapped to its content or kind."""
+    seen: dict[str, str] = {}
+    for folder, dirs, files in os.walk(root, followlinks=False):
+        base = Path(folder)
+        for name in dirs:
+            path = base / name
+            rel = str(path.relative_to(root))
+            seen[rel] = f"link:{os.readlink(path)}" if path.is_symlink() else "dir"
+        for name in files:
+            path = base / name
+            rel = str(path.relative_to(root))
+            seen[rel] = (
+                f"link:{os.readlink(path)}"
+                if path.is_symlink()
+                else path.read_text(encoding="utf-8")
+            )
+    return seen
+
+
+def registry_with_gitignore(*lines: str) -> MockStackRegistry:
+    registry = MockStackRegistry()
+    stack = registry.stacks["fixture"]
+    registry.stacks["fixture"] = replace(
+        stack, manifest=replace(stack.manifest, gitignore=tuple(lines))
+    )
+    return registry
+
+
+# ---------------------------------------------------- add: dir safety
+
+
+def _outside(tmp_path: Path) -> Path:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    return outside
+
+
+def test_add_rejects_a_dir_that_is_a_symlink_to_a_folder_outside_the_app(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    outside = _outside(tmp_path)
+    (app.root / "web").symlink_to(outside, target_is_directory=True)
+    before_app = snapshot(app.root)
+    before_outside = snapshot(outside)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture")
+    assert snapshot(app.root) == before_app
+    assert snapshot(outside) == before_outside
+
+
+def test_add_rejects_a_dir_under_a_symlinked_parent_pointing_outside(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    outside = _outside(tmp_path)
+    (app.root / "link").symlink_to(outside, target_is_directory=True)
+    before_app = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", "link/web")
+    assert snapshot(app.root) == before_app
+    assert snapshot(outside) == {}
+
+
+def test_add_rejects_a_dir_that_exists_as_a_file(tmp_path: Path) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    (app.root / "web").write_text("not a folder", encoding="utf-8")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture")
+    assert snapshot(app.root) == before
+    assert not (app.parts_dir / "web.toml").exists()
+
+
+# ------------------------------------------- add: gitignore prefixing
+
+
+def _gitignore_after_add(tmp_path: Path, folder: str, *lines: str) -> list[str]:
+    app = new_app(tmp_path, config="format = 1\n")
+    live = LiveParts(registry_with_gitignore(*lines), loader_with())
+    live.add(app, "web", "fixture", folder)
+    return (app.root / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("__pycache__/", "web/**/__pycache__/"),
+        ("*.pyc", "web/**/*.pyc"),
+        (".venv/", "web/**/.venv/"),
+        ("build/out/", "web/build/out/"),
+        ("/dist", "/web/dist"),
+        ("**/x", "web/**/x"),
+    ],
+)
+def test_add_prefixes_gitignore_lines_keeping_their_meaning(
+    tmp_path: Path, line: str, expected: str
+) -> None:
+    lines = _gitignore_after_add(tmp_path, "web", line)
+    assert expected in lines
+    assert line not in lines
+
+
+def test_add_leaves_gitignore_lines_unchanged_for_a_part_at_the_root(
+    tmp_path: Path,
+) -> None:
+    given = ("__pycache__/", "build/out/", "/dist", "**/x", "*.pyc")
+    lines = _gitignore_after_add(tmp_path, ".", *given)
+    for line in given:
+        assert line in lines
+
+
+# --------------------------------------------------- is_test_path
+
+
+def test_is_test_path_normalizes_dotdot_into_the_test_folder(tmp_path: Path) -> None:
+    app = new_app(tmp_path)
+    assert make().is_test_path(app, app.root / "src/../tests/x.py")
+
+
+def test_is_test_path_normalizes_dotdot_out_of_the_test_folder(tmp_path: Path) -> None:
+    app = new_app(tmp_path)
+    assert not make().is_test_path(app, app.root / "tests/../src/a.py")
+
+
+def test_is_test_path_follows_a_symlink_from_source_into_the_test_folder(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path)
+    (app.root / "tests").mkdir()
+    (app.root / "src/fx").mkdir(parents=True)
+    (app.root / "src/fx/linked").symlink_to(
+        app.root / "tests", target_is_directory=True
+    )
+    (app.root / "tests/x.fx").write_text("", encoding="utf-8")
+    assert make().is_test_path(app, app.root / "src/fx/linked/x.fx")
+
+
+def test_is_test_path_takes_relative_paths_relative_to_the_app_root(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path)
+    live = make()
+    assert live.is_test_path(app, Path("tests/core/x.fx"))
+    assert not live.is_test_path(app, Path("src/fx/core/a.fx"))
+
+
+def test_is_test_path_is_false_outside_the_app(tmp_path: Path) -> None:
+    app = new_app(tmp_path)
+    live = make()
+    assert not live.is_test_path(app, tmp_path / "elsewhere/tests/x.fx")
+    assert not live.is_test_path(app, tmp_path / "elsewhere/x.test")
+
+
+def test_is_test_path_matches_globs_against_the_file_name_only(tmp_path: Path) -> None:
+    app = new_app(tmp_path)
+    live = make()
+    assert live.is_test_path(app, app.root / "src/fx/deep/er/a.test")
+    assert not live.is_test_path(app, app.root / "src/fx/a.test.fx")
+
+
+# ---------------------------------------- add: whole-operation safety
+
+
+def test_add_failing_in_the_scaffold_step_rolls_everything_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Chosen behavior: rollback. A failed add leaves config.toml, .gitignore and the
+    # part files exactly as they were, so the app still lists its one implicit part.
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    live = make()
+    parts_before = live.all(app)
+    config_before = app.config_file.read_text(encoding="utf-8")
+    gitignore_before = (app.root / ".gitignore").read_text(encoding="utf-8")
+    real_mkdir = Path.mkdir
+    web = app.root / "web"
+
+    def failing_mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
+        if self.parent == web:
+            raise OSError("disk full")
+        real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+    with pytest.raises((BullError, OSError)):
+        live.add(app, "web", "fixture")
+    monkeypatch.undo()
+
+    assert app.config_file.read_text(encoding="utf-8") == config_before
+    assert (app.root / ".gitignore").read_text(encoding="utf-8") == gitignore_before
+    assert not (app.parts_dir / "web.toml").exists()
+    assert not (app.parts_dir / "app.toml").exists()
+    assert live.all(app) == parts_before
+
+
+# ------------------------------------------------- add: refusals
+
+
+def _refusal_cases() -> list[tuple[str, str, str | None]]:
+    return [
+        ("bad name", "Web", None),
+        ("existing name", "api", "other"),
+        ("overlap", "web", "api/inner"),
+        ("outside dir", "web", "../outside"),
+        ("absolute dir", "web", "/abs/place"),
+    ]
+
+
+@pytest.mark.parametrize(("label", "name", "folder"), _refusal_cases())
+def test_add_refusals_write_nothing(
+    tmp_path: Path, label: str, name: str, folder: str | None
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    live = make()
+    live.add(app, "api", "fixture")  # moves the implicit part, then adds `api`
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        live.add(app, name, "fixture", folder)
+    assert snapshot(app.root) == before
+
+
+@pytest.mark.parametrize("name", ["Web", "app"])
+def test_add_refused_on_an_implicit_app_leaves_config_and_gitignore_alone(
+    tmp_path: Path, name: str
+) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, name, "fixture", "other")
+    assert snapshot(app.root) == before
+
+
+def test_add_overlap_with_the_implicit_part_writes_nothing(tmp_path: Path) -> None:
+    app = new_app(tmp_path, config=CONFIG_WITH_STACK, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture", "tests/deep")
+    assert snapshot(app.root) == before
+
+
+# --------------------------------------- add: implicit move fidelity
+
+
+def test_implicit_move_keeps_comments_and_unrelated_lines_byte_for_byte(
+    tmp_path: Path,
+) -> None:
+    kept = (
+        "# top comment\n"
+        "format = 1\n"
+        "# keep me\n"
+        'base_branch = "trunk"  # trailing note\n'
+        "\n"
+        "[models]\n"
+        'reviewer = "opus"\n'
+    )
+    original = (
+        "# top comment\n"
+        "format = 1\n"
+        'stack = "fixture"\n'
+        'source_dir = "lib/x"\n'
+        "# keep me\n"
+        'base_branch = "trunk"  # trailing note\n'
+        'test_dir = "spec"\n'
+        "\n"
+        "[models]\n"
+        'reviewer = "opus"\n'
+    )
+    app = new_app(tmp_path, config=original)
+    make().add(app, "web", "fixture")
+    assert app.config_file.read_text(encoding="utf-8") == kept
+    moved = toml_of(app.parts_dir / "app.toml")
+    assert moved["source_dir"] == "lib/x"
+    assert moved["test_dir"] == "spec"
+
+
+def test_implicit_move_refuses_stack_keys_it_cannot_move_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    original = (
+        'format = 1\nstack = "fixture"\nsource_dir = [\n  "lib/x",\n  "lib/y",\n]\n'
+    )
+    app = new_app(tmp_path, config=original, gitignore="keep/\n")
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        make().add(app, "web", "fixture")
+    assert snapshot(app.root) == before
+
+
+def test_a_stray_non_toml_file_in_parts_does_not_block_the_implicit_move(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path)
+    app.parts_dir.mkdir(parents=True)
+    (app.parts_dir / "README.md").write_text("notes", encoding="utf-8")
+    (app.parts_dir / "app.toml.bak").write_text("old", encoding="utf-8")
+    live = make()
+    assert [p.name for p in live.all(app)] == ["app"]
+    live.add(app, "web", "fixture")
+    assert (app.parts_dir / "app.toml").exists()
+    assert [p.name for p in live.all(app)] == ["app", "web"]
+    assert "stack" not in toml_of(app.config_file)
+
+
+# ---------------------------------------------------- check reports
+
+
+@pytest.mark.parametrize("folder", ["/abs/place", "../outside", "a/../../outside"])
+def test_check_reports_a_part_file_with_a_bad_dir_instead_of_raising(
+    tmp_path: Path, folder: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    app.parts_dir.mkdir(parents=True)
+    (app.parts_dir / "web.toml").write_text(
+        f'format = 1\nstack = "fixture"\ndir = "{folder}"\n', encoding="utf-8"
+    )
+    problems = make().check(app)
+    assert len(problems) == 1
+    assert "web" in problems[0]
+
+
+@pytest.mark.parametrize("missing", ["src/fx", "tests"])
+def test_check_reports_a_missing_source_or_test_folder_once(
+    tmp_path: Path, missing: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    write_part(app, "web")
+    shutil.rmtree(app.root / "web" / missing)
+    problems = make().check(app)
+    assert len(problems) == 1
+    assert "web" in problems[0]
+
+
+def test_check_reports_a_root_part_whose_source_folder_contains_another_part(
+    tmp_path: Path,
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    write_part(app, "core", dir=".")
+    write_part(app, "web", dir="src/fx/web")
+    problems = make().check(app)
+    assert len(problems) == 1
+    assert "core" in problems[0]
+    assert "web" in problems[0]
+
+
+# ------------------------------------------- add: root part refusals
+
+
+@pytest.mark.parametrize("existing", ["src/fx/web", "tests/web"])
+def test_add_root_part_refused_when_its_folders_would_contain_an_existing_part(
+    tmp_path: Path, existing: str
+) -> None:
+    app = new_app(tmp_path, config="format = 1\n")
+    live = make()
+    live.add(app, "web", "fixture", existing)
+    before = snapshot(app.root)
+    with pytest.raises(BullError):
+        live.add(app, "core", "fixture", ".")
+    assert snapshot(app.root) == before
