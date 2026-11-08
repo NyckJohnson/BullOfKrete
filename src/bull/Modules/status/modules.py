@@ -65,7 +65,7 @@ def _in_build_order(memo: Memo) -> list[ModuleEntry]:
     for step in memo.build_order:
         entry = by_name.pop(step.name, None)
         if entry is None:
-            raise StatusError(
+            raise StatusError(  # coverage-exempt: memo problems refuse a build-order entry without a module block first
                 f"build order line {step.line}: {step.name} has no module section",
                 "fix the memo, then run `bull status init-modules` again",
             )

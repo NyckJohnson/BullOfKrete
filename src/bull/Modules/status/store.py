@@ -102,7 +102,7 @@ class LiveStatusStore(StatusStore):
         payload = model.status_to_json(status)
         # Validate: what we write must read back as the same status.
         if model.status_from_json(payload) != status:
-            raise StatusError(
+            raise StatusError(  # coverage-exempt: round-trip check cannot fail for a status the transitions produce
                 f"{what}: the new status does not round-trip; nothing written"
             )
         text = json.dumps(payload, indent=2, sort_keys=True) + "\n"

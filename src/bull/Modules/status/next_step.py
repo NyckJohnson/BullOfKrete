@@ -47,11 +47,11 @@ _SWITCH_OVER_STEPS = {
 def _track(status: Status, mode: Mode) -> Track:
     if mode == Mode.ADOPT:
         if status.adoption is None:
-            raise StatusError("adopt mode without an active adoption in status.json")
+            raise StatusError("adopt mode without an active adoption in status.json")  # coverage-exempt: mode comes from the same status, so an adoption is always present
         return status.adoption
     if mode == Mode.FEATURE:
         if status.feature is None:
-            raise StatusError("feature mode without an active feature in status.json")
+            raise StatusError("feature mode without an active feature in status.json")  # coverage-exempt: mode comes from the same status, so a feature is always present
         return status.feature.track
     return status.app
 

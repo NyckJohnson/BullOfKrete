@@ -176,7 +176,7 @@ class _Obj:
             if high is None:
                 raise _bad(self._path(key), f"an integer of at least {low}")
             if low is None:
-                raise _bad(self._path(key), f"an integer of at most {high}")
+                raise _bad(self._path(key), f"an integer of at most {high}")  # coverage-exempt: no caller passes a bound of high alone; defensive helper branch
             raise _bad(self._path(key), f"an integer from {low} to {high}")
         return value
 

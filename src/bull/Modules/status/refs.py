@@ -27,7 +27,7 @@ class LiveRefs(Refs):
         if mode == Mode.FEATURE:
             feature = self._store.load().feature
             if feature is None:
-                raise StatusError(
+                raise StatusError(  # coverage-exempt: mode comes from the same status, so a feature is always present
                     "feature mode without an active feature in status.json"
                 )
             return f"feature/{feature.slug}/"

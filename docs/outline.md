@@ -1216,6 +1216,15 @@ when `readers.py` defines `detect`.
     refused through `store.load()`.
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
     `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
+  - Guards (coverage triage, approved 2026-11-08): a naive time is written as UTC; a module with
+    no part when the app has no parts → refused ("add a part with `bull part add`"); reopen with no
+    unit holding any of the files → refused (files no unit holds are otherwise ignored);
+    add_modules with an existing name → refused; no module in progress, none can start, not all
+    done → "no module can start (not done: <M>, …): ask the human"; `base_branch` empty or not a
+    string → refused; `max_attempts` / `max_files_per_unit` not an integer → refused; end_feature
+    and mark_contract_applied with no active feature → refused; mark_contract_applied twice →
+    no-op; start_adoption while an adoption or a feature is active → refused; abandon_adoption
+    clears the adoption, leaves the app track as it was, and is refused when none is active.
 - Anticipated operations (not built yet): time totals from the event log.
 - Reference tests: v1-tests/test_adopt_status.py (all cases except test_start_needs_a_clean_tree_on_the_trunk, test_finish_waits_for_verify, test_abandon_keeps_the_trunk_and_carries_the_backlog, test_app_shell_tests_are_not_old_tests, which map to adoption); v1-tests/test_parts.py::test_modules_get_their_part; v1-tests/test_gate_speed.py::test_wrong_case_suggests_the_module, test_unknown_module_lists_the_modules
 - Contract: see `docs/api/status.md` (generated; do not edit by hand)
@@ -2052,3 +2061,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: status construction (store/refs constructors, model.py functions, store delegating to pure functions in transitions.py/modules.py) set in the status § "Construction" line; internal wiring, no contract change.
 - 2026-11-08: status `attempt` at the limit saves the `blocked` state, then refuses (store raises after writing); found by the unit 2 code-writer.
 - 2026-11-08: status reference scan (covered 14, missed 0, contradicts 0, not-in-spec 4, obsolete 4) — human: `init-modules --replace` keeps unchanged units' progress (v1 behavior; spec line added under init_modules); `bull status` shows no per-part lines (`bull part list` covers it); finish's "not adopted"/legacy-left refusals belong to the adoption module, already specified there.
+- 2026-11-08: status coverage triage — human approved specifying and testing 12 code-writer guards (listed under status Behavior spec "Guards"). Open for the features module: a `Changes` line naming a file new to an existing module (no unit holds it yet) is refused by `reopen`; features must decide how new files join a module.
