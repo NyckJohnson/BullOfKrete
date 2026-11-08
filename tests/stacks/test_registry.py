@@ -191,9 +191,7 @@ def test_installed_stack_is_found_by_a_registry_afterwards(tmp_path: Path) -> No
 
 def test_install_replaces_an_earlier_install_of_the_same_name(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
-    first = write_stack(
-        tmp_path / "v1", "rg_repl", extra_files={"old_only.txt": "old"}
-    )
+    first = write_stack(tmp_path / "v1", "rg_repl", extra_files={"old_only.txt": "old"})
     registry.install(first)
     second = write_stack(
         tmp_path / "v2", "rg_repl", extra_files={"new_only.txt": "new"}

@@ -47,7 +47,7 @@ stop = ["halt", "{port}"]
 ready_timeout = 12
 """
 
-REQUIRED_READERS = '''from __future__ import annotations
+REQUIRED_READERS = """from __future__ import annotations
 
 
 def contract_declarations(path):
@@ -64,7 +64,7 @@ def uncovered(part_root, sources, results):
 
 def check(part_root, settings, adopting):
     return []
-'''
+"""
 
 ALL_AGENTS = (
     '["skeleton-builder", "test-writer", "code-writer", "reviewer", '

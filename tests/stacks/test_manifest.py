@@ -163,7 +163,8 @@ def test_missing_required_key_raises_stack_error_naming_it(
     tmp_path: Path, key: str
 ) -> None:
     lines = manifest_text("sample").splitlines(keepends=True)
-    kept = [ln for ln in lines if not ln.startswith(f"{key} =")]
+    first = next(i for i, ln in enumerate(lines) if ln.startswith(f"{key} ="))
+    kept = lines[:first] + lines[first + 1 :]
     assert len(kept) == len(lines) - 1
     message = _problems(tmp_path, "sample", "".join(kept))
     assert key in message
@@ -189,16 +190,16 @@ def test_bad_kind_value_raises_stack_error(tmp_path: Path) -> None:
 
 
 def test_todo_placeholder_raises_stack_error(tmp_path: Path) -> None:
-    text = manifest_text(
-        "sample", replace={'title = "Sample stack"': 'title = "TODO"'}
-    )
+    text = manifest_text("sample", replace={'title = "Sample stack"': 'title = "TODO"'})
     assert "TODO" in _problems(tmp_path, "sample", text)
 
 
 def test_todo_placeholder_inside_a_longer_value_is_rejected(tmp_path: Path) -> None:
     text = manifest_text(
         "sample",
-        replace={'description = "A sample stack for tests."': 'description = "TODO: write"'},
+        replace={
+            'description = "A sample stack for tests."': 'description = "TODO: write"'
+        },
     )
     assert "TODO" in _problems(tmp_path, "sample", text)
 
@@ -210,7 +211,9 @@ def test_run_section_missing_a_command_raises_stack_error(
     kept = [
         ln for ln in RUN_SECTION.splitlines(keepends=True) if not ln.startswith(missing)
     ]
-    message = _problems(tmp_path, "sample", manifest_text("sample", append="".join(kept)))
+    message = _problems(
+        tmp_path, "sample", manifest_text("sample", append="".join(kept))
+    )
     assert missing in message
 
 
