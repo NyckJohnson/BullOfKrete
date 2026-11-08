@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 
 import pytest
@@ -133,6 +134,16 @@ def test_read_json_invalid_raises_file_format_error_naming_path_and_line(
     assert "3" in info.value.message
 
 
+def test_read_json_non_utf8_bytes_raise_file_format_error_naming_path(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "binary.json"
+    target.write_bytes(b"\xff\xfe")
+    with pytest.raises(FileFormatError) as info:
+        LiveFiles().read_json(target)
+    assert str(target) in info.value.message
+
+
 def test_read_json_empty_file_raises_file_format_error(tmp_path: Path) -> None:
     target = tmp_path / "empty.json"
     target.write_text("")
@@ -193,3 +204,38 @@ def test_append_line_appends_to_existing_content(tmp_path: Path) -> None:
     files.append_line(target, "one")
     files.append_line(target, "two")
     assert target.read_text() == "one\ntwo\n"
+
+
+def test_write_atomic_retries_with_a_new_name_when_the_temp_name_is_taken(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "a.txt"
+    taken = tmp_path / ".a.txt.aaaaaaaaaaaa.tmp"
+    taken.write_text("squatter")
+    real_token_hex = secrets.token_hex
+    names = iter(["aaaaaaaaaaaa"])
+
+    def fake_token_hex(nbytes: int | None = None) -> str:
+        fixed = next(names, None)
+        return fixed if fixed is not None else real_token_hex(nbytes)
+
+    monkeypatch.setattr(secrets, "token_hex", fake_token_hex)
+    LiveFiles().write_atomic(target, "hello")
+    assert target.read_text() == "hello"
+    assert taken.read_text() == "squatter"
+
+
+def test_write_atomic_raises_and_leaves_target_when_every_temp_name_is_taken(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "a.txt"
+    target.write_text("old")
+
+    def always_taken(*args: object, **kwargs: object) -> int:
+        raise FileExistsError("taken")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", always_taken)
+        with pytest.raises(FileExistsError):
+            LiveFiles().write_atomic(target, "new")
+    assert target.read_text() == "old"

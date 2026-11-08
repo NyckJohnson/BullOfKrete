@@ -140,6 +140,31 @@ def test_run_timeout_returns_promptly_even_if_a_grandchild_holds_the_output_pipe
                 pass
 
 
+def test_run_nonexistent_cwd_raises_not_found_naming_the_folder_not_tool_missing(
+    tmp_path: Path,
+) -> None:
+    missing = tmp_path / "no-such-folder"
+    with pytest.raises(FileNotFoundError) as info:
+        LiveRunner().run(_py("pass"), missing)
+    assert not isinstance(info.value, ToolMissing)
+    assert str(missing) in str(info.value)
+
+
+def test_run_timeout_after_partial_stderr_adds_newline_before_message(
+    tmp_path: Path,
+) -> None:
+    code = (
+        "import sys, time\n"
+        "sys.stderr.write('partial')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(30)\n"
+    )
+    result = LiveRunner().run(_py(code), tmp_path, timeout=1.0)
+    assert result.returncode == 124
+    assert result.stderr.startswith("partial\ntimed out after ")
+    assert result.stderr.rstrip().endswith("s")
+
+
 def test_run_without_timeout_waits_for_completion(tmp_path: Path) -> None:
     result = LiveRunner().run(
         _py("import time; time.sleep(0.2); print('done')"), tmp_path
@@ -309,3 +334,81 @@ def test_which_returns_path_for_a_common_tool() -> None:
 
 def test_which_returns_none_for_unknown_tool() -> None:
     assert LiveRunner().which("bull-no-such-tool-xyz") is None
+
+
+def test_stop_empties_the_group_when_a_member_ignores_sigterm_and_leader_exits(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "member.pid"
+    member_code = (
+        "import signal, time, pathlib\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        f"pathlib.Path({str(pid_file) + '.tmp'!r}).write_text(str(__import__('os').getpid()))\n"
+        f"pathlib.Path({str(pid_file) + '.tmp'!r}).rename({str(pid_file)!r})\n"
+        "time.sleep(30)\n"
+    )
+    leader_code = (
+        "import subprocess, sys, time\n"
+        f"subprocess.Popen([sys.executable, '-c', {member_code!r}])\n"
+        "time.sleep(30)\n"
+    )
+    spawned = LiveRunner().spawn(_py(leader_code), tmp_path)
+    member_pid = 0
+    try:
+        assert _wait_for(pid_file.exists)
+        member_pid = int(pid_file.read_text())
+        spawned.stop(grace=1.0)
+        assert not spawned.alive()
+
+        def member_gone() -> bool:
+            try:
+                os.kill(member_pid, 0)
+            except ProcessLookupError:
+                return True
+            return False
+
+        assert _wait_for(member_gone, 5.0)
+        with pytest.raises(ProcessLookupError):
+            os.killpg(spawned.pid, 0)
+    finally:
+        if member_pid:
+            try:
+                os.kill(member_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_stop_on_an_already_exited_process_does_nothing(tmp_path: Path) -> None:
+    spawned = LiveRunner().spawn(_py("pass"), tmp_path)
+    assert _wait_for(lambda: not spawned.alive())
+    spawned.stop(grace=1.0)
+    assert not spawned.alive()
+
+
+def test_stop_twice_is_harmless(tmp_path: Path) -> None:
+    spawned = LiveRunner().spawn(_py("import time; time.sleep(30)"), tmp_path)
+    spawned.stop(grace=1.0)
+    spawned.stop(grace=1.0)
+    assert not spawned.alive()
+
+
+@pytest.mark.parametrize("with_log", [False, True])
+def test_spawn_missing_executable_raises_tool_missing_naming_it(
+    tmp_path: Path, with_log: bool
+) -> None:
+    log = tmp_path / "out.log" if with_log else None
+    with pytest.raises(ToolMissing) as info:
+        LiveRunner().spawn(["bull-no-such-tool-xyz"], tmp_path, log=log)
+    assert "bull-no-such-tool-xyz" in info.value.message
+
+
+@pytest.mark.parametrize("with_log", [False, True])
+def test_spawn_nonexistent_cwd_raises_not_found_not_tool_missing(
+    tmp_path: Path, with_log: bool
+) -> None:
+    log = tmp_path / "out.log" if with_log else None
+    missing = tmp_path / "no-such-folder"
+    with pytest.raises(FileNotFoundError) as info:
+        LiveRunner().spawn(_py("pass"), missing, log=log)
+    assert not isinstance(info.value, ToolMissing)
+    assert str(missing) in str(info.value)
