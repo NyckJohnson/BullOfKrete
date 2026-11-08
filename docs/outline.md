@@ -1195,6 +1195,12 @@ when `readers.py` defines `detect`.
   - attempt at the limit: `transitions.attempt` returns the new `Status` with the unit `blocked`;
     the store writes it and logs the `status` event, then raises `StatusError` "unit n blocked
     after <max_attempts> attempts; ask the human" (the one refusal that saves its change).
+  - Unit 3 also finishes the store side (it may edit store.py and model.py): attempt at the limit
+    as above; a no-op change (checkpoint recorded twice, resume when not paused, take_approval with
+    none) writes nothing and logs nothing; `pause` logs `status` + `pause`, `resume` `status` +
+    `resume`, `approve` `status` + `decision` (tests pin the exact event set); init_modules and
+    add_modules pass `known_parts` and `problems` through; `status_from_json` refuses stage
+    outside 0–6, attempts or unit number < 1 and negative scan counts, naming the field.
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
     `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
 - Anticipated operations (not built yet): time totals from the event log.
