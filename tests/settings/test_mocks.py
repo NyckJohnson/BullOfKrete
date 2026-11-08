@@ -182,9 +182,7 @@ def test_mock_set_accepts_usage_range_boundaries(raw: str) -> None:
     assert MockSettings().set("usage.pause_5h", raw).value == int(raw)
 
 
-@pytest.mark.parametrize(
-    "key", ["base_branch", "usage.pause_5h", "usage.pause_weekly"]
-)
+@pytest.mark.parametrize("key", ["base_branch", "usage.pause_5h", "usage.pause_weekly"])
 def test_mock_set_rejects_part_layer_for_user_and_app_only_keys(key: str) -> None:
     raw = "x" if key == "base_branch" else "50"
     mock = MockSettings()
