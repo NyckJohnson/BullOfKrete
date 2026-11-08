@@ -10,6 +10,8 @@ from bull.Modules.foundation.Contracts import BullError
 
 _MAX_SLUG = 40
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
+_CHECKED = re.compile(r"\[[xX]\](\s|$)")
+_UNCHECKED = re.compile(r"^\[ \](\s|$)")
 
 
 def _heading(line: str) -> tuple[int, str] | None:
@@ -21,16 +23,36 @@ def _heading(line: str) -> tuple[int, str] | None:
 
 
 def _list_items(lines: list[str]) -> list[Idea]:
-    """One idea per top-level `- Title: description` item (split at the first colon)."""
+    """One idea per top-level `- Title: description` item (split at the first colon).
+
+    An indented line right under an item continues its description (joined with a
+    newline); `- [x] …` items are skipped and `- [ ] B` is read as `- B`.
+    """
     ideas: list[Idea] = []
-    for line in lines:
-        if not line.startswith("- "):
-            continue
-        text = line[2:].strip()
-        title, sep, description = text.partition(":")
-        title = title.strip() if sep else text
+    title: str | None = None
+    parts: list[str] = []
+
+    def flush() -> None:
         if title:
-            ideas.append(Idea(title, description.strip() if sep else ""))
+            ideas.append(Idea(title, "\n".join(p for p in parts if p)))
+
+    for line in lines:
+        if line.startswith("- "):
+            flush()
+            title, parts = None, []
+            text = line[2:].strip()
+            if _CHECKED.match(text):
+                continue
+            text = _UNCHECKED.sub("", text, count=1).strip()
+            head, sep, description = text.partition(":")
+            title = head.strip() if sep else text
+            parts = [description.strip()] if sep else []
+        elif title is not None and line[:1] in (" ", "\t") and line.strip():
+            parts.append(line.strip())
+        else:
+            flush()
+            title, parts = None, []
+    flush()
     return ideas
 
 
@@ -60,7 +82,7 @@ class LiveIdeaReader(IdeaReader):
             return [
                 idea
                 for title, body in sections
-                if title == section
+                if title.casefold() == section.casefold()
                 for idea in _list_items(body)
             ]
         if sections:

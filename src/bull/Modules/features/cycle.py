@@ -95,7 +95,8 @@ class LiveFeatureCycle(FeatureCycle):
             )
         if status.adoption is not None:
             raise BullError(
-                "An adoption is in progress.", "Finish or abandon the adoption first."
+                "An adoption is in progress; a feature can start after the adoption finishes.",
+                "Finish or abandon the adoption first.",
             )
         if status.feature is not None:
             raise BullError(
