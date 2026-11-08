@@ -990,13 +990,15 @@ when `readers.py` defines `detect`.
     name, must be relative, inside the app, and not overlap another part (a root part `.` is
     allowed when its source and test folders don't contain the other part's folder); on an app
     with the implicit part, first moves `stack` and the stack keys from `config.toml` into
-    `parts/app.toml`, and moves `.gitignore` lines anchored with `/` under the part's folder;
-    writes `parts/<name>.toml` (`format`, `stack`, `dir`, stack defaults), merges the stack's
-    gitignore lines prefixed with the folder, creates its scaffold folders.
+    `parts/app.toml`; writes `parts/<name>.toml` (`format`, `stack`, `dir`, stack defaults),
+    merges the stack's gitignore lines prefixed with the folder (comments and blank lines kept
+    as they are), creates its scaffold folders; `dir` may not be or lie inside bull's own app
+    folders (`.bull`, `.git`, `docs`, `interfaces`). A one-part app never gets a `.bull/parts/`
+    folder until `part add`.
   - check: overlapping folders, unknown stacks, missing folders → one message each.
   - module_src: `<root>/<source_dir>/Modules/<module>`; module_tests: `<root>/<test_dir>/<module>`.
   - is_test_path: inside any part's test folder, or matching any part's stack `test_glob`.
-  - cli: `part add|list [--json]|check` (check exits 1 on problems).
+  - cli: `part add|list [--json]|check` (check prints each problem and exits 1, or prints `no problems`).
 - Reference tests: v1-tests/test_parts.py::test_implicit_part, test_add_moves_the_implicit_part, test_existing_modules_still_resolve_after_the_move, test_rejects_bad_names_and_folders, test_check, test_stack_select_refused_once_parts_exist, test_anchored_patterns_move_under_the_part
 - Contract: see `docs/api/parts.md` (generated; do not edit by hand)
 
@@ -2007,3 +2009,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: stacks reference scan (covered 4, missed 0, contradicts 0, not-in-spec 4) — added to the spec: `bull stack check` without `--part` checks every part (heading per part, exit 1 if any fails), and every `bull stack` command rejects an unknown `--part` naming the known parts; left out: v1's `stack show` and the `(this app: …)` marker in `bull stacks` (`part list` shows part stacks) — approved by Nicholas Johnson
 - 2026-11-08: stacks spec clarifications from coverage triage (flagged to the human at the module boundary): `select` refuses with `StackError`, writing nothing, when `config.toml` can't be edited safely; `rules` without a `## common` section returns the agent's section alone, and `rules(stack, "common")` returns that section once.
 - 2026-11-08: parts spec clarifications from review (flagged to the human at the module boundary): a stack's slash-free `.gitignore` line keeps its any-depth meaning under a part folder (`__pycache__/` → `web/**/__pycache__/`; middle-slash lines → `web/<line>`; `/x` → `/web/x`); `part add` refuses a folder that resolves outside the app (symlinks followed), rolls back every write on failure, and creates the part's source and test folders; `part check` also reports missing source/test folders and bad `dir` values; `is_test_path` resolves paths and is false outside the app.
+- 2026-11-08: parts reference scan (covered 8, missed 2, contradicts 2, not-in-spec 3, obsolete 1) — `part check` prints `no problems` on success; a stack's unanchored gitignore lines stay scoped to the part (`web/**/x`, not v1's unchanged copy); the spec line about moving `/`-anchored `.gitignore` lines on the first `part add` is deleted (v1 never did it; a no-op at `.`); `part add` refuses `dir` at or inside `.bull`, `.git`, `docs`, `interfaces` — approved by Nicholas Johnson
