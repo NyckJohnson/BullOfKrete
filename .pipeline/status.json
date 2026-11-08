@@ -232,7 +232,7 @@
             "docs.py",
             "cli.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T07:57:10-08:00",
+  "updatedAt": "2026-11-08T07:59:55-08:00",
   "features": [],
   "activeFeature": null
 }
