@@ -781,7 +781,7 @@ when `readers.py` defines `detect`.
   - parse `## Constraints`: `- Parts: a (stack), b (stack)` → parts; absent → `()`.
   - parse `## Unmapped reference tests` and `## Legacy code` (`App shell:`, `App shell tests:`,
     `Legacy folders:`, `Renames: A → LegacyA, …`); a missing section → empty / None.
-  - section_items(text, heading): top-level `- ` items under `## <heading>` (text after `- `,
+  - section_items(text, heading): top-level `- ` items under `## <heading>` (heading matched ignoring case; text after `- `,
     continuation lines joined); missing heading → `[]`.
   - problems, each with its line: module in build order without a `###` block or the reverse;
     duplicate module names (case-insensitive); a dependency that is unknown, not earlier in the
@@ -1990,3 +1990,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: events coverage triage — `read` skips a line whose data values aren't str/int/float/bool/null (added to the spec); `read` failing on non-UTF-8 bytes is deferred to the time report (Later features) rather than reopening foundation — approved by Nicholas Johnson
 - 2026-11-08: module `cli.py` convention (first set by settings; every later module follows it): `register(commands: argparse._SubParsersAction[argparse.ArgumentParser], <collaborators as zero-argument providers typed by protocol, e.g. settings: Callable[[], Settings]>) -> None` adds the module's command parsers; each leaf parser does `set_defaults(run=<fn>)` with `run(args: argparse.Namespace, out: TextIO) -> int` (exit code; `--json` writes JSON only to `out`). Providers, not instances, because `cli.main` builds the parser before it checks formats and loads settings. `cli.wiring` calls each `register`; `cli.main` calls `args.run(args, sys.stdout)`. Errors are raised as `BullError`/`ConfigError`, never printed by the module.
 - 2026-11-08: formats spec clarifications (follow from the foundation contract and the Commands table; flagged to the human at the module boundary): an app file that isn't valid JSON/TOML → foundation's `FileFormatError` naming the path from `inspect`/`check`/`migrate`; a non-integer `format` (incl. `true`) counts as missing (None, migrated from 0); `bull migrate` prints `migrated <path>` per changed file; a missing migration step's fix is the upgrade command.
+- 2026-11-08: memo reference scan — `section_items` matches the `## <heading>` ignoring case (v1's test_sections_and_lists did; added to the spec) — approved by Nicholas Johnson

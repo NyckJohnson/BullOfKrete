@@ -1,7 +1,7 @@
 {
   "stage": 5,
-  "paused": true,
-  "pauseReason": "5-hour usage 85%; memo: units done, reference scan done, next coverage triage (one not-in-spec question pending)",
+  "paused": false,
+  "pauseReason": null,
   "checkpoints": {
     "outline-approved": "2026-11-07T23:20:19-08:00",
     "setup": "2026-11-07T23:31:13-08:00",
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T01:20:46-08:00",
+  "updatedAt": "2026-11-08T06:43:54-08:00",
   "features": [],
   "activeFeature": null
 }
