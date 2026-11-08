@@ -192,8 +192,8 @@
             "mocks/__init__.py",
             "usage.py"
           ],
-          "state": "tests",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T07:00:00-08:00",
+  "updatedAt": "2026-11-08T07:03:10-08:00",
   "features": [],
   "activeFeature": null
 }
