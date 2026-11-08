@@ -992,3 +992,17 @@ def test_select_write_failure_raises_leaves_no_temp_file_and_keeps_the_config(
     monkeypatch.undo()
     assert app.config_file.read_text(encoding="utf-8") == before
     assert [p.name for p in app.bull_dir.iterdir()] == ["config.toml"]
+
+
+def test_select_refuses_a_stack_line_inside_a_multi_line_string(
+    tmp_path: Path,
+) -> None:
+    original = 'format = 1\nnote = """\nstack = "x"\n"""\n'
+    app = make_app(tmp_path, original)
+    with pytest.raises(StackError) as caught:
+        ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    text = message(caught.value).lower()
+    assert "edit" in text or "update" in text
+    assert app.config_file.read_text(encoding="utf-8") == original
+    assert not (tmp_path / ".gitignore").exists()
+    assert not (tmp_path / "src").exists()

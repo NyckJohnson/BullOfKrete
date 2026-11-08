@@ -206,3 +206,23 @@ def test_rules_for_outline_ignores_common_even_when_it_exists(tmp_path: Path) ->
     text = rules(make(tmp_path), "OUTLINE")
     assert text.startswith("## outline")
     assert "COMMON-LINE" not in text
+
+
+def test_rules_without_a_common_section_returns_just_the_agents_body(
+    tmp_path: Path,
+) -> None:
+    text = rules(make(tmp_path, "## reviewer\n- REVIEWER-LINE\n"), "reviewer")
+    assert text.count("REVIEWER-LINE") == 1
+    assert "COMMON" not in text.upper()
+
+
+@pytest.mark.parametrize("name", ["common", "COMMON"])
+def test_rules_for_common_returns_the_common_body_once(
+    tmp_path: Path, name: str
+) -> None:
+    text = rules(
+        make(tmp_path, "## common\n- COMMON-LINE\n\n## reviewer\n- REVIEWER-LINE\n"),
+        name,
+    )
+    assert text.count("COMMON-LINE") == 1
+    assert "REVIEWER-LINE" not in text
