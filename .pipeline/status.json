@@ -1,5 +1,5 @@
 {
-  "stage": 4,
+  "stage": 5,
   "paused": false,
   "pauseReason": null,
   "checkpoints": {
@@ -13,7 +13,7 @@
       "name": "foundation",
       "path": "src/myapp/Modules/foundation",
       "dependsOn": [],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -21,8 +21,8 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 2
         },
         {
           "number": 2,
@@ -32,8 +32,8 @@
             "runner.py",
             "clock.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-07T23:54:01-08:00",
+  "updatedAt": "2026-11-08T00:08:38-08:00",
   "features": [],
   "activeFeature": null
 }

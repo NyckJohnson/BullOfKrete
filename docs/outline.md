@@ -511,15 +511,22 @@ when `readers.py` defines `detect`.
     user_data_dir: `$XDG_DATA_HOME/bull`, else `~/.local/share/bull`.
   - machine_local_ignores → the six `.gitignore` lines in **App folder**, in that order.
   - Files.read_text: missing file → None. write_atomic: creates parent folders; writes a temp file
-    in the same folder then `os.replace`; an interrupted write never leaves a partial target.
+    in the same folder then `os.replace`; an interrupted write never leaves a partial target. The
+    temp file is created exclusively under a random name; if the name is taken it retries with a
+    new one (up to 100 times, then raises). A new file gets the process umask; an existing file
+    keeps its mode.
   - Files.read_json: missing → None; invalid JSON → `FileFormatError` naming the path and line.
     write_json: `indent=2`, `sort_keys=True`, trailing newline, atomic.
   - append_line: appends `line + "\n"`, creating the file and folders.
   - Runner.run: merges `env` over the current environment; captures stdout/stderr as text;
-    executable not found → `ToolMissing` naming it; timeout → returncode 124 and stderr ends with
-    "timed out after <n>s"; never uses a shell.
+    executable not found → `ToolMissing` naming it; a missing `cwd` is not `ToolMissing` (the
+    original not-found error, naming the folder, is raised); timeout → returncode 124 and stderr
+    ends with "timed out after <n>s" (the whole process group is killed, so a grandchild holding
+    the output can't delay it); never uses a shell.
   - Runner.spawn: starts the process in its own process group, output to `log` (or discarded);
     `stop` sends SIGTERM to the group, waits `grace`, then SIGKILL; `alive` false after stop.
+    `stop` is idempotent: on a process that already exited, or a second call, it signals nothing
+    (its pid may have been reused). Executable not found, or missing `cwd` → as Runner.run.
   - Runner.which: `shutil.which` → Path or None.
   - Clock.now: timezone-aware UTC.
 - Anticipated operations (not built yet): Windows path and process-group handling.
@@ -1977,3 +1984,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-07: at `/setup`, `.pipeline/config.sh` changes to `APP_PACKAGE="bull"`, `APP_SOURCE_DIR="src/bull"`, `APP_TEST_DIR="tests"` (the human edits it).
 - 2026-11-07: PyPI distribution name is `bullofkrete` (`bull` taken; `bull-pipeline` also free) — approved by Nicholas Johnson
 - 2026-11-07: Stage 4 (prototype) skipped: the skeleton's `bull` entry point is a stub and the python_cli stack has no screen-builder rules, so there is nothing to try. `ui-approved` is tagged without a review; the command surface is first checked in Stage 5 (cli) and Stage 6 (journeys). (Options weighed: review the Commands table on paper; a throwaway help-only shell.)
+- 2026-11-08: foundation coverage triage — four behaviors added to the spec rather than removed: temp-name retry in write_atomic, missing `cwd` not reported as ToolMissing, idempotent `stop`, and spawn's ToolMissing (same as run) — approved by Nicholas Johnson
