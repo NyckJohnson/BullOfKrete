@@ -171,7 +171,7 @@
             "templates/backlog.md",
             "cli.py"
           ],
-          "state": "tests",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T01:18:13-08:00",
+  "updatedAt": "2026-11-08T01:20:12-08:00",
   "features": [],
   "activeFeature": null
 }
