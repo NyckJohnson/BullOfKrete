@@ -32,7 +32,7 @@
             "runner.py",
             "clock.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T00:00:08-08:00",
+  "updatedAt": "2026-11-08T00:01:39-08:00",
   "features": [],
   "activeFeature": null
 }
