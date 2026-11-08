@@ -170,9 +170,10 @@ def test_stack_run_passes_command_and_no_part_by_default(rig: Rig) -> None:
     assert rig.ops.calls == [("run_command", (APP, "prune", None))]
 
 
-def test_stack_run_passes_the_part_through(rig: Rig) -> None:
-    rig.run("stack", "run", "prune", "--part", "api")
-    assert rig.ops.calls == [("run_command", (APP, "prune", "api"))]
+def test_stack_run_passes_the_part_through(rig: Rig, tmp_path: Path) -> None:
+    app = parts_app(tmp_path, "api")
+    run_with(build(rig, app), "stack", "run", "prune", "--part", "api")
+    assert rig.ops.calls == [("run_command", (app, "prune", "api"))]
 
 
 def test_stack_run_returns_the_commands_exit_code(rig: Rig) -> None:
@@ -194,8 +195,15 @@ def test_stack_rules_prints_the_rules_for_the_apps_stack(rig: Rig) -> None:
     assert "## test-writer" in text
 
 
-def test_stack_rules_with_part_uses_that_parts_stack(rig: Rig) -> None:
-    rig.run("stack", "rules", "reviewer", "--part", "api")
+def test_stack_rules_with_part_uses_that_parts_stack(rig: Rig, tmp_path: Path) -> None:
+    run_with(
+        build(rig, parts_app(tmp_path, "api")),
+        "stack",
+        "rules",
+        "reviewer",
+        "--part",
+        "api",
+    )
     ((_, (stack, _)),) = rig.ops.calls
     assert stack is rig.registry.stacks["fixture"]
 
@@ -214,8 +222,8 @@ def test_stack_setup_section_is_passed_through(rig: Rig) -> None:
     ]
 
 
-def test_stack_setup_with_part_uses_that_parts_stack(rig: Rig) -> None:
-    rig.run("stack", "setup", "--part", "api")
+def test_stack_setup_with_part_uses_that_parts_stack(rig: Rig, tmp_path: Path) -> None:
+    run_with(build(rig, parts_app(tmp_path, "api")), "stack", "setup", "--part", "api")
     ((_, (stack, _)),) = rig.ops.calls
     assert stack is rig.registry.stacks["fixture"]
 
@@ -257,9 +265,10 @@ def test_stack_check_with_no_items_exits_zero(rig: Rig) -> None:
     assert code == 0
 
 
-def test_stack_check_passes_the_part_through(rig: Rig) -> None:
-    rig.run("stack", "check", "--part", "api")
-    assert rig.ops.calls == [("check", (APP, "api"))]
+def test_stack_check_passes_the_part_through(rig: Rig, tmp_path: Path) -> None:
+    app = parts_app(tmp_path, "api")
+    run_with(build(rig, app), "stack", "check", "--part", "api")
+    assert rig.ops.calls == [("check", (app, "api"))]
 
 
 def test_stack_check_json_lists_every_item_and_still_exits_one_on_failure(
@@ -348,6 +357,30 @@ def run_with(parser: argparse.ArgumentParser, *argv: str) -> int:
     return int(args.run(args, io.StringIO()))
 
 
+def run_text(parser: argparse.ArgumentParser, *argv: str) -> tuple[int, str]:
+    args = parser.parse_args(argv)
+    out = io.StringIO()
+    code = int(args.run(args, out))
+    return code, out.getvalue()
+
+
+def parts_app(tmp_path: Path, *names: str) -> AppLayout:
+    app = sample_layout(tmp_path)
+    app.parts_dir.mkdir(parents=True)
+    for name in names:
+        (app.parts_dir / f"{name}.toml").write_text("format = 1\n", encoding="utf-8")
+    return app
+
+
+def two_part_rig(rig: Rig, tmp_path: Path) -> argparse.ArgumentParser:
+    """Parts `api` (stack fixture) and `web` (stack python_cli)."""
+    rig.settings = FakeSettings(
+        {"stack": "python_cli"},
+        {"api": {"stack": "fixture"}, "web": {"stack": "python_cli"}},
+    )
+    return build(rig, parts_app(tmp_path, "web", "api"))
+
+
 @pytest.mark.parametrize("leaf", [("rules", "reviewer"), ("setup",)])
 def test_stack_rules_and_setup_without_part_name_the_parts_when_parts_exist(
     rig: Rig, tmp_path: Path, leaf: tuple[str, ...]
@@ -425,3 +458,204 @@ def test_stack_install_propagates_a_non_stack_error_and_installs_nothing(
         args.run(args, io.StringIO())
     assert not any(name == "install" for name, _ in rig.registry.calls)
     assert "my_stack" not in rig.registry.stacks
+
+
+# ------------------------------------------- check every part, unknown --part
+
+
+class PerPartOps(MockStackOps):
+    """`check` returns the items set for the part it is asked about."""
+
+    def __init__(self, per_part: dict[str | None, list[CheckItem]]) -> None:
+        super().__init__()
+        self.per_part = per_part
+
+    def check(self, app: AppLayout, part: str | None = None) -> list[CheckItem]:
+        self.calls.append(("check", (app, part)))
+        return list(self.per_part[part])
+
+
+def checks(rig: Rig) -> list[object]:
+    return [args[1] for name, args in rig.ops.calls if name == "check"]
+
+
+def test_stack_check_without_part_checks_every_part_in_sorted_order(
+    rig: Rig, tmp_path: Path
+) -> None:
+    code, _ = run_text(two_part_rig(rig, tmp_path), "stack", "check")
+    assert code == 0
+    assert checks(rig) == ["api", "web"]
+
+
+def test_stack_check_without_part_prints_a_heading_before_each_parts_lines(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps(
+        {
+            "api": [CheckItem(True, "uv on PATH", "")],
+            "web": [CheckItem(False, "node on PATH", "install node")],
+        }
+    )
+    _, text = run_text(two_part_rig(rig, tmp_path), "stack", "check")
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    assert lines == [
+        "part api (fixture)",
+        "✓ uv on PATH",
+        "part web (python_cli)",
+        "✗ node on PATH — install node",
+    ]
+
+
+def test_stack_check_without_part_exits_one_if_any_part_fails(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps(
+        {
+            "api": [CheckItem(False, "uv on PATH", "install uv")],
+            "web": [CheckItem(True, "node on PATH", "")],
+        }
+    )
+    code, _ = run_text(two_part_rig(rig, tmp_path), "stack", "check")
+    assert code == 1
+
+
+def test_stack_check_without_part_still_checks_later_parts_after_a_failure(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps(
+        {
+            "api": [CheckItem(False, "uv on PATH", "install uv")],
+            "web": [CheckItem(True, "node on PATH", "")],
+        }
+    )
+    _, text = run_text(two_part_rig(rig, tmp_path), "stack", "check")
+    assert checks(rig) == ["api", "web"]
+    assert "✓ node on PATH" in text
+
+
+def test_stack_check_without_part_exits_zero_when_every_part_passes(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps(
+        {
+            "api": [CheckItem(True, "uv on PATH", "")],
+            "web": [CheckItem(True, "node on PATH", "")],
+        }
+    )
+    code, text = run_text(two_part_rig(rig, tmp_path), "stack", "check")
+    assert code == 0
+    assert "✗" not in text
+
+
+def test_stack_check_with_one_part_prints_no_heading_and_checks_only_it(
+    rig: Rig, tmp_path: Path
+) -> None:
+    code, text = run_text(
+        two_part_rig(rig, tmp_path), "stack", "check", "--part", "web"
+    )
+    assert code == 0
+    assert "part web" not in text
+    assert checks(rig) == ["web"]
+
+
+def test_stack_check_without_part_json_lists_part_stack_and_items(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps(
+        {
+            "api": [CheckItem(True, "uv on PATH", "")],
+            "web": [CheckItem(False, "node on PATH", "install node")],
+        }
+    )
+    code, text = run_text(two_part_rig(rig, tmp_path), "stack", "check", "--json")
+    assert code == 1
+    assert json.loads(text) == [
+        {
+            "part": "api",
+            "stack": "fixture",
+            "items": [{"ok": True, "item": "uv on PATH", "fix": ""}],
+        },
+        {
+            "part": "web",
+            "stack": "python_cli",
+            "items": [{"ok": False, "item": "node on PATH", "fix": "install node"}],
+        },
+    ]
+
+
+def test_stack_check_with_one_part_json_is_a_plain_list_of_items(
+    rig: Rig, tmp_path: Path
+) -> None:
+    rig.ops = PerPartOps({"web": [CheckItem(True, "node on PATH", "")]})
+    _, text = run_text(
+        two_part_rig(rig, tmp_path), "stack", "check", "--part", "web", "--json"
+    )
+    assert json.loads(text) == [{"ok": True, "item": "node on PATH", "fix": ""}]
+
+
+def test_stack_check_without_part_in_an_app_without_part_files_has_no_heading(
+    rig: Rig,
+) -> None:
+    code, text = rig.run("stack", "check")
+    assert code == 0
+    assert "part " not in text
+    assert text.splitlines() == ["✓ git on PATH", "✓ source folder src/fx exists"]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("rules", "reviewer", "--part", "nope"),
+        ("setup", "--part", "nope"),
+        ("check", "--part", "nope"),
+        ("run", "prune", "--part", "nope"),
+    ],
+)
+def test_unknown_part_is_rejected_naming_the_known_parts(
+    rig: Rig, tmp_path: Path, argv: tuple[str, ...]
+) -> None:
+    parser = two_part_rig(rig, tmp_path)
+    with pytest.raises(StackError) as caught:
+        run_with(parser, "stack", *argv)
+    text = f"{caught.value.message} {caught.value.fix}"
+    assert "nope" in text
+    assert "api" in text
+    assert "web" in text
+    assert rig.ops.calls == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("rules", "reviewer", "--part", "nope"),
+        ("setup", "--part", "nope"),
+        ("check", "--part", "nope"),
+        ("run", "prune", "--part", "nope"),
+    ],
+)
+def test_unknown_part_in_an_app_without_part_files_names_app_as_known(
+    rig: Rig, argv: tuple[str, ...]
+) -> None:
+    with pytest.raises(StackError) as caught:
+        rig.run("stack", *argv)
+    text = f"{caught.value.message} {caught.value.fix}"
+    assert "nope" in text
+    assert "app" in text
+    assert rig.ops.calls == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("rules", "reviewer", "--part", "app"),
+        ("setup", "--part", "app"),
+        ("check", "--part", "app"),
+        ("run", "prune", "--part", "app"),
+    ],
+)
+def test_part_app_is_accepted_in_an_app_without_part_files(
+    rig: Rig, argv: tuple[str, ...]
+) -> None:
+    code, _ = rig.run("stack", *argv)
+    assert code == 0
+    assert len(rig.ops.calls) == 1
