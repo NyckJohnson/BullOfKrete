@@ -122,7 +122,7 @@
         "foundation",
         "gitrepo"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T01:04:55-08:00",
+  "updatedAt": "2026-11-08T01:04:59-08:00",
   "features": [],
   "activeFeature": null
 }
