@@ -75,8 +75,41 @@ def _heading(line: str) -> str | None:
     return None
 
 
+def _scan(text: str) -> list[tuple[str, str | None]]:
+    """Each line (ends kept) with its `## ` heading text, or None.
+
+    Lines inside a fenced code block (opened by ``` or ~~~, closed by a line of the same
+    character at least as long) are never headings.
+    """
+    out: list[tuple[str, str | None]] = []
+    fence: str | None = None
+    for line in text.splitlines(keepends=True):
+        bare = line.rstrip("\r\n")
+        stripped = bare.lstrip()
+        if fence is not None:
+            if stripped.startswith(fence) and not stripped.strip(fence[0]).strip():
+                fence = None
+            out.append((line, None))
+            continue
+        marker = _fence_marker(stripped)
+        if marker is not None:
+            fence = marker
+            out.append((line, None))
+            continue
+        out.append((line, _heading(bare)))
+    return out
+
+
+def _fence_marker(stripped: str) -> str | None:
+    """The opening fence (a run of 3+ backticks or tildes) a line starts with, else None."""
+    for char in ("`", "~"):
+        if stripped.startswith(char * 3):
+            return char * (len(stripped) - len(stripped.lstrip(char)))
+    return None
+
+
 def _headings(text: str) -> list[str]:
-    return [h for h in (_heading(ln) for ln in text.splitlines()) if h is not None]
+    return [h for _, h in _scan(text) if h is not None]
 
 
 def _sections(text: str) -> dict[str, str]:
@@ -92,8 +125,7 @@ def _sections(text: str) -> dict[str, str]:
         if name is not None and name.casefold() not in found:
             found[name.casefold()] = "".join(lines).rstrip() + "\n"
 
-    for line in text.splitlines(keepends=True):
-        heading = _heading(line.rstrip("\r\n"))
+    for line, heading in _scan(text):
         if heading is not None:
             close()
             name, lines = heading, [line]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import sys
 import tempfile
 import tomllib
@@ -64,7 +65,7 @@ class LiveStackOps(StackOps):
 
         Raises StackError for an app with parts or an unknown stack, before writing anything.
         """
-        if _has_parts(app):
+        if part_names(app):
             raise StackError(
                 "this app has parts; its stacks are set per part",
                 "use `bull part add <name> <stack>` to add a part with a stack",
@@ -78,12 +79,13 @@ class LiveStackOps(StackOps):
         gitignore_path = app.root / ".gitignore"
         gitignore = _gitignore_with(gitignore_path, stack.manifest.gitignore)
 
-        if config is not None:
-            _write_atomic(app.config_file, config)
-        if gitignore is not None:
-            _write_atomic(gitignore_path, gitignore)
+        # Config last: if a folder or `.gitignore` cannot be written, the stack stays unset.
         for folder in stack.manifest.scaffold:
             (app.root / folder).mkdir(parents=True, exist_ok=True)
+        if gitignore is not None:
+            _write_atomic(gitignore_path, gitignore)
+        if config is not None:
+            _write_atomic(app.config_file, config)
 
     # ------------------------------------------------------ rules, setup
 
@@ -131,7 +133,10 @@ class LiveStackOps(StackOps):
     # -------------------------------------------------------- run_command
 
     def run_command(self, app: AppLayout, command: str, part: str | None = None) -> int:
-        """Run the stack's `[commands]` entry `command` like a gate step; its exit code."""
+        """Run the stack's `[commands]` entry `command` like a gate step; its exit code.
+
+        The command's captured stdout and stderr are written to this process's stdout and stderr.
+        """
         where = self._part(app, part)
         commands = where.stack.manifest.commands
         if command not in commands:
@@ -166,20 +171,42 @@ class LiveStackOps(StackOps):
             "BULL_SCOPE_MODULE": "",
             "BULL_SETTINGS": json.dumps(_jsonable(values), sort_keys=True),
         }
-        return self._runner.run(argv, where.root, env, None).returncode
+        result = self._runner.run(argv, where.root, env, None)
+        if result.stdout:
+            sys.stdout.write(result.stdout)
+            sys.stdout.flush()
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+            sys.stderr.flush()
+        return result.returncode
 
     # ------------------------------------------------------------ helpers
 
     def _part(self, app: AppLayout, part: str | None) -> _Part:
-        """The part's folder, results folder and stack; `None`/`app` is the one-part app."""
-        if part is None or part == _ONE_PART:
+        """The part's folder, results folder and stack.
+
+        With no part files, the app is the implicit part `app` (`None` or `"app"`): the app root
+        and the app-layer settings. With part files, `part` must name one of them.
+        """
+        names = part_names(app)
+        if not names:
+            if part is not None and part != _ONE_PART:
+                raise StackError(
+                    f"unknown part `{part}`",
+                    "this app has no parts; leave out the part, or add one with `bull part add`",
+                )
             root = app.root
             name, settings_part = _ONE_PART, None
         else:
-            if not (app.parts_dir / f"{part}.toml").is_file():
+            if part is None:
+                raise StackError(
+                    "this app has parts; say which part: " + ", ".join(names),
+                    "pass `--part <name>`",
+                )
+            if part not in names:
                 raise StackError(
                     f"unknown part `{part}`",
-                    "see `bull part list`, or add it with `bull part add`",
+                    "parts: " + ", ".join(names),
                 )
             folder = self._settings.get("dir", part)
             if not isinstance(folder, str):
@@ -203,8 +230,11 @@ class LiveStackOps(StackOps):
         return {r.key: r.value for r in self._settings.show(where.settings_part)}
 
 
-def _has_parts(app: AppLayout) -> bool:
-    return app.parts_dir.is_dir() and any(app.parts_dir.glob("*.toml"))
+def part_names(app: AppLayout) -> list[str]:
+    """The sorted names of the app's parts (`.bull/parts/*.toml`); empty for a one-part app."""
+    if not app.parts_dir.is_dir():
+        return []
+    return sorted(p.stem for p in app.parts_dir.glob("*.toml") if p.is_file())
 
 
 def _stack_default(stack: Stack, key: str) -> str:
@@ -275,6 +305,13 @@ def _config_with(path: Path, values: Mapping[str, str]) -> str | None:
     top = next(
         (i for i, ln in enumerate(lines) if ln.lstrip().startswith("[")), len(lines)
     )
+    # New keys go after the last top-level entry: above any comment block directly over the
+    # first table (it belongs to that table) and above the blank lines before it.
+    insert = top
+    while insert > 0 and lines[insert - 1].lstrip().startswith("#"):
+        insert -= 1
+    while insert > 0 and not lines[insert - 1].strip():
+        insert -= 1
     for key, value in values.items():
         wanted = _toml_line(key, value)
         pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
@@ -282,7 +319,8 @@ def _config_with(path: Path, values: Mapping[str, str]) -> str | None:
         if at is not None:
             lines[at] = wanted
         else:
-            lines.insert(top, wanted)
+            lines.insert(insert, wanted)
+            insert += 1
             top += 1
     updated = "".join(lines)
     try:
@@ -320,13 +358,28 @@ def _gitignore_with(path: Path, wanted: tuple[str, ...]) -> str | None:
 
 
 def _write_atomic(path: Path, text: str) -> None:
-    """Write `text` to `path` through a temporary file and a rename."""
+    """Write `text` to `path` through a temporary file and a rename.
+
+    The file keeps its permission mode; a new file gets `0o666` less the umask, as `open` would.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+    except FileNotFoundError:
+        mode = 0o666 & ~_umask()
     fd, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
+            os.fchmod(handle.fileno(), mode)
         os.replace(temp, path)
     except BaseException:
         Path(temp).unlink(missing_ok=True)
         raise
+
+
+def _umask() -> int:
+    """The process umask (read by setting it and putting it back)."""
+    current = os.umask(0o022)
+    os.umask(current)
+    return current

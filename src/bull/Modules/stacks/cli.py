@@ -13,9 +13,11 @@ from bull.Modules.settings.Contracts import Settings
 from bull.Modules.stacks.Contracts import (
     CheckItem,
     Stack,
+    StackError,
     StackOps,
     StackRegistry,
 )
+from bull.Modules.stacks.select import part_names
 
 
 def register(
@@ -52,8 +54,24 @@ def register(
     leaves = stack.add_subparsers(dest="stack_command", required=True)
 
     def part_stack(part: str | None) -> Stack:
+        """The stack of `part`; with parts present, a part must be named."""
+        if part is None:
+            names = part_names(app())
+            if names:
+                raise StackError(
+                    "this app has parts; say which part: " + ", ".join(names),
+                    "pass `--part <name>`",
+                )
         name = settings().get("stack", part)
-        return registry().get(str(name))
+        if not isinstance(name, str) or not name:
+            where = "this app" if part is None else f"part `{part}`"
+            raise StackError(
+                f"no stack set for {where}",
+                "run `bull stack select <name>`"
+                if part is None
+                else "run `bull stack select <name>`, or set the part's `stack`",
+            )
+        return registry().get(name)
 
     select = leaves.add_parser("select", help="Set the one-part app's stack")
     select.add_argument("name")
