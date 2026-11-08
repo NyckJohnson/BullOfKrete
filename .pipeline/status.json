@@ -83,7 +83,7 @@
       "dependsOn": [
         "foundation"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T00:42:23-08:00",
+  "updatedAt": "2026-11-08T00:43:26-08:00",
   "features": [],
   "activeFeature": null
 }
