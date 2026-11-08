@@ -204,7 +204,7 @@
         "foundation",
         "settings"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T07:06:58-08:00",
+  "updatedAt": "2026-11-08T07:41:04-08:00",
   "features": [],
   "activeFeature": null
 }
