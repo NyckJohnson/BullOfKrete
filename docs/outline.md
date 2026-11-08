@@ -183,8 +183,7 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
 ## Constraints
 - Stack: python_cli (one part). Package and console script `bull` (`APP_PACKAGE="bull"`,
   `APP_SOURCE_DIR="src/bull"`, `APP_TEST_DIR="tests"`; set in `.pipeline/config.sh` during
-  `/setup`). PyPI distribution name settled in `/setup` (`bull` is likely taken; fallbacks
-  `bull-pipeline`, `bullofkrete`).
+  `/setup`). PyPI distribution name `bullofkrete` (`bull` is taken; settled in `/setup`).
 - App shell (not a module): `src/bull/__init__.py` (`__version__`), `src/bull/__main__.py`
   (`python -m bull` → `bull.Modules.cli.main.main`); console script `bull =
   "bull.Modules.cli.main:main"`. Written by skeleton-builder.
@@ -1976,3 +1975,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-07: README, CONTRIBUTING, LICENSE, `docs/guide.md` and `docs/stacks.md` are written in Stage 6 (code-writer from this memo; the human reviews), not as a module.
 - 2026-11-07: rewritten v1 Markdown reaches code-writer through source notes. At the start of plugin_text, stack_python_cli and stack_ios, before any unit, the orchestrator writes `docs/process/<module>.md` from the v1 files that **v1 Markdown review** sends there: stack-neutral where the target is, in `bull` terms and v2 formats. The human approves each note like a memo section; test-writer and code-writer briefs list the note, never `reference/`. (Options weighed: code-writer reads named v1 files; the orchestrator writes the Markdown itself.)
 - 2026-11-07: at `/setup`, `.pipeline/config.sh` changes to `APP_PACKAGE="bull"`, `APP_SOURCE_DIR="src/bull"`, `APP_TEST_DIR="tests"` (the human edits it).
+- 2026-11-07: PyPI distribution name is `bullofkrete` (`bull` taken; `bull-pipeline` also free) — approved by Nicholas Johnson

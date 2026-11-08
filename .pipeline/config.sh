@@ -17,3 +17,5 @@ APP_PACKAGE="myapp"
 # their tests in <APP_TEST_DIR>/<Module>/ (same convention as every other stack).
 APP_SOURCE_DIR="src/myapp"
 APP_TEST_DIR="tests"
+APP_PACKAGE="bull"
+APP_SOURCE_DIR="src/bull"
