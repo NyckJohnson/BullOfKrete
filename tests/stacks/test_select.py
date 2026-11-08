@@ -34,7 +34,12 @@ from bull.Modules.foundation.Contracts import (
     RunResult,
 )
 from bull.Modules.foundation.mocks import MockRunner, sample_layout
-from bull.Modules.settings.Contracts import SettingValue
+from bull.Modules.settings.Contracts import (
+    Setting,
+    SettingType,
+    SettingValue,
+    StackLayer,
+)
 from bull.Modules.stacks.Contracts import Requirement, StackError
 from bull.Modules.stacks.docs import rules, setup_guide
 from bull.Modules.stacks.mocks import MockStackReaders, MockStackRegistry
@@ -863,3 +868,127 @@ def test_select_leaves_the_config_unchanged_when_gitignore_cannot_be_written(
     finally:
         tmp_path.chmod(0o755)
     assert app.config_file.read_text(encoding="utf-8") == before
+
+
+# ------------------------------------------------ coverage triage: select/check edges
+
+
+def test_check_with_a_non_string_source_dir_fails_and_still_checks_tests(
+    tmp_path: Path,
+) -> None:
+    rig = CheckRig(tmp_path)
+    rig.make_folders(tmp_path, "src/fx", "tests")
+    rig.settings = FakeSettings({**APP_VALUES, "source_dir": 3})
+    items = rig.ops().check(rig.app)
+    bad = failing(items)
+    assert len(bad) == 1
+    assert "source_dir" in bad[0].fix
+    assert any(i.ok and "tests" in i.item for i in items)
+
+
+def test_check_of_a_part_without_a_string_dir_raises(tmp_path: Path) -> None:
+    rig = CheckRig(tmp_path)
+    rig.add_part()
+    rig.settings = FakeSettings(APP_VALUES, {"api": {**PART_VALUES, "dir": 3}})
+    with pytest.raises(StackError):
+        rig.ops().check(rig.app, "api")
+
+
+def _layer(*settings: Setting, **values: SettingValue) -> StackLayer:
+    return StackLayer(schema=tuple(settings), values=values)
+
+
+def test_select_uses_the_schema_default_when_the_layer_values_lack_source_dir(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path)
+    layer = _layer(
+        Setting("source_dir", SettingType.STR, "schema_src", "s"),
+        Setting("test_dir", SettingType.STR, "schema_tests", "t"),
+    )
+    ops_for(registry_with(settings=layer, scaffold=(), gitignore=())).select(
+        app, "fixture"
+    )
+    data = tomllib.loads(app.config_file.read_text(encoding="utf-8"))
+    assert data["source_dir"] == "schema_src"
+    assert data["test_dir"] == "schema_tests"
+
+
+def test_select_without_a_string_default_for_source_dir_raises_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path)
+    before = app.config_file.read_text(encoding="utf-8")
+    layer = _layer(Setting("test_dir", SettingType.STR, "tests", "t"))
+    with pytest.raises(StackError) as caught:
+        ops_for(registry_with(settings=layer)).select(app, "fixture")
+    assert "source_dir" in message(caught.value)
+    assert app.config_file.read_text(encoding="utf-8") == before
+
+
+def test_check_with_status_json_as_a_directory_raises_file_format_error(
+    rig: CheckRig,
+) -> None:
+    rig.app.status_file.mkdir(parents=True)
+    with pytest.raises(FileFormatError):
+        rig.ops().check(rig.app)
+
+
+def test_select_with_config_toml_as_a_directory_raises_file_format_error(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path, config=None)
+    app.config_file.mkdir(parents=True)
+    with pytest.raises(FileFormatError):
+        ops_for(registry_with()).select(app, "fixture")
+
+
+def test_select_with_gitignore_as_a_directory_raises_file_format_error(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path)
+    (tmp_path / ".gitignore").mkdir()
+    before = app.config_file.read_text(encoding="utf-8")
+    with pytest.raises(FileFormatError):
+        ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    assert app.config_file.read_text(encoding="utf-8") == before
+
+
+def test_select_puts_the_new_key_on_its_own_line_when_config_lacks_a_newline(
+    tmp_path: Path,
+) -> None:
+    app = make_app(tmp_path, "format = 1")
+    ops_for(registry_with(scaffold=(), gitignore=())).select(app, "fixture")
+    text = app.config_file.read_text(encoding="utf-8")
+    assert "format = 1\n" in text
+    assert tomllib.loads(text)["stack"] == "fixture"
+    assert all(len(ln.split(" = ")) == 2 for ln in text.splitlines() if ln)
+
+
+def test_select_refuses_a_stack_key_set_in_a_form_it_cannot_edit(
+    tmp_path: Path,
+) -> None:
+    original = "format = 1\nstack.x = 1\n"
+    app = make_app(tmp_path, original)
+    with pytest.raises(StackError):
+        ops_for(registry_with(gitignore=("results/",))).select(app, "fixture")
+    assert app.config_file.read_text(encoding="utf-8") == original
+    assert not (tmp_path / ".gitignore").exists()
+    assert not (tmp_path / "src").exists()
+
+
+def test_select_write_failure_raises_leaves_no_temp_file_and_keeps_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = make_app(tmp_path)
+    before = app.config_file.read_text(encoding="utf-8")
+
+    def failing_replace(src: object, dst: object) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+    with pytest.raises(OSError):
+        ops_for(registry_with(scaffold=(), gitignore=())).select(app, "fixture")
+    monkeypatch.undo()
+    assert app.config_file.read_text(encoding="utf-8") == before
+    assert [p.name for p in app.bull_dir.iterdir()] == ["config.toml"]

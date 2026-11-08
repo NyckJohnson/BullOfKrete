@@ -171,3 +171,38 @@ def test_setup_guide_does_not_treat_a_heading_inside_a_code_fence_as_a_section(
     assert "NEXT-LINE" not in text
     with pytest.raises(StackError):
         setup_guide(stack, "Fake")
+
+
+# ------------------------------------------------ coverage triage: unreadable files
+
+
+def test_rules_without_a_rules_file_raises(tmp_path: Path) -> None:
+    (tmp_path / "setup.md").write_text(SETUP, encoding="utf-8")
+    with pytest.raises(StackError) as caught:
+        rules(stack_of(registry_with(tmp_path)), "reviewer")
+    assert "rules.md" in f"{caught.value.message} {caught.value.fix}"
+
+
+def test_setup_guide_without_a_setup_file_raises(tmp_path: Path) -> None:
+    (tmp_path / "rules.md").write_text(RULES, encoding="utf-8")
+    with pytest.raises(StackError) as caught:
+        setup_guide(stack_of(registry_with(tmp_path)))
+    assert "setup.md" in f"{caught.value.message} {caught.value.fix}"
+
+
+def test_rules_with_a_non_utf8_rules_file_raises_stack_error(tmp_path: Path) -> None:
+    (tmp_path / "rules.md").write_bytes(b"## common\n\xff\xfe\n")
+    with pytest.raises(StackError):
+        rules(stack_of(registry_with(tmp_path)), "common")
+
+
+def test_rules_with_a_directory_for_rules_md_raises_stack_error(tmp_path: Path) -> None:
+    (tmp_path / "rules.md").mkdir()
+    with pytest.raises(StackError):
+        rules(stack_of(registry_with(tmp_path)), "reviewer")
+
+
+def test_rules_for_outline_ignores_common_even_when_it_exists(tmp_path: Path) -> None:
+    text = rules(make(tmp_path), "OUTLINE")
+    assert text.startswith("## outline")
+    assert "COMMON-LINE" not in text

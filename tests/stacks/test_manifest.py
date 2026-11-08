@@ -339,3 +339,165 @@ def test_manifest_that_is_not_valid_utf8_raises_stack_error(tmp_path: Path) -> N
     (folder / "stack.toml").write_bytes(b'format = 1\n[stack]\nname = "\xff\xfe"\n')
     with pytest.raises(StackError):
         parse_manifest(folder)
+
+
+# ------------------------------------------------ coverage triage: bad manifests
+
+_TAIL = manifest_text("sample")[
+    manifest_text("sample").index("[settings.source_dir]") :
+]
+_REQUIRES_BLOCK = (
+    '[[stack.requires]]\ntool = "uv"\nhint = "https://example.invalid/uv"\n'
+)
+
+
+def _bad(tmp_path: Path, text: str) -> str:
+    return _problems(tmp_path, "sample", text)
+
+
+def test_a_stack_toml_that_is_a_directory_raises_stack_error(tmp_path: Path) -> None:
+    folder = tmp_path / "sample"
+    (folder / "stack.toml").mkdir(parents=True)
+    with pytest.raises(StackError):
+        parse_manifest(folder)
+
+
+def test_missing_format_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", replace={"format = 1\n": ""})
+    assert "format" in _bad(tmp_path, text)
+
+
+@pytest.mark.parametrize("value", ["2", "true"])
+def test_unsupported_format_is_reported(tmp_path: Path, value: str) -> None:
+    text = manifest_text("sample", replace={"format = 1\n": f"format = {value}\n"})
+    assert "format" in _bad(tmp_path, text)
+
+
+def test_stack_that_is_not_a_table_is_reported(tmp_path: Path) -> None:
+    assert "stack" in _bad(tmp_path, 'format = 1\nstack = "x"\n' + _TAIL)
+
+
+def test_missing_stack_section_reports_the_section_not_every_key(
+    tmp_path: Path,
+) -> None:
+    message = _bad(tmp_path, "format = 1\n" + _TAIL)
+    assert "[stack]" in message
+    assert "stack.title" not in message
+
+
+def test_a_non_string_name_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", replace={'name = "sample"': "name = 5"})
+    assert "stack.name" in _bad(tmp_path, text)
+
+
+@pytest.mark.parametrize("value", ['"x"', "[1]"])
+def test_a_non_list_of_strings_argv_key_is_reported(tmp_path: Path, value: str) -> None:
+    text = manifest_text(
+        "sample",
+        replace={
+            'lint = ["{python}", "{stack_dir}/gates.py", "lint", "{module}"]': f"lint = {value}"
+        },
+    )
+    assert "gates.lint" in _bad(tmp_path, text)
+
+
+def test_a_journeys_value_that_is_not_a_list_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", append='journeys = "x"\n')
+    assert "journeys" in _bad(tmp_path, text)
+
+
+def test_requires_that_is_a_string_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", replace={_REQUIRES_BLOCK: 'requires = "x"\n'})
+    assert "stack.requires" in _bad(tmp_path, text)
+
+
+def test_requires_with_a_non_table_entry_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", replace={_REQUIRES_BLOCK: 'requires = ["x"]\n'})
+    assert "stack.requires" in _bad(tmp_path, text)
+
+
+@pytest.mark.parametrize("missing", ["tool", "hint"])
+def test_a_requires_entry_missing_tool_or_hint_is_reported(
+    tmp_path: Path, missing: str
+) -> None:
+    other = "hint" if missing == "tool" else "tool"
+    text = manifest_text(
+        "sample",
+        replace={_REQUIRES_BLOCK: f'[[stack.requires]]\n{other} = "v"\n'},
+    )
+    assert f"stack.requires[0].{missing}" in _bad(tmp_path, text)
+
+
+def test_a_setting_that_is_not_a_table_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", append="\n[settings]\nx = 3\n")
+    assert "settings.x" in _bad(tmp_path, text)
+
+
+def test_a_setting_with_neither_type_nor_default_is_reported(tmp_path: Path) -> None:
+    text = manifest_text("sample", append='\n[settings.x]\ndescription = "d"\n')
+    assert "settings.x" in _bad(tmp_path, text)
+
+
+def test_a_bare_default_for_a_bull_key_is_accepted_as_a_tuple(tmp_path: Path) -> None:
+    text = manifest_text(
+        "sample", append='\n[settings."coverage.exclude"]\ndefault = ["a", "b"]\n'
+    )
+    m = _parse(tmp_path, "sample", text)
+    assert m.settings.values["coverage.exclude"] == ("a", "b")
+    assert "coverage.exclude" not in {s.key for s in m.settings.schema}
+
+
+@pytest.mark.parametrize(
+    ("body", "key"),
+    [
+        ("type = 5", "settings.x.type"),
+        ('type = "nope"', "settings.x.type"),
+        ('type = "str"\ndescription = 5', "settings.x.description"),
+        ('type = "str"\nchoices = "x"', "settings.x.choices"),
+        ('type = "str"\nchoices = [1]', "settings.x.choices"),
+        ('type = "choice"', "settings.x.choices"),
+        ('type = "int"\nminimum = "a"', "settings.x.minimum"),
+        ('type = "int"\nmaximum = true', "settings.x.maximum"),
+        ('type = "int"\ndefault = "x"', "settings.x.default"),
+        ('type = "int"\ndefault = true', "settings.x.default"),
+        ('type = "choice"\nchoices = ["a"]\ndefault = "b"', "settings.x.default"),
+        ('type = "list"\ndefault = "x"', "settings.x.default"),
+        ('type = "str"\ndefault = 1.5', "settings.x.default"),
+    ],
+)
+def test_an_invalid_setting_is_reported_with_its_key(
+    tmp_path: Path, body: str, key: str
+) -> None:
+    text = manifest_text("sample", append=f"\n[settings.x]\n{body}\n")
+    assert key in _bad(tmp_path, text)
+
+
+@pytest.mark.parametrize("body", ["default = 1.5", "default = { a = 1 }"])
+def test_a_float_or_table_default_is_unsupported(tmp_path: Path, body: str) -> None:
+    text = manifest_text("sample", append=f'\n[settings."coverage.exclude"]\n{body}\n')
+    message = _bad(tmp_path, text)
+    assert "unsupported" in message
+    assert "coverage.exclude" in message
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ('type = "bool"\ndefault = true', True),
+        ('type = "int"\ndefault = 3', 3),
+        ('type = "choice"\nchoices = ["a", "b"]\ndefault = "b"', "b"),
+        ('type = "list"\ndefault = ["a"]', ("a",)),
+    ],
+)
+def test_a_default_matching_its_type_is_accepted(
+    tmp_path: Path, body: str, expected: object
+) -> None:
+    text = manifest_text("sample", append=f"\n[settings.x]\n{body}\n")
+    assert _parse(tmp_path, "sample", text).settings.values["x"] == expected
+
+
+@pytest.mark.parametrize("value", ["0", "-1", '"x"'])
+def test_an_invalid_ready_timeout_is_reported(tmp_path: Path, value: str) -> None:
+    run = RUN_SECTION.replace("ready_timeout = 12", f"ready_timeout = {value}")
+    text = manifest_text("sample", append="\n" + run)
+    assert "ready_timeout" in _bad(tmp_path, text)

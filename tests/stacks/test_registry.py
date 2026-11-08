@@ -366,3 +366,59 @@ def test_refused_install_of_a_builtin_name_leaves_the_builtin_loaded_as_before(
     stack = registry.get("rg_shadow")
     assert stack.builtin is True
     assert stack.readers.contract_declarations(tmp_path) == ["builtin"]
+
+
+# ------------------------------------------------ coverage triage: install edges
+
+
+def test_install_succeeds_over_stale_staging_and_backup_folders(
+    tmp_path: Path,
+) -> None:
+    root = _installed_root(tmp_path)
+    for stale in (".rg_stale.installing", ".rg_stale.previous"):
+        (root / stale).mkdir(parents=True)
+        (root / stale / "junk.txt").write_text("junk", encoding="utf-8")
+    src = write_stack(tmp_path / "src", "rg_stale")
+    _registry(tmp_path).install(src)
+    assert [p.name for p in root.iterdir()] == ["rg_stale"]
+
+
+def test_install_succeeds_over_stale_folders_when_reinstalling(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+    registry.install(write_stack(tmp_path / "v1", "rg_stale2"))
+    root = _installed_root(tmp_path)
+    for stale in (".rg_stale2.installing", ".rg_stale2.previous"):
+        (root / stale).mkdir()
+    registry.install(
+        write_stack(tmp_path / "v2", "rg_stale2", extra_files={"new.txt": "n"})
+    )
+    assert [p.name for p in root.iterdir()] == ["rg_stale2"]
+    assert (root / "rg_stale2" / "new.txt").is_file()
+
+
+def test_failed_final_move_on_reinstall_raises_and_keeps_the_earlier_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = _registry(tmp_path)
+    registry.install(
+        write_stack(
+            tmp_path / "v1", "rg_move", readers=_readers_returning("version-one")
+        )
+    )
+    v2 = write_stack(
+        tmp_path / "v2", "rg_move", readers=_readers_returning("version-two")
+    )
+    real_rename = Path.rename
+
+    def rename(self: Path, target: Any) -> Path:
+        if self.name == ".rg_move.installing":
+            raise OSError("cannot move into place")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", rename)
+    with pytest.raises(StackError):
+        registry.install(v2)
+    monkeypatch.undo()
+    assert [p.name for p in _installed_root(tmp_path).iterdir()] == ["rg_move"]
+    stack = registry.get("rg_move")
+    assert stack.readers.contract_declarations(tmp_path) == ["version-one"]
