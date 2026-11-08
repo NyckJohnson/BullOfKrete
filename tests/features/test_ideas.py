@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from bull.Modules.features.Contracts import Idea
-from bull.Modules.foundation.Contracts import BullError
 from bull.Modules.features.ideas import LiveIdeaReader
+from bull.Modules.foundation.Contracts import BullError
 
 READER = LiveIdeaReader()
 

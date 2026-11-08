@@ -25,12 +25,11 @@ from __future__ import annotations
 import argparse
 import io
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
-
-from dataclasses import replace
 
 from bull.Modules.features.Contracts import FeaturePlan, Idea, ItemState
 from bull.Modules.features.mocks import (
