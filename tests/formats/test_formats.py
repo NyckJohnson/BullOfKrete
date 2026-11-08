@@ -28,7 +28,7 @@ from bull.Modules.formats.Contracts import (
 )
 from bull.Modules.formats.formats import LiveFormats
 from bull.Modules.formats.mocks import MockMigration
-from bull.Modules.foundation.Contracts import AppLayout, BullError
+from bull.Modules.foundation.Contracts import AppLayout, BullError, FileFormatError
 from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.gitrepo.mocks import MockGit
 
@@ -77,6 +77,7 @@ def live(
 
 
 def commits(git: MockGit) -> list[tuple[Path, str]]:
+    # MockGit.calls stores args as tuple[object, ...]; the commit_all entries are (Path, str).
     return [args for name, args in git.calls if name == "commit_all"]  # type: ignore[misc]
 
 
@@ -331,3 +332,84 @@ def test_migrate_with_no_migrations_registered_raises_for_older_files(
     assert not isinstance(info.value, (FormatTooNew, FormatTooOld))
     assert "0" in info.value.message
     assert commits(git) == []
+
+
+# unreadable and malformed files
+
+
+def test_inspect_invalid_status_json_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.status_file.write_text("{not json")
+    with pytest.raises(FileFormatError) as info:
+        live().inspect(app)
+    assert str(app.status_file) in info.value.message
+
+
+def test_check_invalid_status_json_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.status_file.write_text("{not json")
+    with pytest.raises(FileFormatError) as info:
+        live().check(app)
+    assert str(app.status_file) in info.value.message
+
+
+def test_inspect_invalid_config_toml_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.config_file.write_text("format = = 1\n")
+    with pytest.raises(FileFormatError) as info:
+        live().inspect(app)
+    assert str(app.config_file) in info.value.message
+
+
+def test_check_invalid_config_toml_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.config_file.write_text("format = = 1\n")
+    with pytest.raises(FileFormatError) as info:
+        live().check(app)
+    assert str(app.config_file) in info.value.message
+
+
+def test_inspect_invalid_part_toml_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path, parts={"web": 1})
+    part = app.parts_dir / "web.toml"
+    part.write_text("format = = 1\n")
+    with pytest.raises(FileFormatError) as info:
+        live().inspect(app)
+    assert str(part) in info.value.message
+
+
+def test_check_invalid_part_toml_raises_naming_the_path(tmp_path: Path) -> None:
+    app = make_app(tmp_path, parts={"web": 1})
+    part = app.parts_dir / "web.toml"
+    part.write_text("format = = 1\n")
+    with pytest.raises(FileFormatError) as info:
+        live().check(app)
+    assert str(part) in info.value.message
+
+
+def test_inspect_boolean_format_in_toml_is_not_a_format_number(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.config_file.write_text("format = true\n")
+    found = {i.path: i.found for i in live().inspect(app)}
+    assert found[app.config_file] is None
+
+
+def test_inspect_boolean_format_in_json_is_not_a_format_number(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.status_file.write_text(json.dumps({"format": True}))
+    found = {i.path: i.found for i in live().inspect(app)}
+    assert found[app.status_file] is None
+
+
+def test_check_boolean_format_in_toml_raises_too_old(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.config_file.write_text("format = true\n")
+    with pytest.raises(FormatTooOld):
+        live().check(app)
+
+
+def test_check_boolean_format_in_json_raises_too_old(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    app.status_file.write_text(json.dumps({"format": True}))
+    with pytest.raises(FormatTooOld):
+        live().check(app)
