@@ -366,3 +366,21 @@ def test_latest_is_none_for_non_finite_percentages(
         '"five_hour_resets": null, "weekly_resets": null}'
     )
     assert rig.usage.latest() is None
+
+
+@pytest.mark.parametrize("field", ["time", "five_hour_resets"])
+def test_naive_timestamp_makes_the_file_unreadable(rig: Rig, field: str) -> None:
+    data: dict[str, object] = {
+        "format": 1,
+        "time": "2026-11-07T12:00:00Z",
+        "five_hour": 10.0,
+        "weekly": 10.0,
+        "five_hour_resets": "2026-11-07T14:00:00Z",
+        "weekly_resets": None,
+    }
+    data[field] = "2026-01-01T00:00:00"
+    rig.files.texts[APP.usage_file] = json.dumps(data)
+    assert rig.usage.latest() is None
+    check = rig.usage.check()
+    assert check.verdict is UsageVerdict.UNKNOWN
+    assert check.reason == "no usage data yet"
