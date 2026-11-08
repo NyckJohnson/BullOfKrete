@@ -44,7 +44,7 @@ def register(
         return parser
 
     def run_add(args: argparse.Namespace, out: TextIO) -> int:
-        title, sep, description = args.text.partition(":")
+        title, _sep, description = args.text.partition(":")
         item = backlog().add(Idea(title.strip(), description.strip()), args.top)
         out.write(f"Added {item.slug}: {item.title}\n")
         return 0
