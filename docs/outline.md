@@ -954,7 +954,9 @@ when `readers.py` defines `detect`.
     unknown → `StackError` listing the commands.
   - cli: `bull stacks [--all] [--json]` lists name, kind, maturity, title (and "installed"); `stack
     select|rules|setup|check|run|install` as above; `check` exits 1 if any item fails, printing
-    `✗ item — fix` lines.
+    `✗ item — fix` lines; `check` without `--part` in an app with part files checks every part,
+    each under a `part <name> (<stack>)` heading, and exits 1 if any part has a failing item; any
+    `--part` naming a part the app doesn't have → `StackError` naming the known parts.
 - Anticipated operations (not built yet): installing from a package name; `stack uninstall`.
 - Reference tests: v1-tests/test_stack_new.py::test_template_is_not_a_stack; v1-tests/test_parts.py::test_stack_commands_take_part
 - Contract: see `docs/api/stacks.md` (generated; do not edit by hand)
@@ -2000,3 +2002,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: formats spec clarifications (follow from the foundation contract and the Commands table; flagged to the human at the module boundary): an app file that isn't valid JSON/TOML → foundation's `FileFormatError` naming the path from `inspect`/`check`/`migrate`; a non-integer `format` (incl. `true`) counts as missing (None, migrated from 0); `bull migrate` prints `migrated <path>` per changed file; a missing migration step's fix is the upgrade command.
 - 2026-11-08: memo reference scan — `section_items` matches the `## <heading>` ignoring case (v1's test_sections_and_lists did; added to the spec) — approved by Nicholas Johnson
 - 2026-11-08: memo coverage triage — duplicate `## <heading>`: first wins and it is reported through a new contract field `Memo.parse_problems` (contract change approved; no dependent module built yet); an interface side without `<part> / ` and an interface `File` without `(<format>)` are reported by `problems()`; slugged or unknown lines in `## Legacy code` are ignored (spec'd) — approved by Nicholas Johnson
+- 2026-11-08: stacks reference scan (covered 4, missed 0, contradicts 0, not-in-spec 4) — added to the spec: `bull stack check` without `--part` checks every part (heading per part, exit 1 if any fails), and every `bull stack` command rejects an unknown `--part` naming the known parts; left out: v1's `stack show` and the `(this app: …)` marker in `bull stacks` (`part list` shows part stacks) — approved by Nicholas Johnson
