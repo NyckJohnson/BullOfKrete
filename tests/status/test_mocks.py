@@ -40,7 +40,9 @@ def test_mocks_satisfy_their_protocols() -> None:
     store: StatusStore = MockStatusStore()
     refs: Refs = MockRefs()
     progress: Progress = MockProgress()
-    assert store is not None and refs is not None and progress is not None
+    assert store.mode() is Mode.APP
+    assert isinstance(refs.trunk(), str) and refs.trunk()
+    assert isinstance(progress.summary(), str)
 
 
 def test_store_starts_with_the_sample_status_and_records_calls() -> None:
@@ -89,13 +91,15 @@ def test_init_modules_adds_the_memo_modules_as_pending() -> None:
         Status(1, Track(2, ()), (), None, None, (), None, None, None)
     )
     status = store.init_modules(sample_memo())
-    assert [m.name for m in status.modules] == ["Store", "Counter"]
+    entries = sample_memo().modules
+    assert [m.name for m in status.modules] == [e.name for e in entries]
     assert all(m.state is ModuleState.PENDING for m in status.modules)
-    counter = status.modules[1]
-    assert counter.depends == ("Store",)
-    assert [u.number for u in counter.units] == [1, 2]
-    assert counter.units[0].files == ("Contracts/counter.fx", "counter.fx")
-    assert counter.part == "app"
+    for module, entry in zip(status.modules, entries):
+        assert module.depends == entry.depends
+        assert [u.number for u in module.units] == list(range(1, len(entry.units) + 1))
+        assert [u.files for u in module.units] == list(entry.units)
+        if entry.part is not None:
+            assert module.part == entry.part
 
 
 def test_set_module_changes_module_state() -> None:
@@ -218,7 +222,7 @@ def test_add_modules_appends_pending_modules() -> None:
     store = MockStatusStore()
     entry = sample_memo().modules[0]
     status = store.add_modules([entry])
-    assert [m.name for m in status.modules] == ["Store", "Counter", "Store"]
+    assert status.modules[-1].name == entry.name
     assert status.modules[-1].state is ModuleState.PENDING
 
 

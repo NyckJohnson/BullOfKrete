@@ -278,7 +278,7 @@
         "memo",
         "parts"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -286,8 +286,8 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "code",
+          "attempts": 1
         },
         {
           "number": 2,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T09:46:02-08:00",
+  "updatedAt": "2026-11-08T09:54:17-08:00",
   "features": [],
   "activeFeature": null
 }
