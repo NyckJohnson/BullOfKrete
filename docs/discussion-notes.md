@@ -118,7 +118,7 @@ In v2.0, as foundations that would be hard to add later:
 
 ## Core journeys
 
-Draft 2026-11-05, for review. Journeys exercise `bull` as the orchestrator and hooks call it, run as
+Agreed 2026-11-07. Journeys exercise `bull` as the orchestrator and hooks call it, run as
 real subprocesses against temporary git repos. Subagents (Claude) are not part of the tests: where a
 step is an agent's work, the test supplies the files that agent would write. Apps in journeys use a
 small **fixture stack** (fast, no real toolchain) unless a journey says otherwise.
@@ -221,7 +221,7 @@ small **fixture stack** (fast, no real toolchain) unless a journey says otherwis
 
 ## MVP features
 
-Draft 2026-11-05, for review. v2.0 = everything v1 does, stack-neutral, plus the items below.
+Agreed 2026-11-07. v2.0 = everything v1 does, stack-neutral, plus the items below.
 
 - Core pipeline: six stages, four checkpoints, orchestrator instructions, commands (`/bull:…`),
   subagent definitions, one subagent at a time, briefs, `partial` returns, 3 attempts per unit,
