@@ -297,3 +297,63 @@ def test_enum_values_round_trip_for_every_state() -> None:
 def test_module_status_type_is_preserved() -> None:
     status = model.status_from_json(model.status_to_json(full_status()))
     assert all(isinstance(m, ModuleStatus) for m in status.modules)
+
+
+# --- range checks (unit 3) ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ["stage"],
+        ["feature", "stage"],
+        ["adoption", "stage"],
+    ],
+)
+@pytest.mark.parametrize("value", [-1, 7, 100])
+def test_from_json_rejects_a_stage_outside_0_to_6(
+    path: list[str | int], value: int
+) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(path, value))
+    assert "stage" in caught.value.message
+
+
+@pytest.mark.parametrize("value", [0, 6])
+def test_from_json_accepts_the_stage_limits(value: int) -> None:
+    status = model.status_from_json(mutated(["stage"], value))
+    assert status.app.stage == value
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_from_json_rejects_attempts_below_one(value: int) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["modules", 0, "units", 0, "attempts"], value))
+    assert "attempts" in caught.value.message
+
+
+def test_from_json_accepts_one_attempt() -> None:
+    status = model.status_from_json(mutated(["modules", 0, "units", 0, "attempts"], 1))
+    assert status.modules[0].units[0].attempts == 1
+
+
+@pytest.mark.parametrize("value", [0, -3])
+def test_from_json_rejects_a_unit_number_below_one(value: int) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["modules", 0, "units", 0, "number"], value))
+    assert "number" in caught.value.message
+
+
+@pytest.mark.parametrize("field", ["covered", "missed", "contradicts", "not_in_spec"])
+def test_from_json_rejects_a_negative_scan_count(field: str) -> None:
+    with pytest.raises(FileFormatError) as caught:
+        model.status_from_json(mutated(["modules", 1, "scan", field], -1))
+    assert field in caught.value.message
+
+
+@pytest.mark.parametrize("field", ["covered", "missed", "contradicts", "not_in_spec"])
+def test_from_json_accepts_a_zero_scan_count(field: str) -> None:
+    status = model.status_from_json(mutated(["modules", 1, "scan", field], 0))
+    scan = status.modules[1].scan
+    assert scan is not None
+    assert getattr(scan, field) == 0

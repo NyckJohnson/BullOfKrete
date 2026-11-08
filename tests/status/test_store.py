@@ -12,19 +12,23 @@ import pytest
 from bull.Modules.events.Contracts import EventKind
 from bull.Modules.events.mocks import MockEventLog
 from bull.Modules.foundation.mocks import MockClock, MockFiles, sample_layout
+from bull.Modules.memo.Contracts import MemoProblem
 from bull.Modules.memo.mocks import MockMemoReader
-from bull.Modules.parts.mocks import MockParts
+from bull.Modules.parts.mocks import MockParts, sample_part
 from bull.Modules.settings.mocks import MockSettings
-from bull.Modules.status import model, transitions
+from bull.Modules.status import model, modules, transitions
 from bull.Modules.status.Contracts import (
     ActiveFeature,
     Approval,
     Mode,
+    ModuleState,
+    Pause,
     Status,
     StatusError,
     Track,
     Unit,
     UnitState,
+    Waiting,
 )
 from bull.Modules.status.mocks import SAMPLE_TIME, sample_status
 from bull.Modules.status.store import LiveStatusStore
@@ -38,14 +42,17 @@ class Env:
         self.files = MockFiles()
         self.events = MockEventLog()
         self.events.events.clear()
+        self.settings = MockSettings()
+        self.parts = MockParts()
+        self.reader = MockMemoReader()
         self.store = LiveStatusStore(
             LAYOUT,
             self.files,
             self.events,
             MockClock(),
-            MockSettings(),
-            MockParts(),
-            MockMemoReader(),
+            self.settings,
+            self.parts,
+            self.reader,
         )
 
     def seed(self, status: Status) -> None:
@@ -223,7 +230,11 @@ def test_a_change_passes_the_current_status_to_the_transition(
 def test_a_change_writes_atomically_once(monkeypatch: pytest.MonkeyPatch) -> None:
     env = Env()
     env.seed(sample_status())
-    patch(monkeypatch, "set_stage", lambda status, *a, **k: status)
+    patch(
+        monkeypatch,
+        "set_stage",
+        lambda status, *a, **k: replace(status, app=Track(4, status.app.checkpoints)),
+    )
     env.store.set_stage(4)
     assert len(env.status_writes()) == 1
 
@@ -321,8 +332,264 @@ def test_written_file_has_sorted_keys_and_a_trailing_newline(
 ) -> None:
     env = Env()
     env.seed(sample_status())
-    patch(monkeypatch, "set_stage", lambda status, *a, **k: status)
-    env.store.set_stage(5)
+    patch(
+        monkeypatch,
+        "set_stage",
+        lambda status, *a, **k: replace(status, app=Track(4, status.app.checkpoints)),
+    )
+    env.store.set_stage(4)
     text = env.files.texts[LAYOUT.status_file]
     assert text.endswith("\n")
     assert text == json.dumps(json.loads(text), indent=2, sort_keys=True) + "\n"
+
+
+# --- unit 3: attempt at the limit, no-ops, event sets, known parts and problems -----------
+
+
+def seed_counter_unit(env: Env, state: UnitState, attempts: int) -> Status:
+    base = sample_status()
+    counter = base.modules[1]
+    units = (
+        replace(counter.units[0], state=state, attempts=attempts),
+        counter.units[1],
+    )
+    status = replace(base, modules=(base.modules[0], replace(counter, units=units)))
+    env.seed(status)
+    return status
+
+
+def test_attempt_at_the_limit_saves_blocked_logs_then_raises() -> None:
+    env = Env()
+    seed_counter_unit(env, UnitState.CODE, 3)
+    with pytest.raises(StatusError) as caught:
+        env.store.attempt("Counter", 1)
+    assert caught.value.message == "unit 1 blocked after 3 attempts; ask the human"
+    saved = model.status_from_json(env.on_disk())
+    assert saved.modules[1].units[0].state == UnitState.BLOCKED
+    assert [e.data["what"] for e in env.events.events] == ["attempt"]
+    assert env.events.events[0].kind == EventKind.STATUS
+
+
+def test_attempt_at_the_limit_with_a_faked_transition_still_saves_then_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = Env()
+    base = seed_counter_unit(env, UnitState.CODE, 3)
+    blocked = replace(base.modules[1].units[0], state=UnitState.BLOCKED)
+    new = replace(
+        base,
+        modules=(
+            base.modules[0],
+            replace(base.modules[1], units=(blocked, base.modules[1].units[1])),
+        ),
+    )
+    patch(monkeypatch, "attempt", lambda status, *a, **k: (new, blocked))
+    with pytest.raises(
+        StatusError, match="unit 1 blocked after 3 attempts; ask the human"
+    ):
+        env.store.attempt("Counter", 1)
+    assert model.status_from_json(env.on_disk()) == new
+    assert len(env.events.events) == 1
+
+
+def test_attempt_message_uses_the_max_attempts_setting() -> None:
+    env = Env()
+    env.settings.app["max_attempts"] = 2
+    seed_counter_unit(env, UnitState.CODE, 2)
+    with pytest.raises(
+        StatusError, match="unit 1 blocked after 2 attempts; ask the human"
+    ):
+        env.store.attempt("Counter", 1)
+
+
+def test_attempt_below_the_limit_returns_the_unit_and_logs_once() -> None:
+    env = Env()
+    seed_counter_unit(env, UnitState.CODE, 1)
+    unit = env.store.attempt("Counter", 1)
+    assert unit.attempts == 2
+    assert model.status_from_json(env.on_disk()).modules[1].units[0].attempts == 2
+    assert [e.data["what"] for e in env.events.events] == ["attempt"]
+
+
+def test_checkpoint_recorded_twice_writes_and_logs_only_once() -> None:
+    env = Env()
+    env.seed(replace(sample_status(), app=Track(2, ())))
+    env.store.checkpoint("setup")
+    env.events.events.clear()
+    env.files.calls.clear()
+    again = env.store.checkpoint("setup")
+    assert "setup" in again.app.checkpoints
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_resume_when_not_paused_writes_nothing_and_logs_nothing() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.resume()
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_take_approval_with_none_writes_nothing_and_logs_nothing() -> None:
+    env = Env()
+    env.seed(sample_status())
+    assert env.store.take_approval("Store") is None
+    assert env.status_writes() == []
+    assert env.events.events == []
+
+
+def test_take_approval_with_one_writes_and_logs() -> None:
+    env = Env()
+    approval = Approval("Store", "ok", SAMPLE_TIME)
+    env.seed(replace(sample_status(), approvals=(approval,)))
+    assert env.store.take_approval("Store") == approval
+    assert env.on_disk()["approvals"] == []
+    assert [e.data["what"] for e in env.events.events] == ["take_approval"]
+
+
+def test_a_no_op_change_leaves_the_file_untouched() -> None:
+    env = Env()
+    env.seed(sample_status())
+    before = env.files.texts[LAYOUT.status_file]
+    env.store.resume()
+    assert env.files.texts[LAYOUT.status_file] == before
+
+
+def kinds(env: Env) -> list[EventKind]:
+    return [e.kind for e in env.events.events]
+
+
+def test_pause_logs_a_status_event_and_a_pause_event() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.pause("usage limit")
+    assert kinds(env) == [EventKind.STATUS, EventKind.PAUSE]
+    assert env.events.events[0].data["what"] == "pause"
+    assert env.events.events[1].data["reason"] == "usage limit"
+    assert env.on_disk()["pause"]["reason"] == "usage limit"
+
+
+def test_resume_logs_a_status_event_and_a_resume_event() -> None:
+    env = Env()
+    env.seed(replace(sample_status(), pause=Pause("usage", SAMPLE_TIME, None)))
+    env.store.resume()
+    assert kinds(env) == [EventKind.STATUS, EventKind.RESUME]
+    assert env.events.events[0].data["what"] == "resume"
+    assert env.on_disk()["pause"] is None
+
+
+def test_approve_logs_a_status_event_and_a_decision_event() -> None:
+    env = Env()
+    env.seed(
+        replace(sample_status(), waiting=Waiting("Store", "contract", SAMPLE_TIME))
+    )
+    env.store.approve("Store", "looks fine")
+    assert kinds(env) == [EventKind.STATUS, EventKind.DECISION]
+    assert env.events.events[0].data["what"] == "approve"
+    assert env.on_disk()["waiting"] is None
+    assert env.on_disk()["approvals"][0]["note"] == "looks fine"
+
+
+def test_wait_logs_only_a_status_event() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.wait("Store", "contract change")
+    assert kinds(env) == [EventKind.STATUS]
+    assert env.events.events[0].data["what"] == "wait"
+
+
+def test_set_unit_through_the_store_uses_the_real_rules() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_unit("Counter", 1, UnitState.CODE)
+    assert env.on_disk()["modules"][1]["units"][0]["state"] == "code"
+    with pytest.raises(StatusError):
+        env.store.set_unit("Counter", 2, UnitState.DONE)
+
+
+def test_init_modules_refused_problems_reach_the_error_and_nothing_is_written() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    before = env.files.texts[LAYOUT.status_file]
+    env.reader.found_problems = [MemoProblem(33, "Counter has no Files line")]
+    with pytest.raises(StatusError) as caught:
+        env.store.init_modules(env.reader.memo)
+    assert "Counter has no Files line" in caught.value.message + caught.value.fix
+    assert "33" in caught.value.message + caught.value.fix
+    assert env.files.texts[LAYOUT.status_file] == before
+    assert env.events.events == []
+
+
+def test_init_modules_asks_the_reader_for_problems_with_parts_and_max_files() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    env.parts.parts.append(sample_part(name="web"))
+    env.store.init_modules(env.reader.memo)
+    calls = [args for name, args in env.reader.calls if name == "problems"]
+    assert calls == [(env.reader.memo, ("app", "web"), 4)]
+
+
+def test_init_modules_uses_the_max_files_per_unit_setting() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    env.settings.app["max_files_per_unit"] = 2
+    env.store.init_modules(env.reader.memo)
+    assert [a[2] for n, a in env.reader.calls if n == "problems"] == [2]
+
+
+def test_init_modules_passes_known_parts_and_problems_to_the_function(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = Env()
+    env.seed(EMPTY)
+    env.parts.parts.append(sample_part(name="web"))
+    problem = MemoProblem(5, "x")
+    env.reader.found_problems = [problem]
+    seen: dict[str, Any] = {}
+
+    def fake(
+        status: Status, memo: Any, replace_: bool = False, **kwargs: Any
+    ) -> Status:
+        seen.update(kwargs)
+        seen["replace"] = replace_
+        return status
+
+    monkeypatch.setattr(modules, "init_modules", fake, raising=False)
+    env.store.init_modules(env.reader.memo, True)
+    assert list(seen["known_parts"]) == ["app", "web"]
+    assert list(seen["problems"]) == [problem]
+    assert seen["replace"] is True
+
+
+def test_init_modules_writes_the_modules_and_logs_init_modules() -> None:
+    env = Env()
+    env.seed(EMPTY)
+    env.store.init_modules(env.reader.memo)
+    assert [m["name"] for m in env.on_disk()["modules"]] == ["Store", "Counter"]
+    assert [e.data["what"] for e in env.events.events] == ["init_modules"]
+
+
+def test_add_modules_passes_known_parts_to_the_function(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.parts.parts.append(sample_part(name="web"))
+    seen: dict[str, Any] = {}
+
+    def fake(status: Status, entries: Any, **kwargs: Any) -> Status:
+        seen.update(kwargs)
+        return replace(status, app=Track(4, status.app.checkpoints))
+
+    monkeypatch.setattr(modules, "add_modules", fake, raising=False)
+    env.store.add_modules(env.reader.memo.modules)
+    assert list(seen["known_parts"]) == ["app", "web"]
+
+
+def test_set_module_through_the_store_logs_a_status_event() -> None:
+    env = Env()
+    env.seed(sample_status())
+    env.store.set_module("Counter", ModuleState.BLOCKED)
+    assert [e.data["what"] for e in env.events.events] == ["set_module"]
+    assert env.on_disk()["modules"][1]["state"] == "blocked"
