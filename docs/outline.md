@@ -1204,6 +1204,13 @@ when `readers.py` defines `detect`.
   - next_step.py: pure `next_step(status: Status, mode: Mode, refs: Refs, branch: str | None) ->
     NextStep` (`branch` = current git branch, None when unknown). summary.py (unit 4) holds
     `LiveProgress(store: StatusStore, refs: Refs, git: Git)`, which calls it.
+  - summary.py: `LiveProgress(app: AppLayout, store: StatusStore, refs: Refs, git: Git)`;
+    next_step uses `git.current_branch(app.root)`; tags uses `git.tags(app.root, …)`.
+  - cli.py (decisions-log convention): `register(commands, store: Callable[[], StatusStore], refs:
+    Callable[[], Refs], progress: Callable[[], Progress], usage: Callable[[], Usage], memo:
+    Callable[[], Memo]) -> None` (`memo` = the parsed `docs/outline.md`, built by `cli.wiring`).
+    Routing `status` to stackflow in a stack repo is `cli.wiring`'s job; here a stack repo is
+    refused through `store.load()`.
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
     `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
 - Anticipated operations (not built yet): time totals from the event log.
