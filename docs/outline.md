@@ -1273,7 +1273,10 @@ when `readers.py` defines `detect`.
 - Behavior spec:
   - IdeaReader.read: a file with `## <Title>` sections → one idea per section (body, trimmed, is the
     description); otherwise one idea per top-level `- <Title>: <description>` item (no colon → whole
-    text is the title); with `section`, only the items under `## <section>`; nothing found → `[]`.
+    text is the title); with `section`, only the items under `## <section>` (heading matched
+    case-insensitively); nothing found → `[]`. An indented continuation line under a list item is
+    joined to its description with a newline; checkbox items: `- [x] …` (checked) is skipped,
+    `- [ ] B` is read as `- B`.
   - slug: lowercase, runs of non-alphanumerics → `-`, trimmed, at most 40 characters cut at a `-`;
     taken → suffix `-2`, `-3`, …
   - add: new item `queued` at the end (or top), writes `docs/features/<slug>.md` from the brief
@@ -1282,8 +1285,9 @@ when `readers.py` defines `detect`.
     returns the added items. CLI `--dry-run` lists them without writing.
   - move(slug, position): 1-based among queued items; drop: `queued` → `dropped` (brief kept).
   - start(slug): first queued when None; refused unless on a clean trunk, `app-accepted`, no
-    adoption, no active feature, and no existing `feature/<slug>/main` branch (all checked before
-    any write); marks the item active, `status.start_feature`, commits `chore: start feature
+    adoption (message says it can start after the adoption finishes), no active feature, and no
+    existing `feature/<slug>/main` branch (all checked before any write); add and import work
+    during an adoption; marks the item active, `status.start_feature`, commits `chore: start feature
     <slug>`, creates and switches to `feature/<slug>/main`.
   - plan: on the feature branch; reads the memo and runs `status.init_modules(memo, replace=True)`:
     the memo's `Files` groups decide where a file new to an existing module goes (an existing `|`
@@ -2073,3 +2077,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: status coverage triage — human approved specifying and testing 12 code-writer guards (listed under status Behavior spec "Guards"). Open for the features module: a `Changes` line naming a file new to an existing module (no unit holds it yet) is refused by `reopen`; features must decide how new files join a module.
 - 2026-11-08: status exemption review — refs and LiveProgress derive mode from one load; naive clock times are treated as UTC (they made every save fail); build order matches module blocks case-insensitively like memo problems. No contract change.
 - 2026-11-08: features — human: a file new to an existing module goes where the feature's memo puts it in the module's `Files` groups (existing group → that unit; new group at the end → new unit), decided per feature. `feature plan` uses `status.init_modules(replace=True)` (keeps unchanged units) then `reopen`; no status change. Closes the open item from status coverage triage. Also: `feature list` position is the queued position `move` takes (`-` otherwise); `start` refuses an existing `feature/<slug>/main` branch before any write.
+- 2026-11-08: features reference scan (covered 5, missed 1, contradicts 0, not-in-spec 4, obsolete 1) — human kept all four v1 behaviors: wrapped list-item continuation lines joined into the description, checkbox items (`[x]` skipped, `[ ]` stripped), `--section` matched case-insensitively, and the start-during-adoption refusal saying it can start after the adoption finishes. Missed: add works during an adoption. Obsolete: v1's (ideas, notes) return pair.
