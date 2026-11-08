@@ -296,7 +296,7 @@
             "store.py",
             "refs.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T09:58:09-08:00",
+  "updatedAt": "2026-11-08T10:00:54-08:00",
   "features": [],
   "activeFeature": null
 }
