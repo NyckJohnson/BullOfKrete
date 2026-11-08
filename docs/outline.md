@@ -1201,6 +1201,9 @@ when `readers.py` defines `detect`.
     `resume`, `approve` `status` + `decision` (tests pin the exact event set); init_modules and
     add_modules pass `known_parts` and `problems` through; `status_from_json` refuses stage
     outside 0–6, attempts or unit number < 1 and negative scan counts, naming the field.
+  - next_step.py: pure `next_step(status: Status, mode: Mode, refs: Refs, branch: str | None) ->
+    NextStep` (`branch` = current git branch, None when unknown). summary.py (unit 4) holds
+    `LiveProgress(store: StatusStore, refs: Refs, git: Git)`, which calls it.
   - refs.py: `LiveRefs(settings: Settings, store: StatusStore)`; mode and feature slug come from
     `store.load()` / `store.mode()`, the trunk from `settings.get("base_branch", None)`.
 - Anticipated operations (not built yet): time totals from the event log.
