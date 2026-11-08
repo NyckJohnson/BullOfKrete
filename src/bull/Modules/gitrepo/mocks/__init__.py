@@ -5,13 +5,21 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-from bull.Modules.gitrepo.Contracts import Git
+from bull.Modules.gitrepo.Contracts import Git, GitError
 
 SAMPLE_SHA = "3f9c2a1e8b7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f"
 
 
+def _is_sha(ref: str) -> bool:
+    return len(ref) == 40 and all(c in "0123456789abcdef" for c in ref)
+
+
 class MockGit(Git):
-    """A repo on `main` with one commit; branches, tags and file contents are editable."""
+    """A repo on `main` with one commit; branches, tags and file contents are editable.
+
+    Like the live git, it raises `GitError` on a duplicate tag or branch name and on
+    switching to an unknown branch. A tag resolves through `head` to its ref's sha.
+    """
 
     def __init__(self) -> None:
         self.branch: str | None = "main"
@@ -57,6 +65,8 @@ class MockGit(Git):
         self, root: Path, name: str, start: str, switch: bool = True
     ) -> None:
         self.calls.append(("create_branch", (root, name, start, switch)))
+        if name in self.branches:
+            raise GitError(f"`git switch -c {name} {start}` failed: '{name}' exists")
         self.branches.add(name)
         self.heads[name] = self.heads.get(start, SAMPLE_SHA)
         if switch:
@@ -64,6 +74,8 @@ class MockGit(Git):
 
     def switch(self, root: Path, name: str) -> None:
         self.calls.append(("switch", (root, name)))
+        if name not in self.branches:
+            raise GitError(f"`git switch {name}` failed: invalid reference: {name}")
         self.branch = name
 
     def commit_all(self, root: Path, message: str) -> str | None:
@@ -77,7 +89,14 @@ class MockGit(Git):
 
     def tag(self, root: Path, name: str, ref: str = "HEAD") -> None:
         self.calls.append(("tag", (root, name, ref)))
+        if name in self.tag_names:
+            raise GitError(
+                f"`git tag {name} {ref}` failed: tag '{name}' already exists"
+            )
         self.tag_names.append(name)
+        sha = self.heads.get(ref) or (ref if _is_sha(ref) else None)
+        if sha is not None:
+            self.heads[name] = sha
 
     def tags(self, root: Path, pattern: str = "*") -> list[str]:
         self.calls.append(("tags", (root, pattern)))
