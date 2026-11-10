@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
-from bull.Modules.foundation.Contracts import AppLayout
+import pytest
+
+from bull.Modules.foundation.Contracts import AppLayout, BullError
 from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.interfaces.interfaces import LiveInterfaces
 from bull.Modules.memo.Contracts import BuildEntry, InterfaceEntry, Memo, SideRef
@@ -555,3 +558,15 @@ def test_parts_to_run_lists_each_part_once(tmp_path: Path) -> None:
 def test_parts_to_run_with_no_interfaces_is_empty(tmp_path: Path) -> None:
     live, _ = _run_world(tmp_path, {"web": False})
     assert live.parts_to_run(_memo(), "web") == []
+
+
+def test_parts_to_run_non_string_stack_setting_raises_not_a_name() -> None:
+    registry = MockStackRegistry()
+    registry.stacks = {"s_web": _stack("s_web")}
+    settings = FakeSettings({"cli": cast(str, 7), "web": "s_web"}, {})
+    live = LiveInterfaces(MockParts(), registry, settings)
+    memo = _memo(_entry(), order=("Export", "Import"))
+    with pytest.raises(BullError) as caught:
+        live.parts_to_run(memo, "web")
+    assert caught.value.message == "part cli: the stack setting is not a name"
+    assert caught.value.fix == "set the part's stack to a stack name"
