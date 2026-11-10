@@ -435,7 +435,7 @@
             "mocks/__init__.py",
             "interfaces.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-10T01:07:35-08:00",
+  "updatedAt": "2026-11-10T01:10:33-08:00",
   "features": [],
   "activeFeature": null
 }
