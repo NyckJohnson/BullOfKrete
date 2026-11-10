@@ -1352,10 +1352,12 @@ when `readers.py` defines `detect`.
   - markers: `<comment> coverage-exempt: <reason>` at a line's end exempts that line;
     `coverage-exempt-begin: <reason>` … `coverage-exempt-end` exempts every line between them,
     inclusive; `coverage-exempt-file: <reason>` within the first 10 lines exempts the file from
-    "no data" only. Missing reason, an unclosed begin or a stray end → an invalid marker
-    (`<path>:<line>: …`) that exempts nothing.
+    "no data" only. Missing reason, an unclosed begin, a stray end, or a begin inside an open
+    block (`<path>:<line>: coverage-exempt-begin inside an open block`; the open block continues)
+    → an invalid marker (`<path>:<line>: …`) that exempts nothing.
   - sources: files under `module_dir` matching `source_glob`, minus those matching any `exclude`
-    glob (matched against the path relative to `part_root`), sorted.
+    glob (matched against the path relative to `part_root`, or the full path for a file outside
+    `part_root`), sorted; directories whose names match `source_glob` are not sources.
   - report: for each source, uncovered lines minus exempted lines; a file without data is reported
     unless it has a file marker; a file marker never hides uncovered lines in a file that has data,
     and on a file that has data it is reported as an invalid marker (`<path>:<line>: unnecessary
@@ -2097,3 +2099,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: features reference scan (covered 5, missed 1, contradicts 0, not-in-spec 4, obsolete 1) — human kept all four v1 behaviors: wrapped list-item continuation lines joined into the description, checkbox items (`[x]` skipped, `[ ]` stripped), `--section` matched case-insensitively, and the start-during-adoption refusal saying it can start after the adoption finishes. Missed: add works during an adoption. Obsolete: v1's (ideas, notes) return pair.
 - 2026-11-08: features coverage triage — human approved specifying and testing 8 code-writer guards and the `plan` output text (listed under features Behavior spec "Guards" and "plan output").
 - 2026-11-08: coverage reference scan (covered 5, missed 0, contradicts 0, not-in-spec 3) — human: a file marker on a file that has coverage data is reported as an invalid marker ("unnecessary file marker") so it gets tidied; gates' render adds a hint line naming the file marker in the stack's comment syntax when files lack coverage data (in gates, since coverage's `render` doesn't know the comment; no contract change); v1's "N declaration-only file(s) exempt" count left out; gates combines `coverage.exclude` + `coverage.exclude_extra` before calling coverage (reference case test_exclude_extra_adds_to_default moved to gates) — approved by Nicholas Johnson
+- 2026-11-10: coverage coverage triage — human: specify and test the nested-begin invalid marker ("coverage-exempt-begin inside an open block") and the full-path exclude match for a source outside `part_root`; missed test: directories matching `source_glob` are not sources — approved by Nicholas Johnson
