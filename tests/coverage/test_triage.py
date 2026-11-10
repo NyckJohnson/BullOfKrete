@@ -134,6 +134,36 @@ def test_report_file_marker_never_hides_uncovered_lines(tmp_path: Path) -> None:
     assert rep.clean is False
 
 
+def test_report_file_marker_on_file_with_data_is_unnecessary_marker(
+    tmp_path: Path,
+) -> None:
+    src = _write(tmp_path / "a.py", "x = 1\n# coverage-exempt-file: why\ny = 2\n")
+    data = CoverageData(uncovered={}, no_data=())
+    rep = LiveCoverageTriage().report("Counter", [src], data, "#")
+    assert rep.invalid_markers == (f"{src}:2: unnecessary file marker",)
+    assert rep.clean is False
+
+
+def test_report_unnecessary_file_marker_hides_no_uncovered_lines(
+    tmp_path: Path,
+) -> None:
+    src = _write(tmp_path / "a.py", "# coverage-exempt-file: why\nx = 1\ny = 2\n")
+    data = CoverageData(uncovered={src: (2, 3)}, no_data=())
+    rep = LiveCoverageTriage().report("Counter", [src], data, "#")
+    assert rep.uncovered == {src: (2, 3)}
+    assert rep.invalid_markers == (f"{src}:1: unnecessary file marker",)
+
+
+def test_report_file_marker_on_no_data_file_is_not_an_invalid_marker(
+    tmp_path: Path,
+) -> None:
+    src = _write(tmp_path / "decl.py", "# coverage-exempt-file: declarations\nx = 1\n")
+    data = CoverageData(uncovered={}, no_data=(src,))
+    rep = LiveCoverageTriage().report("Counter", [src], data, "#")
+    assert rep.invalid_markers == ()
+    assert rep.no_data == ()
+
+
 def test_report_ignores_data_for_files_outside_sources(tmp_path: Path) -> None:
     src = _write(tmp_path / "a.py")
     other = _write(tmp_path / "other.py")
@@ -258,4 +288,15 @@ def test_render_lists_invalid_markers() -> None:
     msg = "/proj/a.py:4: coverage-exempt marker is missing a reason"
     out = LiveCoverageTriage().render(_report(invalid=(msg,)))
     assert msg in out
+    assert "coverage clean" not in out
+
+
+def test_render_lists_unnecessary_file_marker_among_invalid_markers(
+    tmp_path: Path,
+) -> None:
+    src = _write(tmp_path / "a.py", "# coverage-exempt-file: why\nx = 1\n")
+    data = CoverageData(uncovered={}, no_data=())
+    triage = LiveCoverageTriage()
+    out = triage.render(triage.report("Counter", [src], data, "#"))
+    assert f"{src}:1: unnecessary file marker" in out
     assert "coverage clean" not in out
