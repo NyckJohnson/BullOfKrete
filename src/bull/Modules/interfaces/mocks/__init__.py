@@ -48,7 +48,7 @@ class MockInterfaces(Interfaces):
                 interface=entry.name,
                 part=entry.provider.part
                 if role is Role.PROVIDER
-                else entry.consumers[0].part,
+                else next(c.part for c in entry.consumers if c.module == module),
                 module=module,
                 role=role,
                 items=(CheckItem(True, f"{role.value} fields match the schema", ""),),
