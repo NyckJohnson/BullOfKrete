@@ -1811,6 +1811,9 @@ when `readers.py` defines `detect`.
     interfaces, handing off), one command per stage plus adopt, feature, resume, status and the
     stack workflow (`/bull:stack`, which refuses outside a stack repo), and the nine agents (v1's
     ui-test-writer renamed journey-test-writer).
+  - test-writer: before it reports, it runs the stack's formatter and lint on the test files it
+    wrote or changed and fixes what they find, so a formatting slip never costs a gate attempt
+    (stack-neutral wording; the stack's rules name the tools).
 - Reference tests: v1-tests/test_cli_misc.py::test_every_agent_has_frontmatter_and_its_stack_rules_exist
 - Contract: see `docs/api/plugin_text.md` (generated; do not edit by hand)
 
@@ -2132,3 +2135,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: coverage coverage triage — human: specify and test the nested-begin invalid marker ("coverage-exempt-begin inside an open block") and the full-path exclude match for a source outside `part_root`; missed test: directories matching `source_glob` are not sources — approved by Nicholas Johnson
 - 2026-11-10: api construction (LiveApiSnapshots collaborators, paths, diff labels, `approval.authorize` order, cli output) set in the api § "Construction" line; the `approved` note goes through `status.approve` so its `decision` event is logged by status (api gains no events dependency); internal wiring, no contract change.
 - 2026-11-10: api coverage triage — human: specify and test parse refusing damaged snapshot text (missing heading, `## <path>` with no fence, unclosed block), the missing-interface-file error, and `--check` with `--write` refused — approved by Nicholas Johnson
+- 2026-11-10: test-writer formats and lints its own test files before reporting (plugin_text Behavior spec; stack rules name the tools). From the v1 run: test-writers twice left a test file that failed the formatter, each costing a retry; until plugin_text ships, the orchestrator adds this to every test-writer brief — requested by Nicholas Johnson
