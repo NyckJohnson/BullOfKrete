@@ -1412,6 +1412,31 @@ when `readers.py` defines `detect`.
     the file's text in one fenced block; the memo entry's `Contract changes (<slug>)` pre-approves).
   - cli: `bull api <M>` prints the check (exit 1 when not ok); `--check` same quietly; `--write`
     per the rules.
+- Construction (internal; not contracts):
+  - snapshots.py: `LiveApiSnapshots(files: Files, parts: Parts, stacks: StackRegistry, memo:
+    Callable[[], Memo], store: StatusStore)`. A module's `Contracts/` is
+    `parts.module_src(parts.get(app, entry.part), M) / "Contracts"` (entry = the memo's module
+    block; no block → `BullError` "unknown module <M>"); the stack is `stacks.get(part.stack)`, its
+    `manifest.source_glob` and `readers.contract_declarations`. Snapshot paths are relative to the
+    module folder (e.g. `Contracts/__init__.py`), POSIX. Stored files: `app.api_dir / "<M>.md"`
+    and `app.api_dir / "interfaces" / "<Name>.md"` (interface name not in the memo's
+    `## Interfaces` → `BullError` "unknown interface <Name>"; its file is `app.root / entry.file`;
+    its snapshot has one entry keyed by `entry.file`). check compares the stored text with
+    `render(current)`; the diff is `difflib.unified_diff` over lines with `fromfile="stored"`,
+    `tofile="current"`. All reads and writes go through `files` (`read_text`, `write_atomic`).
+  - approval.py: `authorize(name: str, approved: str | None, store: StatusStore,
+    contract_changes: Mapping[str, str]) -> None`, called by write only when the snapshot changed,
+    checked in order: an `approved` note → `store.approve(name, note)` (which logs the `decision`
+    event) then `store.take_approval(name)`; else `store.take_approval(name)` returning an
+    approval; else FEATURE mode (`store.mode()`), the active feature's slug in
+    `contract_changes` and `name` not in its `applied_contracts` → `store.mark_contract_applied(name)`;
+    else `ApprovalNeeded` with the spec's message (`<M>` = name).
+  - cli.py (decisions-log convention): `register(commands, snapshots: Callable[[], ApiSnapshots],
+    app: Callable[[], AppLayout]) -> None`. `bull api <M>` / `bull api --interface <Name>` (exactly
+    one): ok → "api: <M> matches its snapshot", exit 0; not ok → "api: <M> differs from its
+    snapshot" then the diff, exit 1. `--check`: nothing printed, same exit. `--write [--approved
+    "<note>"]`: "wrote <path>" or "api: <M> unchanged", exit 0 (`ApprovalNeeded` propagates).
+    `--approved` without `--write` → `BullError`.
 - Reference tests: none mapped (v1's api scanner tests were inside the stack scanners).
 - Contract: see `docs/api/api.md` (generated; do not edit by hand)
 
@@ -2100,3 +2125,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-08: features coverage triage — human approved specifying and testing 8 code-writer guards and the `plan` output text (listed under features Behavior spec "Guards" and "plan output").
 - 2026-11-08: coverage reference scan (covered 5, missed 0, contradicts 0, not-in-spec 3) — human: a file marker on a file that has coverage data is reported as an invalid marker ("unnecessary file marker") so it gets tidied; gates' render adds a hint line naming the file marker in the stack's comment syntax when files lack coverage data (in gates, since coverage's `render` doesn't know the comment; no contract change); v1's "N declaration-only file(s) exempt" count left out; gates combines `coverage.exclude` + `coverage.exclude_extra` before calling coverage (reference case test_exclude_extra_adds_to_default moved to gates) — approved by Nicholas Johnson
 - 2026-11-10: coverage coverage triage — human: specify and test the nested-begin invalid marker ("coverage-exempt-begin inside an open block") and the full-path exclude match for a source outside `part_root`; missed test: directories matching `source_glob` are not sources — approved by Nicholas Johnson
+- 2026-11-10: api construction (LiveApiSnapshots collaborators, paths, diff labels, `approval.authorize` order, cli output) set in the api § "Construction" line; the `approved` note goes through `status.approve` so its `decision` event is logged by status (api gains no events dependency); internal wiring, no contract change.
