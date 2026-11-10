@@ -368,7 +368,7 @@
         "foundation",
         "stacks"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -378,8 +378,8 @@
             "markers.py",
             "triage.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T14:02:48-08:00",
+  "updatedAt": "2026-11-10T00:47:34-08:00",
   "features": [],
   "activeFeature": null
 }
