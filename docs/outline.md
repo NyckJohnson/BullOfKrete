@@ -1490,7 +1490,9 @@ when `readers.py` defines `detect`.
     interface check")`, no exception. `InterfaceResult.ok`: every item ok (no items → True).
   - parts_to_run: interfaces with a consumer whose part is `part`; their providers' parts ordered
     by the provider module's position in `memo.build_order` (a provider not in the build order goes
-    last, in memo order); stack `manifest.run is not None`.
+    last, in memo order); stack `manifest.run is not None`. A part whose `stack` setting is not a
+    string → `BullError` "part <part>: the stack setting is not a name" (fix "set the part's stack
+    to a stack name").
 - Reference tests: none (new in v2).
 - Contract: see `docs/api/interfaces.md` (generated; do not edit by hand)
 
@@ -2157,3 +2159,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: test-writer formats and lints its own test files before reporting (plugin_text Behavior spec; stack rules name the tools). From the v1 run: test-writers twice left a test file that failed the formatter, each costing a retry; until plugin_text ships, the orchestrator adds this to every test-writer brief — requested by Nicholas Johnson
 - 2026-11-10: interfaces construction (LiveInterfaces collaborators, problem texts, check without interface_check, parts_to_run ordering) set in the interfaces § "Construction" line; internal wiring, no contract change.
 - 2026-11-10: interfaces depends on settings (its Construction takes the app's `Settings`); added to its Depends line and the build order. settings is already built, so the order is unchanged.
+- 2026-11-10: interfaces coverage triage — human: keep, specify and test the `parts_to_run` guard for a non-string `stack` setting (`BullError` "part <part>: the stack setting is not a name") — approved by Nicholas Johnson
