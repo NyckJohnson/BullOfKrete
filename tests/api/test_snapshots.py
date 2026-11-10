@@ -188,6 +188,36 @@ def test_render_is_deterministic(env: Env) -> None:
     assert env.api.render(snapshot) == env.api.render(snapshot)
 
 
+def test_parse_without_the_contract_heading_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as caught:
+        env.api.parse("## Contracts/a.fx\n```\npub a\n```\n")
+    assert caught.value.message == (
+        "not a contract snapshot: missing the `# <Name> contract` heading"
+    )
+
+
+def test_parse_of_empty_text_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as caught:
+        env.api.parse("")
+    assert "missing the `# <Name> contract` heading" in caught.value.message
+
+
+def test_parse_path_heading_without_a_fence_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as caught:
+        env.api.parse("# Counter contract\n\n## Contracts/a.fx\npub a\n")
+    assert caught.value.message == (
+        "contract snapshot: `## Contracts/a.fx` has no fenced block"
+    )
+
+
+def test_parse_unclosed_block_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as caught:
+        env.api.parse("# Counter contract\n\n## Contracts/a.fx\n```\npub a\n")
+    assert caught.value.message == (
+        "contract snapshot: unclosed block for `Contracts/a.fx`"
+    )
+
+
 # --- check ---------------------------------------------------------------
 
 
@@ -459,3 +489,13 @@ def test_write_interface_unlisted_feature_change_is_refused(env: Env) -> None:
 def test_write_interface_unknown_name_raises_bull_error(env: Env) -> None:
     with pytest.raises(BullError):
         env.api.write_interface(env.app, "Nope")
+
+
+def test_check_interface_missing_file_raises_bull_error(env: Env) -> None:
+    entry = _with_interface(env)
+    del env.files.texts[env.app.root / entry.file]
+    with pytest.raises(BullError) as caught:
+        env.api.check_interface(env.app, "Wire")
+    assert caught.value.message == (
+        "interface Wire: file interfaces/wire.json not found"
+    )

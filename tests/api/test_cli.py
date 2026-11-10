@@ -169,3 +169,8 @@ def test_module_and_interface_together_is_a_bull_error() -> None:
 def test_neither_module_nor_interface_is_a_bull_error() -> None:
     with pytest.raises(BullError):
         _run(MockApiSnapshots(), [])
+
+
+def test_check_with_write_is_a_bull_error() -> None:
+    with pytest.raises(BullError):
+        _run(MockApiSnapshots(), ["Counter", "--check", "--write"])
