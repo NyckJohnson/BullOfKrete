@@ -172,9 +172,7 @@ def test_begin_inside_open_block_is_invalid_and_outer_block_continues(
         "d = 4\n"
     )
     path, scan = _scan(tmp_path, text)
-    assert scan.invalid == (
-        f"{path}:4: coverage-exempt-begin inside an open block",
-    )
+    assert scan.invalid == (f"{path}:4: coverage-exempt-begin inside an open block",)
     assert len(scan.exemptions) == 1
     assert scan.exemptions[0].lines == (2, 3, 4, 5, 6)
     assert scan.exemptions[0].reason == "outer"

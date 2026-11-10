@@ -368,7 +368,7 @@
         "foundation",
         "stacks"
       ],
-      "state": "in_progress",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -379,7 +379,7 @@
             "triage.py"
           ],
           "state": "done",
-          "attempts": 0
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-10T00:40:04-08:00",
+  "updatedAt": "2026-11-10T00:47:34-08:00",
   "features": [],
   "activeFeature": null
 }
