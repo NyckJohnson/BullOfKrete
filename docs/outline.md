@@ -427,7 +427,7 @@ when `readers.py` defines `detect`.
 11. features (depends on: foundation, gitrepo, memo, status)
 12. coverage (depends on: foundation, stacks)
 13. api (depends on: foundation, memo, stacks, parts, status)
-14. interfaces (depends on: foundation, memo, stacks, parts, api)
+14. interfaces (depends on: foundation, settings, memo, stacks, parts, api)
 15. adoption (depends on: foundation, gitrepo, memo, stacks, parts, status, features)
 16. gates (depends on: foundation, gitrepo, events, settings, memo, stacks, parts, status, coverage, api, interfaces)
 17. stacktest (depends on: foundation, gitrepo, stacks)
@@ -1448,7 +1448,7 @@ when `readers.py` defines `detect`.
 ### interfaces
 - Purpose: interfaces between parts: memo entries, which modules provide or consume them, the
   per-side check through each side's stack, and which parts must run for a part's journeys.
-- Depends on: foundation, memo, stacks, parts, api
+- Depends on: foundation, settings, memo, stacks, parts, api
 - Files: Contracts/__init__.py, mocks/__init__.py, interfaces.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
@@ -2156,3 +2156,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: api coverage triage — human: specify and test parse refusing damaged snapshot text (missing heading, `## <path>` with no fence, unclosed block), the missing-interface-file error, and `--check` with `--write` refused — approved by Nicholas Johnson
 - 2026-11-10: test-writer formats and lints its own test files before reporting (plugin_text Behavior spec; stack rules name the tools). From the v1 run: test-writers twice left a test file that failed the formatter, each costing a retry; until plugin_text ships, the orchestrator adds this to every test-writer brief — requested by Nicholas Johnson
 - 2026-11-10: interfaces construction (LiveInterfaces collaborators, problem texts, check without interface_check, parts_to_run ordering) set in the interfaces § "Construction" line; internal wiring, no contract change.
+- 2026-11-10: interfaces depends on settings (its Construction takes the app's `Settings`); added to its Depends line and the build order. settings is already built, so the order is unchanged.
