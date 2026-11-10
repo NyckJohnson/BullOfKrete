@@ -7,22 +7,27 @@ from pathlib import Path
 from typing import Protocol
 
 from bull.Modules.foundation.Contracts import AppLayout
-from bull.Modules.stacks.Contracts import Detection, Issue
+from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel
 
 
 @dataclass(frozen=True)
 class DetectionReport:
+    """What detection found: the chosen stack (if any), its detection, and every issue."""
+
     stack: str | None
     detection: Detection | None
     issues: tuple[Issue, ...]
 
     @property
     def blocked(self) -> bool:
-        raise NotImplementedError(f"{type(self).__name__}.blocked")
+        """True exactly when any issue has level `IssueLevel.BLOCK`."""
+        return any(issue.level is IssueLevel.BLOCK for issue in self.issues)
 
 
 @dataclass(frozen=True)
 class LegacyLeft:
+    """Legacy code still present: files, declarations, tests and memo `Legacy files:` entries."""
+
     files: tuple[str, ...]
     declarations: tuple[str, ...]
     tests: tuple[str, ...]
@@ -30,7 +35,8 @@ class LegacyLeft:
 
     @property
     def empty(self) -> bool:
-        raise NotImplementedError(f"{type(self).__name__}.empty")
+        """True exactly when no legacy files, declarations, tests or memo files are left."""
+        return not (self.files or self.declarations or self.tests or self.memo_files)
 
 
 class Adoption(Protocol):
