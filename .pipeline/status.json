@@ -1,7 +1,7 @@
 {
   "stage": 5,
-  "paused": true,
-  "pauseReason": "weekly usage 95%; next: coverage reference-scan follow-up (test-writer for unnecessary-file-marker warning), then coverage triage",
+  "paused": false,
+  "pauseReason": null,
   "checkpoints": {
     "outline-approved": "2026-11-07T23:20:19-08:00",
     "setup": "2026-11-07T23:31:13-08:00",
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-08T14:27:13-08:00",
+  "updatedAt": "2026-11-10T00:40:04-08:00",
   "features": [],
   "activeFeature": null
 }

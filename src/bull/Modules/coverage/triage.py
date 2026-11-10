@@ -12,7 +12,7 @@ from bull.Modules.coverage.Contracts import (
     Exemption,
     MarkerScan,
 )
-from bull.Modules.coverage.markers import scan_markers
+from bull.Modules.coverage.markers import scan_markers, scan_markers_with_file_lines
 from bull.Modules.stacks.Contracts import CoverageData
 
 
@@ -48,7 +48,7 @@ class LiveCoverageTriage(CoverageTriage):
         missing = set(data.no_data)
 
         for source in sources:
-            scan = scan_markers(source, comment)
+            scan, file_marker_lines = scan_markers_with_file_lines(source, comment)
             invalid.extend(scan.invalid)
             line_exemptions = [ex for ex in scan.exemptions if ex.lines is not None]
             file_exemptions = [ex for ex in scan.exemptions if ex.lines is None]
@@ -62,6 +62,11 @@ class LiveCoverageTriage(CoverageTriage):
                     no_data.append(source)
                 continue
 
+            # A file with data needs no file marker: report it so it gets removed.
+            invalid.extend(
+                f"{source}:{number}: unnecessary file marker"
+                for number in file_marker_lines
+            )
             exempt_lines = {n for ex in line_exemptions for n in ex.lines or ()}
             remaining = tuple(
                 n
