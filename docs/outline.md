@@ -1585,8 +1585,10 @@ when `readers.py` defines `detect`.
     items whose slug is not on the trunk are appended with state `queued`, other fields kept, and
     the trunk's backlog is written with `files.write_json` only if something was added; then
     `abandon_adoption` and commit "chore: abandon adoption". The `adopt/main` branch is kept.
-  - cli.py: `register(commands, adoption: Callable[[], Adoption], layouts: Layouts)` adds `adopt`
-    and `stack detect` (the root is `layouts.find(Path.cwd())`'s root, or the cwd outside an
+  - cli.py: `register(commands, adoption: Callable[[], Adoption], layouts: Layouts)` adds `adopt`;
+    `register_detect(stack_leaves, adoption, layouts)` adds `detect` to the subcommands action of
+    the `stack` command that stacks.cli owns (how cli hands it over is the cli module's wiring)
+    (the root is `layouts.find(Path.cwd())`'s root, or the cwd outside an
     app); refusals are raised as `BullError` for `cli.main`. `legacy` prints one `<field>: <path>`
     line per entry or "Nothing left to replace."; `--json` prints the four lists. `stack detect`
     prints `stack: <name> (<confidence>) — <summary>` or `stack: none`, then one issue line each;
@@ -2207,6 +2209,6 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: api coverage triage — human: specify and test parse refusing damaged snapshot text (missing heading, `## <path>` with no fence, unclosed block), the missing-interface-file error, and `--check` with `--write` refused — approved by Nicholas Johnson
 - 2026-11-10: test-writer formats and lints its own test files before reporting (plugin_text Behavior spec; stack rules name the tools). From the v1 run: test-writers twice left a test file that failed the formatter, each costing a retry; until plugin_text ships, the orchestrator adds this to every test-writer brief — requested by Nicholas Johnson
 - 2026-11-10: interfaces construction (LiveInterfaces collaborators, problem texts, check without interface_check, parts_to_run ordering) set in the interfaces § "Construction" line; internal wiring, no contract change.
-- 2026-11-10: adoption construction (LiveAdoption collaborators, issue texts and order, apply via `select` + `Settings.set`, legacy path rules, abandon's backlog carry-over from `adopt/main`, cli output) set in the adoption § "Construction" line; adoption now depends on settings (for `apply`); branch-clash listing goes through `Runner` because `Git` has no branch listing; internal wiring, no contract change.
+- 2026-11-10: adoption construction (LiveAdoption collaborators, issue texts and order, apply via `select` + `Settings.set`, legacy path rules, abandon's backlog carry-over from `adopt/main`, cli output; `stack detect` registered through `register_detect` because stacks.cli owns `stack`) set in the adoption § "Construction" line; adoption now depends on settings (for `apply`); branch-clash listing goes through `Runner` because `Git` has no branch listing; internal wiring, no contract change.
 - 2026-11-10: interfaces depends on settings (its Construction takes the app's `Settings`); added to its Depends line and the build order. settings is already built, so the order is unchanged.
 - 2026-11-10: interfaces coverage triage — human: keep, specify and test the `parts_to_run` guard for a non-string `stack` setting (`BullError` "part <part>: the stack setting is not a name") — approved by Nicholas Johnson
