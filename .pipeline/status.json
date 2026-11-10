@@ -393,7 +393,7 @@
         "parts",
         "status"
       ],
-      "state": "in_progress",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
