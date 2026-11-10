@@ -300,3 +300,25 @@ def test_render_lists_unnecessary_file_marker_among_invalid_markers(
     out = triage.render(triage.report("Counter", [src], data, "#"))
     assert f"{src}:1: unnecessary file marker" in out
     assert "coverage clean" not in out
+
+
+def test_sources_skips_directories_matching_the_glob(tmp_path: Path) -> None:
+    mod = tmp_path / "src" / "Counter"
+    real = _write(mod / "a.py")
+    (mod / "pkg.py").mkdir()
+    result = LiveCoverageTriage().sources(mod, tmp_path, "*.py", [])
+    assert result == [real]
+
+
+def test_sources_matches_exclude_against_full_path_outside_part_root(
+    tmp_path: Path,
+) -> None:
+    part_root = tmp_path / "part"
+    part_root.mkdir()
+    mod = tmp_path / "elsewhere" / "Counter"
+    keep = _write(mod / "a.py")
+    gen = _write(mod / "gen.py")
+    triage = LiveCoverageTriage()
+    assert triage.sources(mod, part_root, "*.py", []) == sorted([keep, gen])
+    result = triage.sources(mod, part_root, "*.py", [f"{gen.as_posix()}"])
+    assert result == [keep]

@@ -157,3 +157,24 @@ def test_marker_with_other_comment_prefix_is_not_recognised(tmp_path: Path) -> N
     _, scan = _scan(tmp_path, "a = 1  # coverage-exempt: hash\n", comment="//")
     assert scan.exemptions == ()
     assert scan.invalid == ()
+
+
+def test_begin_inside_open_block_is_invalid_and_outer_block_continues(
+    tmp_path: Path,
+) -> None:
+    text = (
+        "a = 1\n"
+        "# coverage-exempt-begin: outer\n"
+        "b = 2\n"
+        "# coverage-exempt-begin: inner\n"
+        "c = 3\n"
+        "# coverage-exempt-end\n"
+        "d = 4\n"
+    )
+    path, scan = _scan(tmp_path, text)
+    assert scan.invalid == (
+        f"{path}:4: coverage-exempt-begin inside an open block",
+    )
+    assert len(scan.exemptions) == 1
+    assert scan.exemptions[0].lines == (2, 3, 4, 5, 6)
+    assert scan.exemptions[0].reason == "outer"
