@@ -393,7 +393,7 @@
         "parts",
         "status"
       ],
-      "state": "coverage",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-10T00:57:24-08:00",
+  "updatedAt": "2026-11-10T01:00:45-08:00",
   "features": [],
   "activeFeature": null
 }
