@@ -1472,6 +1472,25 @@ when `readers.py` defines `detect`.
     settings, interface file, format, role, module)`; a module with none → `[]`.
   - parts_to_run(part): providers' parts of every interface any module of `part` consumes, whose
     stack has `[run]`, in build order, without duplicates and without `part` itself.
+- Construction (internal; not contracts):
+  - interfaces.py: `LiveInterfaces(parts: Parts, stacks: StackRegistry, settings: Settings)`
+    (`settings` is the app's loaded settings). A side is a `SideRef`; its part is
+    `parts.get(app, side.part)`, its stack `stacks.get(part.stack)` (in `parts_to_run`, which has
+    no app: `stacks.get(settings.get("stack", side.part))`), its settings
+    `{r.key: r.value for r in settings.show(side.part)}`. The interface file is
+    `app.root / entry.file`. Modules match `SideRef.module` by exact name.
+  - for_module: in memo order; provider role when the module is the provider, else consumer.
+  - problems, one line each, in memo order, without duplicates: "interface <Name>: file <file>
+    not found" (once per interface); then per side (provider, then consumers in order): "interface
+    <Name>: format <format> is not supported by the <stack> stack (part <part>)" and "interface
+    <Name>: the <stack> stack has no interface check (part <part>)".
+  - check_module: one `InterfaceResult` per (interface, role) from for_module; `part` is the
+    module's side's part; `items` are interface_check's return. A stack without `interface_check`
+    → one item `CheckItem(False, "interface check for <format>", "the <stack> stack has no
+    interface check")`, no exception. `InterfaceResult.ok`: every item ok (no items → True).
+  - parts_to_run: interfaces with a consumer whose part is `part`; their providers' parts ordered
+    by the provider module's position in `memo.build_order` (a provider not in the build order goes
+    last, in memo order); stack `manifest.run is not None`.
 - Reference tests: none (new in v2).
 - Contract: see `docs/api/interfaces.md` (generated; do not edit by hand)
 
@@ -2136,3 +2155,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: api construction (LiveApiSnapshots collaborators, paths, diff labels, `approval.authorize` order, cli output) set in the api § "Construction" line; the `approved` note goes through `status.approve` so its `decision` event is logged by status (api gains no events dependency); internal wiring, no contract change.
 - 2026-11-10: api coverage triage — human: specify and test parse refusing damaged snapshot text (missing heading, `## <path>` with no fence, unclosed block), the missing-interface-file error, and `--check` with `--write` refused — approved by Nicholas Johnson
 - 2026-11-10: test-writer formats and lints its own test files before reporting (plugin_text Behavior spec; stack rules name the tools). From the v1 run: test-writers twice left a test file that failed the formatter, each costing a retry; until plugin_text ships, the orchestrator adds this to every test-writer brief — requested by Nicholas Johnson
+- 2026-11-10: interfaces construction (LiveInterfaces collaborators, problem texts, check without interface_check, parts_to_run ordering) set in the interfaces § "Construction" line; internal wiring, no contract change.
