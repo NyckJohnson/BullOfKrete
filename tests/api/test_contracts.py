@@ -44,11 +44,21 @@ def test_snapshot_equal_when_fields_equal() -> None:
 
 def test_api_check_holds_fields() -> None:
     check = ApiCheck(name="m", ok=False, stored=True, diff="-a\n+b")
-    assert (check.name, check.ok, check.stored, check.diff) == ("m", False, True, "-a\n+b")
+    assert (check.name, check.ok, check.stored, check.diff) == (
+        "m",
+        False,
+        True,
+        "-a\n+b",
+    )
 
 
 def test_api_check_field_names() -> None:
-    assert [f.name for f in dataclasses.fields(ApiCheck)] == ["name", "ok", "stored", "diff"]
+    assert [f.name for f in dataclasses.fields(ApiCheck)] == [
+        "name",
+        "ok",
+        "stored",
+        "diff",
+    ]
 
 
 def test_api_check_is_frozen() -> None:
