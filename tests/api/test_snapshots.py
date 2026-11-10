@@ -1,7 +1,461 @@
-"""Tests for `bull.Modules.api.snapshots` (placeholder until its unit is built)."""
+"""Tests for `bull.Modules.api.snapshots`."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from pathlib import Path
 
-def test_placeholder() -> None:
-    pass
+import pytest
+
+from bull.Modules.api.Contracts import ApiCheck, ApprovalNeeded, Snapshot
+from bull.Modules.api.snapshots import LiveApiSnapshots
+from bull.Modules.foundation.Contracts import AppLayout, BullError
+from bull.Modules.foundation.mocks import MockFiles, sample_layout
+from bull.Modules.memo.Contracts import InterfaceEntry, Memo, SideRef
+from bull.Modules.memo.mocks import sample_memo
+from bull.Modules.parts.mocks import MockParts, sample_part
+from bull.Modules.stacks.mocks import MockStackReaders, MockStackRegistry
+from bull.Modules.status.mocks import MockStatusStore
+
+DECLARATIONS = {
+    "a.fx": ["pub a.one", "pub a.two"],
+    "b.fx": ["pub b.one"],
+}
+
+
+class _Readers(MockStackReaders):
+    def contract_declarations(self, path: Path) -> list[str]:
+        super().contract_declarations(path)
+        return list(DECLARATIONS.get(path.name, []))
+
+
+@dataclass
+class Env:
+    api: LiveApiSnapshots
+    app: AppLayout
+    files: MockFiles
+    store: MockStatusStore
+    memo: Memo
+    readers: _Readers
+    set_memo: Callable[[Memo], None]
+
+    @property
+    def stored_path(self) -> Path:
+        return self.app.api_dir / "Counter.md"
+
+    def module_dir(self, module: str = "Counter") -> Path:
+        return self.app.root / "src" / "fx" / "Modules" / module
+
+
+def _env(tmp_path: Path) -> Env:
+    app = sample_layout(tmp_path)
+    files = MockFiles()
+    parts = MockParts()
+    parts.parts = [sample_part(tmp_path)]
+    stacks = MockStackRegistry()
+    readers = _Readers()
+    stacks.stacks["fixture"] = replace(stacks.stacks["fixture"], readers=readers)
+    store = MockStatusStore()
+    memo = sample_memo()
+    holder = {"memo": memo}
+    api = LiveApiSnapshots(files, parts, stacks, lambda: holder["memo"], store)
+    contracts = tmp_path / "src" / "fx" / "Modules" / "Counter" / "Contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "b.fx").write_text("b")
+    (contracts / "a.fx").write_text("a")
+    (contracts / "notes.txt").write_text("not a source")
+    return Env(
+        api,
+        app,
+        files,
+        store,
+        memo,
+        readers,
+        lambda m: holder.__setitem__("memo", m),
+    )
+
+
+def _old_text(env: Env) -> str:
+    old = Snapshot("Counter", {"Contracts/a.fx": ("pub a.old",)})
+    return env.api.render(old)
+
+
+def _with_contract_change(env: Env, slug: str) -> None:
+    modules = tuple(
+        replace(m, contract_changes={slug: "changed"}) if m.name == "Counter" else m
+        for m in env.memo.modules
+    )
+    env.set_memo(replace(env.memo, modules=modules))
+
+
+@pytest.fixture
+def env(tmp_path: Path) -> Env:
+    return _env(tmp_path)
+
+
+# --- current -------------------------------------------------------------
+
+
+def test_current_names_the_snapshot_for_the_module(env: Env) -> None:
+    assert env.api.current(env.app, "Counter").name == "Counter"
+
+
+def test_current_reads_declarations_of_each_source_file(env: Env) -> None:
+    files = env.api.current(env.app, "Counter").files
+    assert files["Contracts/a.fx"] == ("pub a.one", "pub a.two")
+    assert files["Contracts/b.fx"] == ("pub b.one",)
+
+
+def test_current_lists_files_sorted(env: Env) -> None:
+    files = env.api.current(env.app, "Counter").files
+    assert list(files) == ["Contracts/a.fx", "Contracts/b.fx"]
+
+
+def test_current_skips_files_not_matching_the_source_glob(env: Env) -> None:
+    files = env.api.current(env.app, "Counter").files
+    assert "Contracts/notes.txt" not in files
+
+
+def test_current_with_no_matching_files_is_an_empty_snapshot(env: Env) -> None:
+    for path in (env.module_dir() / "Contracts").glob("*.fx"):
+        path.unlink()
+    assert dict(env.api.current(env.app, "Counter").files) == {}
+
+
+def test_current_missing_contracts_folder_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError):
+        env.api.current(env.app, "Store")
+
+
+def test_current_unknown_module_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError) as caught:
+        env.api.current(env.app, "Nope")
+    assert "unknown module Nope" in caught.value.message
+
+
+# --- render and parse ----------------------------------------------------
+
+
+def test_render_starts_with_the_contract_heading() -> None:
+    api = LiveApiSnapshots(
+        MockFiles(),
+        MockParts(),
+        MockStackRegistry(),
+        sample_memo,
+        MockStatusStore(),
+    )
+    text = api.render(Snapshot("Counter", {"Contracts/a.fx": ("pub a",)}))
+    assert text.splitlines()[0] == "# Counter contract"
+
+
+def test_render_carries_the_generated_comment(env: Env) -> None:
+    text = env.api.render(env.api.current(env.app, "Counter"))
+    assert "generated by `bull api`; do not edit" in text.lower()
+
+
+def test_render_has_a_heading_and_fenced_block_per_file(env: Env) -> None:
+    text = env.api.render(env.api.current(env.app, "Counter"))
+    assert "## Contracts/a.fx" in text
+    assert "## Contracts/b.fx" in text
+    assert text.count("```") == 4
+    assert "pub a.one" in text
+    assert "pub b.one" in text
+
+
+def test_render_lists_files_in_snapshot_order(env: Env) -> None:
+    text = env.api.render(env.api.current(env.app, "Counter"))
+    assert text.index("## Contracts/a.fx") < text.index("## Contracts/b.fx")
+
+
+def test_parse_inverts_render(env: Env) -> None:
+    snapshot = env.api.current(env.app, "Counter")
+    assert env.api.parse(env.api.render(snapshot)) == snapshot
+
+
+def test_parse_inverts_render_for_an_empty_snapshot(env: Env) -> None:
+    snapshot = Snapshot("Empty", {})
+    assert env.api.parse(env.api.render(snapshot)) == snapshot
+
+
+def test_parse_inverts_render_for_a_file_with_no_declarations(env: Env) -> None:
+    snapshot = Snapshot("Counter", {"Contracts/a.fx": ()})
+    assert env.api.parse(env.api.render(snapshot)) == snapshot
+
+
+def test_render_is_deterministic(env: Env) -> None:
+    snapshot = env.api.current(env.app, "Counter")
+    assert env.api.render(snapshot) == env.api.render(snapshot)
+
+
+# --- check ---------------------------------------------------------------
+
+
+def test_check_without_stored_snapshot_is_not_ok_and_not_stored(env: Env) -> None:
+    check = env.api.check(env.app, "Counter")
+    assert check == ApiCheck(
+        name="Counter",
+        ok=False,
+        stored=False,
+        diff="no snapshot: run `bull api Counter --write`",
+    )
+
+
+def test_check_equal_to_stored_is_ok_with_empty_diff(env: Env) -> None:
+    env.files.texts[env.stored_path] = env.api.render(
+        env.api.current(env.app, "Counter")
+    )
+    assert env.api.check(env.app, "Counter") == ApiCheck("Counter", True, True, "")
+
+
+def test_check_reads_the_stored_snapshot_from_the_api_folder(env: Env) -> None:
+    env.api.check(env.app, "Counter")
+    assert ("read_text", (env.stored_path,)) in env.files.calls
+
+
+def test_check_changed_is_not_ok_but_stored(env: Env) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    check = env.api.check(env.app, "Counter")
+    assert (check.ok, check.stored) == (False, True)
+
+
+def test_check_diff_is_a_unified_diff_from_stored_to_current(env: Env) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    lines = env.api.check(env.app, "Counter").diff.splitlines()
+    assert lines[0].startswith("--- stored")
+    assert lines[1].startswith("+++ current")
+    assert "-pub a.old" in lines
+    assert "+pub a.one" in lines
+
+
+def test_check_names_the_module(env: Env) -> None:
+    assert env.api.check(env.app, "Counter").name == "Counter"
+
+
+# --- write ---------------------------------------------------------------
+
+
+def test_write_without_stored_snapshot_writes_the_rendered_text(env: Env) -> None:
+    path = env.api.write(env.app, "Counter")
+    assert path == env.stored_path
+    assert env.files.texts[env.stored_path] == env.api.render(
+        env.api.current(env.app, "Counter")
+    )
+
+
+def test_write_without_stored_snapshot_needs_no_approval(env: Env) -> None:
+    env.api.write(env.app, "Counter")
+    assert [name for name, _ in env.store.calls] == []
+
+
+def test_write_then_check_is_ok(env: Env) -> None:
+    env.api.write(env.app, "Counter")
+    assert env.api.check(env.app, "Counter").ok
+
+
+def test_write_when_equal_returns_none_and_writes_nothing(env: Env) -> None:
+    env.api.write(env.app, "Counter")
+    env.files.calls.clear()
+    assert env.api.write(env.app, "Counter") is None
+    assert all(name != "write_atomic" for name, _ in env.files.calls)
+
+
+def test_write_changed_without_approval_raises_with_exact_message(env: Env) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    with pytest.raises(ApprovalNeeded) as caught:
+        env.api.write(env.app, "Counter")
+    assert caught.value.message == (
+        'the Counter contract changed; the human must approve (bull status approve Counter "<note>")'
+    )
+
+
+def test_write_refused_leaves_the_stored_snapshot_untouched(env: Env) -> None:
+    old = _old_text(env)
+    env.files.texts[env.stored_path] = old
+    with pytest.raises(ApprovalNeeded):
+        env.api.write(env.app, "Counter")
+    assert env.files.texts[env.stored_path] == old
+
+
+def test_write_changed_with_approved_note_writes_and_records_the_note(
+    env: Env,
+) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    path = env.api.write(env.app, "Counter", approved="adds a function")
+    assert path == env.stored_path
+    assert ("approve", ("Counter", "adds a function")) in env.store.calls
+    assert env.api.check(env.app, "Counter").ok
+
+
+def test_write_changed_with_stored_approval_writes_and_consumes_it(env: Env) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    env.store.approve("Counter", "human ok")
+    path = env.api.write(env.app, "Counter")
+    assert path == env.stored_path
+    assert env.store.status.approvals == ()
+    assert env.api.check(env.app, "Counter").ok
+
+
+def test_write_changed_in_feature_mode_with_listed_change_is_pre_approved(
+    env: Env,
+) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    env.store.start_feature("add-x")
+    _with_contract_change(env, "add-x")
+    path = env.api.write(env.app, "Counter")
+    assert path == env.stored_path
+    assert ("mark_contract_applied", ("Counter",)) in env.store.calls
+
+
+def test_feature_pre_approval_covers_one_write_only(env: Env) -> None:
+    env.store.start_feature("add-x")
+    _with_contract_change(env, "add-x")
+    env.files.texts[env.stored_path] = _old_text(env)
+    env.api.write(env.app, "Counter")
+    env.files.texts[env.stored_path] = _old_text(env)
+    with pytest.raises(ApprovalNeeded):
+        env.api.write(env.app, "Counter")
+
+
+def test_write_changed_in_feature_mode_without_listed_change_is_refused(
+    env: Env,
+) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    env.store.start_feature("add-x")
+    with pytest.raises(ApprovalNeeded):
+        env.api.write(env.app, "Counter")
+
+
+def test_write_changed_in_app_mode_ignores_listed_change(env: Env) -> None:
+    env.files.texts[env.stored_path] = _old_text(env)
+    _with_contract_change(env, "add-x")
+    with pytest.raises(ApprovalNeeded):
+        env.api.write(env.app, "Counter")
+
+
+def test_write_unknown_module_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError):
+        env.api.write(env.app, "Nope")
+
+
+# --- interfaces ----------------------------------------------------------
+
+INTERFACE_TEXT = '{"type": "object"}\n'
+
+
+def _with_interface(
+    env: Env, contract_changes: dict[str, str] | None = None
+) -> InterfaceEntry:
+    entry = InterfaceEntry(
+        name="Wire",
+        file="interfaces/wire.json",
+        format="json-schema",
+        provider=SideRef("app", "Counter"),
+        consumers=(),
+        contract_changes=contract_changes or {},
+    )
+    env.set_memo(replace(env.memo, interfaces=(entry,)))
+    env.files.texts[env.app.root / entry.file] = INTERFACE_TEXT
+    return entry
+
+
+def _interface_stored(env: Env) -> Path:
+    return env.app.api_dir / "interfaces" / "Wire.md"
+
+
+def _old_interface_text(env: Env) -> str:
+    old = Snapshot("Wire", {"interfaces/wire.json": ('{"type": "string"}',)})
+    return env.api.render(old)
+
+
+def test_check_interface_without_stored_snapshot_is_not_stored(env: Env) -> None:
+    _with_interface(env)
+    check = env.api.check_interface(env.app, "Wire")
+    assert (check.name, check.ok, check.stored) == ("Wire", False, False)
+    assert check.diff.startswith("no snapshot")
+
+
+def test_check_interface_equal_after_write_is_ok(env: Env) -> None:
+    _with_interface(env)
+    env.api.write_interface(env.app, "Wire")
+    assert env.api.check_interface(env.app, "Wire") == ApiCheck("Wire", True, True, "")
+
+
+def test_check_interface_reports_diff_when_the_file_changed(env: Env) -> None:
+    _with_interface(env)
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    check = env.api.check_interface(env.app, "Wire")
+    assert (check.ok, check.stored) == (False, True)
+    assert "--- stored" in check.diff
+    assert "+++ current" in check.diff
+
+
+def test_check_interface_unknown_name_raises_bull_error(env: Env) -> None:
+    _with_interface(env)
+    with pytest.raises(BullError) as caught:
+        env.api.check_interface(env.app, "Nope")
+    assert "unknown interface Nope" in caught.value.message
+
+
+def test_write_interface_stores_the_files_text_in_one_fenced_block(
+    env: Env,
+) -> None:
+    _with_interface(env)
+    path = env.api.write_interface(env.app, "Wire")
+    assert path == _interface_stored(env)
+    text = env.files.texts[_interface_stored(env)]
+    assert text.startswith("# Wire contract")
+    assert "## interfaces/wire.json" in text
+    assert text.count("```") == 2
+    assert '{"type": "object"}' in text
+
+
+def test_write_interface_when_equal_returns_none(env: Env) -> None:
+    _with_interface(env)
+    env.api.write_interface(env.app, "Wire")
+    assert env.api.write_interface(env.app, "Wire") is None
+
+
+def test_write_interface_changed_without_approval_is_refused(env: Env) -> None:
+    _with_interface(env)
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    with pytest.raises(ApprovalNeeded) as caught:
+        env.api.write_interface(env.app, "Wire")
+    assert "the Wire contract changed" in caught.value.message
+
+
+def test_write_interface_changed_with_approved_note_writes(env: Env) -> None:
+    _with_interface(env)
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    path = env.api.write_interface(env.app, "Wire", approved="schema update")
+    assert path == _interface_stored(env)
+    assert ("approve", ("Wire", "schema update")) in env.store.calls
+
+
+def test_write_interface_changed_with_stored_approval_writes(env: Env) -> None:
+    _with_interface(env)
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    env.store.approve("Wire", "ok")
+    assert env.api.write_interface(env.app, "Wire") == _interface_stored(env)
+    assert env.store.status.approvals == ()
+
+
+def test_write_interface_listed_feature_change_pre_approves(env: Env) -> None:
+    _with_interface(env, {"add-x": "new field"})
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    env.store.start_feature("add-x")
+    assert env.api.write_interface(env.app, "Wire") == _interface_stored(env)
+    assert ("mark_contract_applied", ("Wire",)) in env.store.calls
+
+
+def test_write_interface_unlisted_feature_change_is_refused(env: Env) -> None:
+    _with_interface(env)
+    env.files.texts[_interface_stored(env)] = _old_interface_text(env)
+    env.store.start_feature("add-x")
+    with pytest.raises(ApprovalNeeded):
+        env.api.write_interface(env.app, "Wire")
+
+
+def test_write_interface_unknown_name_raises_bull_error(env: Env) -> None:
+    with pytest.raises(BullError):
+        env.api.write_interface(env.app, "Nope")
