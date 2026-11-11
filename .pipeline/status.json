@@ -510,7 +510,7 @@
             "passes.py",
             "failed.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-11T09:03:47-08:00",
+  "updatedAt": "2026-11-11T09:08:20-08:00",
   "features": [],
   "activeFeature": null
 }
