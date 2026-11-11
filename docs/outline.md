@@ -1751,11 +1751,11 @@ when `readers.py` defines `detect`.
       not in status → `BullError("branch <b> is for module <m>, which is not in status", "run
       `bull status init-modules` or switch branch")`.
     - Adopting = `status.adoption` set with stage ≤ 5. MODULE, FAST and COVERAGE_REPORT steps get
-      `adopt=True, scope_module=M` only while adopting; ALL and JOURNEYS steps get `adopt` while
-      adopting and never a scope.
+      `adopt=True, scope_module=M` only while adopting; ALL, JOURNEYS and FAILED steps get `adopt`
+      while adopting and never a scope.
     - Step verdicts: exit 0 → pass, else fail; preflight exit 2 → `ABORTED` and nothing more runs
-      (in ALL: no later part either). A setup failure stops that part's remaining steps (ALL goes
-      on with the next part). build_test (and build_test_fast) gives a `TESTS` step and, on a
+      (in ALL: no later part either). A setup failure stops that part's remaining steps, its
+      journeys included (ALL goes on with the next part). build_test (and build_test_fast) gives a `TESTS` step and, on a
       non-zero exit with no failed ids, a `BUILD` fail step first; when it passes, one `BUILD`
       pass then `TESTS`; the `TESTS` step's seconds are the run's, `BUILD` 0. Failed ids
       (`TestRun.failed`) are written with `write_failed` after every build_test and
@@ -1776,8 +1776,9 @@ when `readers.py` defines `detect`.
       ALL, AFTER_MERGE, not `skip_coverage`): `git.is_clean(root)` before the first step and after
       the last, verdict PASS → `passes.record(app, git.head(root, "HEAD"), current branch,
       command, parts run)` with command "gates <M>", "gates --all" or "gates --after-merge
-      <branch>"; notes: dirty → "not recorded: working tree has changes"; failed/aborted → "not
-      recorded: gates failed"; skip_coverage → "not recorded: coverage skipped"; FAST, FAILED,
+      <branch>"; notes, the first that applies: failed/aborted → "not recorded: gates failed";
+      skip_coverage → "not recorded: coverage skipped"; dirty → "not recorded: working tree has
+      changes"; FAST, FAILED,
       COVERAGE_REPORT, JOURNEYS → "not recorded: partial run (<mode value>)" (FAILED with nothing
       to rerun: "no failed tests recorded"; JOURNEYS notes joined with "; ").
     - FAILED: parts in `parts.all` order; a part with ids → one `TESTS` step from rerun_failed
@@ -2358,3 +2359,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-11: adoption reference scan (covered 13, missed 0, contradicts 2, not-in-spec 6, obsolete/out of scope 3) — human: dotfiles stay ignored by `legacy` (spec over v1); `App shell`/`App shell tests` entries ending in `/` cover their folder (v1); detect reports nested git repositories as a fix issue (v1); `stack detect --apply` takes an optional stack name, none → the detected stack (v1); `adopt start` refusals name the problem and fix (v1); a blocked `--apply` writes "blocking issues; nothing applied" to stderr (v1); left out: abandon printing carried-over items (would change the `abandon` contract) — approved by Nicholas Johnson
 - 2026-11-11: adoption coverage triage (missed 4, not-in-spec 2) — human kept and specified both: `stack detect --apply` outside a bull app is refused (`BullError`); a failed `git for-each-ref` in detect raises `GitError`. Missed: abandon's malformed `adopt/main` backlog (`FileFormatError`: bad JSON, no `items`, item without `slug`) and `adopt` subcommands outside an app — approved by Nicholas Johnson
 - 2026-11-11: gates construction (LiveGates collaborators and per-app providers, LiveSteps/fill/step_env, pass-record and failed.txt helpers, step order and skip rules, notes, after-merge skip, JourneyRunner lifecycle, render/JSON, cli flag rules) set in the gates § "Construction" line; journeys are injected into LiveGates as a JourneyRunner (unit 3 may stub it; unit 4 builds it); render's file-marker hint uses the stack comment LiveGates remembers from coverage; internal wiring, no contract change.
+- 2026-11-11: gates unit 3 review — three choices the spec left open set in the gates § Construction: FAILED reruns get the adopt env (no scope) while adopting; a part whose setup failed gets no journeys; the not-recorded note is the first of gates failed → coverage skipped → working tree has changes. Internal behavior, no contract change.
