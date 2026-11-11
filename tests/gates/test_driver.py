@@ -1166,3 +1166,100 @@ def test_coverage_in_the_implicit_part_reads_settings_without_a_part(
     rig.gates.coverage(rig.app, "Counter")
     keys = {k: p for k, p in rig.settings.calls if k.startswith("coverage.")}
     assert keys == {"coverage.exclude": None, "coverage.exclude_extra": None}
+
+
+# --- unit 3 review follow-ups -------------------------------------------
+
+
+def test_render_passes_the_remembered_stack_comment_of_each_covered_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bull.Modules.gates import report as report_module
+
+    rig = make_rig(tmp_path, parts=[("app", make_stack("fixture", comment="//"))])
+    seen: list[dict[str, str]] = []
+
+    def fake_render(run: object, triage: object, comments: dict[str, str]) -> str:
+        seen.append(dict(comments))
+        return "rendered"
+
+    monkeypatch.setattr(report_module, "render", fake_render)
+    run = rig.run(GateMode.MODULE, "Counter")
+    assert rig.gates.render(run) == "rendered"
+    assert seen[0]["Counter"] == "//"
+
+
+def test_render_comment_follows_an_explicit_coverage_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bull.Modules.gates import report as report_module
+
+    rig = make_rig(tmp_path, parts=[("app", make_stack("fixture", comment="--"))])
+    seen: list[dict[str, str]] = []
+
+    def fake_render(run: object, triage: object, comments: dict[str, str]) -> str:
+        seen.append(dict(comments))
+        return ""
+
+    monkeypatch.setattr(report_module, "render", fake_render)
+    report_ = rig.gates.coverage(rig.app, "Counter")
+    run = replace(rig.run(GateMode.FAILED), coverage=(report_,))
+    rig.gates.render(run)
+    assert seen[0]["Counter"] == "--"
+
+
+def test_failed_reruns_get_the_adopt_env_without_a_scope_while_adopting(
+    tmp_path: Path,
+) -> None:
+    rig = make_rig(tmp_path, adoption_stage=3)
+    seed_failed(rig, "app", "t::a\n")
+    rig.run(GateMode.FAILED)
+    (env,) = rig.runner.envs("rerun")
+    assert env["BULL_ADOPT_MODE"] == "1"
+    assert env["BULL_SCOPE_MODULE"] == ""
+
+
+def test_failed_reruns_outside_adoption_are_not_adopt(tmp_path: Path) -> None:
+    rig = make_rig(tmp_path)
+    seed_failed(rig, "app", "t::a\n")
+    rig.run(GateMode.FAILED)
+    (env,) = rig.runner.envs("rerun")
+    assert env["BULL_ADOPT_MODE"] == "0"
+    assert env["BULL_SCOPE_MODULE"] == ""
+
+
+def test_all_gives_a_part_whose_setup_failed_no_journeys_call(
+    tmp_path: Path,
+) -> None:
+    rig = make_rig(
+        tmp_path,
+        parts=[("a", make_stack("astack")), ("b", make_stack("bstack"))],
+        modules=[("A", "a"), ("B", "b")],
+        explicit_parts=True,
+    )
+    rig.runner.set("setup", part="a", code=1)
+    run = rig.run(GateMode.ALL)
+    assert rig.journeys.parts() == ["b"]
+    assert run.verdict is Verdict.FAIL
+
+
+def test_failing_run_with_skipped_coverage_on_a_dirty_tree_notes_gates_failed(
+    tmp_path: Path,
+) -> None:
+    rig = clean_rig(tmp_path)
+    rig.git.clean = False
+    rig.runner.set("lint", code=1)
+    run = rig.run(GateMode.MODULE, "Counter", skip_coverage=True)
+    assert run.recorded is False
+    assert run.note == "not recorded: gates failed"
+
+
+def test_passing_run_with_skipped_coverage_on_a_dirty_tree_notes_coverage_skipped(
+    tmp_path: Path,
+) -> None:
+    rig = clean_rig(tmp_path)
+    rig.git.clean = False
+    run = rig.run(GateMode.MODULE, "Counter", skip_coverage=True)
+    assert run.verdict is Verdict.PASS
+    assert run.recorded is False
+    assert run.note == "not recorded: coverage skipped"
