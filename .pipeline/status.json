@@ -452,7 +452,7 @@
         "status",
         "features"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -460,7 +460,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -471,7 +471,7 @@
             "legacy.py",
             "cli.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-10T01:16:14-08:00",
+  "updatedAt": "2026-11-11T08:55:21-08:00",
   "features": [],
   "activeFeature": null
 }
