@@ -1562,7 +1562,8 @@ when `readers.py` defines `detect`.
     leaving out the submodule paths), sorted POSIX relative paths → fix "nested git repository at
     <path>", "remove its `.git` or vendor its files";
     each clashing branch (`git for-each-ref --format=%(refname:short) refs/heads/module/
-    refs/heads/feature/ refs/heads/adopt/` through `runner`) → fix "branch <name> clashes with
+    refs/heads/feature/ refs/heads/adopt/` through `runner`; a non-zero exit raises `GitError`
+    "git for-each-ref failed: <stderr>", "check that git works in this repository") → fix "branch <name> clashes with
     bull's branch names", "rename or delete it"; each clashing tag (`git.tags` for `module/*`,
     `feature/*`, `adopt/*`) → fix "tag <name> clashes with bull's tag names", "rename or delete
     it"; each `git.active_hooks` entry → note "active git hook <name>", "bull's gates do not run
@@ -1604,7 +1605,8 @@ when `readers.py` defines `detect`.
     `--json` is `{stack, confidence, summary, settings, issues: [{level, item, fix}], blocked}`;
     `--apply [<stack>]` calls `apply` after printing, unless blocked (then it writes "blocking
     issues; nothing applied" to stderr); `--apply` with no name applies the detected stack
-    (`apply(app, report, None)`).
+    (`apply(app, report, None)`); an unblocked `--apply` outside a bull app raises `BullError`
+    "`--apply` needs a bull app here", "run `bull init` in the app's folder, or cd into a bull app".
 - Reference tests: v1-tests/test_adopt_status.py::test_start_needs_a_clean_tree_on_the_trunk, test_finish_waits_for_verify, test_abandon_keeps_the_trunk_and_carries_the_backlog, test_app_shell_tests_are_not_old_tests; v1-tests/test_adopt_detect.py::test_trunk_clashes_hooks_and_dirty_tree, test_submodules_block_and_nested_repos_need_fixing, test_apply_writes_the_detected_settings, test_json_and_blocking_issues
 - Contract: see `docs/api/adoption.md` (generated; do not edit by hand)
 
@@ -2224,3 +2226,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: interfaces depends on settings (its Construction takes the app's `Settings`); added to its Depends line and the build order. settings is already built, so the order is unchanged.
 - 2026-11-10: interfaces coverage triage — human: keep, specify and test the `parts_to_run` guard for a non-string `stack` setting (`BullError` "part <part>: the stack setting is not a name") — approved by Nicholas Johnson
 - 2026-11-11: adoption reference scan (covered 13, missed 0, contradicts 2, not-in-spec 6, obsolete/out of scope 3) — human: dotfiles stay ignored by `legacy` (spec over v1); `App shell`/`App shell tests` entries ending in `/` cover their folder (v1); detect reports nested git repositories as a fix issue (v1); `stack detect --apply` takes an optional stack name, none → the detected stack (v1); `adopt start` refusals name the problem and fix (v1); a blocked `--apply` writes "blocking issues; nothing applied" to stderr (v1); left out: abandon printing carried-over items (would change the `abandon` contract) — approved by Nicholas Johnson
+- 2026-11-11: adoption coverage triage (missed 4, not-in-spec 2) — human kept and specified both: `stack detect --apply` outside a bull app is refused (`BullError`); a failed `git for-each-ref` in detect raises `GitError`. Missed: abandon's malformed `adopt/main` backlog (`FileFormatError`: bad JSON, no `items`, item without `slug`) and `adopt` subcommands outside an app — approved by Nicholas Johnson
