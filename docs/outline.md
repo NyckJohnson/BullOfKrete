@@ -163,7 +163,7 @@ checks file formats (module `formats`) and settings (module `settings`).
 | `bull status usage-check` *json* | OK / PAUSE / UNKNOWN | status (uses `usage`) |
 | `bull feature add "<Title>: <desc>" [--top]`, `import <file> [--section <heading>] [--dry-run]`, `list` *json*, `move <slug> <pos>`, `drop <slug>`, `start [<slug>]`, `plan`, `accept`, `abandon` | Backlog and feature cycle | features |
 | `bull adopt start`, `legacy` *json*, `finish`, `abandon` | Adoption | adoption |
-| `bull stack detect [--apply <stack>]` *json* | Detection report for an existing project | adoption |
+| `bull stack detect [--apply [<stack>]]` *json* | Detection report for an existing project | adoption |
 | `bull gates <M> [--fast\|--coverage-report\|--skip-coverage]`, `--failed`, `--all [--skip-coverage]`, `--after-merge <branch>`, `--journeys` (all *json*) | Gates | gates |
 | `bull coverage <M>` *json* | Triage report from the last full run's data | gates |
 | `bull api <M> [--write [--approved "<note>"]] [--check]`, `bull api --interface <Name> [...]` | Contract snapshots | api |
@@ -1525,7 +1525,8 @@ when `readers.py` defines `detect`.
   ```
 - Behavior spec:
   - detect: runs every stack's `detect` (stacks without one skipped) and picks the highest
-    confidence above 0.5; adds bull's own issues: git submodules (block), branches or tags that
+    confidence above 0.5; adds bull's own issues: git submodules (block), nested git repositories
+    (fix), branches or tags that
     clash with `module/*`, `feature/*`, `adopt/*` (fix), active git hooks (note), dirty tree (fix),
     not the root of its own repo (block). No stack found → issue (block) "no stack recognizes this
     project".
@@ -1535,13 +1536,14 @@ when `readers.py` defines `detect`.
     `adopt/main`.
   - legacy: files in the part's source folder outside `Modules/` and not in the memo's `App shell`
     list; declarations named `Legacy…` from the stack's `legacy_declarations` (if any); test files
-    in the test folder outside module test folders and not in `App shell tests`; files named in any
+    in the test folder outside module test folders and not in `App shell tests` (an `App shell` or
+    `App shell tests` entry ending in `/` covers everything under that folder); files named in any
     module's `Legacy files` or `Legacy tests` that still exist.
   - finish: refused unless the adoption track is at stage 6 and `legacy` is empty (listing what is
     left); then `status.finish_adoption`.
   - abandon: on the trunk; clears the adoption; carries over backlog items queued on `adopt/main`
     (as features.abandon does).
-  - cli: `bull adopt start|legacy|finish|abandon`; `bull stack detect [--apply <stack>] [--json]`
+  - cli: `bull adopt start|legacy|finish|abandon`; `bull stack detect [--apply [<stack>]] [--json]`
     prints the report (issues as `block|fix|note: item — fix`), exit 1 when blocked.
 - Construction (internal; not contracts):
   - adopt.py: `LiveAdoption(files: Files, git: Git, runner: Runner, stacks: StackRegistry, ops:
@@ -1555,6 +1557,10 @@ when `readers.py` defines `detect`.
     not the root of its own repo (`git.toplevel(root) != root`, incl. not a repo) → block
     "not the root of its own git repository", "run bull from the repository root, or `git init`";
     each submodule → block "git submodule <path>", "remove the submodule or vendor its files";
+    each nested git repository (a folder below `root` holding a `.git` file or folder, found by
+    walking the tree without entering `.git` folders, `__pycache__` or a found nested repo, and
+    leaving out the submodule paths), sorted POSIX relative paths → fix "nested git repository at
+    <path>", "remove its `.git` or vendor its files";
     each clashing branch (`git for-each-ref --format=%(refname:short) refs/heads/module/
     refs/heads/feature/ refs/heads/adopt/` through `runner`) → fix "branch <name> clashes with
     bull's branch names", "rename or delete it"; each clashing tag (`git.tags` for `module/*`,
@@ -1568,7 +1574,10 @@ when `readers.py` defines `detect`.
     name)`; then, only when that name is `report.stack`, each `report.detection.settings` entry
     via `settings(app).set(key, value, Layer.APP, None)` in mapping order. No commit.
   - start: trunk is `refs(app).trunk()`; refused (`BullError`) when not on it, the tree is not
-    clean, or `store(app).load()` has any module; then `start_adoption`, `git.commit_all(root,
+    clean, or `store(app).load()` has any module, checked in that order, each message naming the
+    problem and its fix: "adopt start runs on the trunk <trunk>; you are on <branch>" with fix
+    "git switch <trunk>"; "adopt start needs a clean tree" with fix "commit or stash your
+    changes"; "this app already has modules; adoption is for apps built outside bull"; then `start_adoption`, `git.commit_all(root,
     "chore: start adoption")`, `git.create_branch(root, "adopt/main", trunk, switch=True)`.
   - legacy: the app's one part (`parts.get(app, None)`); paths relative to `app.root`, POSIX,
     sorted, no duplicates. `files`: under `part.source_dir`, outside `Modules/`, not in
@@ -1593,7 +1602,9 @@ when `readers.py` defines `detect`.
     line per entry or "Nothing left to replace."; `--json` prints the four lists. `stack detect`
     prints `stack: <name> (<confidence>) — <summary>` or `stack: none`, then one issue line each;
     `--json` is `{stack, confidence, summary, settings, issues: [{level, item, fix}], blocked}`;
-    `--apply <stack>` calls `apply` after printing, unless blocked.
+    `--apply [<stack>]` calls `apply` after printing, unless blocked (then it writes "blocking
+    issues; nothing applied" to stderr); `--apply` with no name applies the detected stack
+    (`apply(app, report, None)`).
 - Reference tests: v1-tests/test_adopt_status.py::test_start_needs_a_clean_tree_on_the_trunk, test_finish_waits_for_verify, test_abandon_keeps_the_trunk_and_carries_the_backlog, test_app_shell_tests_are_not_old_tests; v1-tests/test_adopt_detect.py::test_trunk_clashes_hooks_and_dirty_tree, test_submodules_block_and_nested_repos_need_fixing, test_apply_writes_the_detected_settings, test_json_and_blocking_issues
 - Contract: see `docs/api/adoption.md` (generated; do not edit by hand)
 
@@ -2212,3 +2223,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: adoption construction (LiveAdoption collaborators, issue texts and order, apply via `select` + `Settings.set`, legacy path rules, abandon's backlog carry-over from `adopt/main`, cli output; `stack detect` registered through `register_detect` because stacks.cli owns `stack`) set in the adoption § "Construction" line; adoption now depends on settings (for `apply`); branch-clash listing goes through `Runner` because `Git` has no branch listing; internal wiring, no contract change.
 - 2026-11-10: interfaces depends on settings (its Construction takes the app's `Settings`); added to its Depends line and the build order. settings is already built, so the order is unchanged.
 - 2026-11-10: interfaces coverage triage — human: keep, specify and test the `parts_to_run` guard for a non-string `stack` setting (`BullError` "part <part>: the stack setting is not a name") — approved by Nicholas Johnson
+- 2026-11-11: adoption reference scan (covered 13, missed 0, contradicts 2, not-in-spec 6, obsolete/out of scope 3) — human: dotfiles stay ignored by `legacy` (spec over v1); `App shell`/`App shell tests` entries ending in `/` cover their folder (v1); detect reports nested git repositories as a fix issue (v1); `stack detect --apply` takes an optional stack name, none → the detected stack (v1); `adopt start` refusals name the problem and fix (v1); a blocked `--apply` writes "blocking issues; nothing applied" to stderr (v1); left out: abandon printing carried-over items (would change the `abandon` contract) — approved by Nicholas Johnson
