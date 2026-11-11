@@ -343,6 +343,42 @@ def test_apply_is_skipped_when_the_report_is_blocked(rig: Rig) -> None:
     assert "block: git submodule vendor/lib" in out
 
 
-def test_apply_needs_a_stack_name(rig: Rig) -> None:
-    with pytest.raises(SystemExit):
-        rig.parser.parse_args(["stack", "detect", "--apply"])
+def test_apply_without_a_name_applies_the_detected_stack(rig: Rig) -> None:
+    code, _ = rig.run("stack", "detect", "--apply")
+    assert code == 0
+    assert rig.adoption.calls == [
+        ("detect", (rig.layouts.found.root,)),  # type: ignore[union-attr]
+        ("apply", (rig.layouts.found, rig.adoption.report, None)),
+    ]
+
+
+def test_apply_without_a_name_still_prints_the_report(rig: Rig) -> None:
+    _, out = rig.run("stack", "detect", "--apply")
+    assert out.splitlines()[0].startswith("stack: fixture (")
+
+
+def test_blocked_apply_says_so_on_stderr(
+    rig: Rig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.adoption.report = BLOCKING
+    code, _ = rig.run("stack", "detect", "--apply", "fixture")
+    assert code == 1
+    assert "blocking issues; nothing applied" in capsys.readouterr().err
+
+
+def test_blocked_apply_without_a_name_does_not_apply(
+    rig: Rig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.adoption.report = BLOCKING
+    code, out = rig.run("stack", "detect", "--apply")
+    assert code == 1
+    assert "apply" not in rig.names()
+    assert "blocking issues; nothing applied" in capsys.readouterr().err
+    assert "blocking issues" not in out
+
+
+def test_unblocked_apply_writes_nothing_to_stderr(
+    rig: Rig, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rig.run("stack", "detect", "--apply")
+    assert capsys.readouterr().err == ""

@@ -314,6 +314,107 @@ def test_detect_blocks_on_each_git_submodule(rig: Rig) -> None:
     assert report.blocked
 
 
+def _nested(rig: Rig, *relative: str, as_file: tuple[str, ...] = ()) -> None:
+    for rel in relative:
+        (rig.root / rel / ".git").mkdir(parents=True)
+    for rel in as_file:
+        (rig.root / rel).mkdir(parents=True, exist_ok=True)
+        (rig.root / rel / ".git").write_text("gitdir: ../elsewhere\n")
+
+
+NESTED_FIX = "remove its `.git` or vendor its files"
+
+
+def test_detect_reports_each_nested_repo_in_sorted_posix_order(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "zeta", "alpha/inner")
+    report = rig.adoption.detect(rig.root)
+    assert report.issues == (
+        Issue(IssueLevel.FIX, "nested git repository at alpha/inner", NESTED_FIX),
+        Issue(IssueLevel.FIX, "nested git repository at zeta", NESTED_FIX),
+    )
+    assert not report.blocked
+
+
+def test_detect_reports_a_nested_repo_whose_git_is_a_file(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, as_file=("worktree",))
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "nested git repository at worktree"
+    ]
+
+
+def test_detect_does_not_report_the_root_itself_as_nested(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    (rig.root / ".git").mkdir()
+    assert rig.adoption.detect(rig.root).issues == ()
+
+
+def test_detect_does_not_descend_into_a_nested_repo(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "outer", "outer/inner")
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "nested git repository at outer"
+    ]
+
+
+def test_detect_does_not_look_inside_git_folders(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    (rig.root / ".git" / "modules" / "sub").mkdir(parents=True)
+    (rig.root / ".git" / "modules" / "sub" / ".git").mkdir()
+    assert rig.adoption.detect(rig.root).issues == ()
+
+
+def test_detect_does_not_look_inside_pycache_folders(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "pkg/__pycache__/odd")
+    assert rig.adoption.detect(rig.root).issues == ()
+
+
+def test_detect_finds_nested_repos_below_ordinary_folders(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "a/b/c")
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "nested git repository at a/b/c"
+    ]
+
+
+def test_detect_does_not_report_a_submodule_path_again(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "vendor/lib", "other")
+    rig.git.submodule_paths = ["vendor/lib"]
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "git submodule vendor/lib",
+        "nested git repository at other",
+    ]
+
+
+def test_nested_repo_issues_come_after_submodules_and_before_branches(
+    rig: Rig,
+) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "inner")
+    rig.git.submodule_paths = ["vendor/lib"]
+    rig.branches("module/A")
+    rig.git.tag_names = ["module/B"]
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "git submodule vendor/lib",
+        "nested git repository at inner",
+        "branch module/A clashes with bull's branch names",
+        "tag module/B clashes with bull's tag names",
+    ]
+
+
+def test_nested_repos_are_not_reported_when_not_the_repo_root(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    _nested(rig, "inner")
+    rig.git.top_is_root = False
+    rig.git.top = None
+    assert [i.item for i in rig.adoption.detect(rig.root).issues] == [
+        "not the root of its own git repository"
+    ]
+
+
 def test_detect_lists_clashing_branches_through_for_each_ref(rig: Rig) -> None:
     rig.add_stack("alpha", _detection(0.9))
     rig.branches("module/Counter", "feature/x/main", "adopt/main")

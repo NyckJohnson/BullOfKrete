@@ -159,6 +159,39 @@ def test_legacy_ignores_files_outside_the_source_and_test_folders(rig: Rig) -> N
     assert left.tests == ()
 
 
+def test_legacy_app_shell_folder_entry_excludes_everything_under_it(rig: Rig) -> None:
+    _touch(
+        rig.root,
+        "src/fx/shell/app.fx",
+        "src/fx/shell/deep/more.fx",
+        "src/fx/shellfish.fx",
+        "src/fx/old.fx",
+    )
+    rig.shell(files=("src/fx/shell/",))
+    assert rig.legacy().files == ("src/fx/old.fx", "src/fx/shellfish.fx")
+
+
+def test_legacy_app_shell_folder_entry_does_not_exclude_tests(rig: Rig) -> None:
+    _touch(rig.root, "tests/shell/a.test")
+    rig.shell(files=("tests/shell/",))
+    assert rig.legacy().tests == ("tests/shell/a.test",)
+
+
+def test_legacy_app_shell_folder_entry_can_cover_the_whole_source_folder(
+    rig: Rig,
+) -> None:
+    _touch(rig.root, "src/fx/a.fx", "src/fx/b/c.fx")
+    rig.shell(files=("src/fx/",))
+    assert rig.legacy().files == ()
+
+
+def test_legacy_ignores_dotfiles_even_under_other_folders(rig: Rig) -> None:
+    _touch(rig.root, "src/fx/sub/.keep", "src/fx/sub/real.fx", "tests/sub/.keep")
+    left = rig.legacy()
+    assert left.files == ("src/fx/sub/real.fx",)
+    assert left.tests == ()
+
+
 # --- declarations -----------------------------------------------------------------------------
 
 
@@ -211,6 +244,28 @@ def test_legacy_excludes_tests_named_in_app_shell_tests(rig: Rig) -> None:
     _touch(rig.root, "tests/conftest.test", "tests/old.test")
     rig.shell(tests=("tests/conftest.test",))
     assert rig.legacy().tests == ("tests/old.test",)
+
+
+def test_legacy_app_shell_tests_folder_entry_excludes_everything_under_it(
+    rig: Rig,
+) -> None:
+    _touch(
+        rig.root,
+        "tests/support/helper.test",
+        "tests/support/deep/more.test",
+        "tests/supports.test",
+        "tests/old.test",
+    )
+    rig.shell(tests=("tests/support/",))
+    assert rig.legacy().tests == ("tests/old.test", "tests/supports.test")
+
+
+def test_legacy_app_shell_tests_folder_entry_does_not_exclude_source_files(
+    rig: Rig,
+) -> None:
+    _touch(rig.root, "src/fx/shell/a.fx")
+    rig.shell(tests=("src/fx/shell/",))
+    assert rig.legacy().files == ("src/fx/shell/a.fx",)
 
 
 def test_legacy_app_shell_does_not_exclude_tests(rig: Rig) -> None:

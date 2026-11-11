@@ -261,6 +261,67 @@ def test_start_refuses_an_app_the_pipeline_already_built(rig: Rig) -> None:
     _assert_nothing_started(rig)
 
 
+def test_start_off_the_trunk_names_the_problem_and_the_fix(rig: Rig) -> None:
+    rig.git.branch = "feature/x/main"
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert raised.value.message == (
+        "adopt start runs on the trunk main; you are on feature/x/main"
+    )
+    assert raised.value.fix == "git switch main"
+
+
+def test_start_off_a_configured_trunk_names_that_trunk(rig: Rig) -> None:
+    rig.refs = MockRefs(trunk="develop")
+    rig.git.branch = "main"
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert (
+        raised.value.message == "adopt start runs on the trunk develop; you are on main"
+    )
+    assert raised.value.fix == "git switch develop"
+
+
+def test_start_with_a_dirty_tree_names_the_problem_and_the_fix(rig: Rig) -> None:
+    rig.git.clean = False
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert raised.value.message == "adopt start needs a clean tree"
+    assert raised.value.fix == "commit or stash your changes"
+
+
+def test_start_with_modules_names_the_problem(rig: Rig) -> None:
+    from bull.Modules.status.mocks import sample_status
+
+    rig.store = MockStatusStore(sample_status())
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert raised.value.message == (
+        "this app already has modules; adoption is for apps built outside bull"
+    )
+
+
+def test_start_checks_the_trunk_before_the_tree_and_the_modules(rig: Rig) -> None:
+    from bull.Modules.status.mocks import sample_status
+
+    rig.git.branch = "other"
+    rig.git.clean = False
+    rig.store = MockStatusStore(sample_status())
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert raised.value.message.startswith("adopt start runs on the trunk")
+
+
+def test_start_checks_the_tree_before_the_modules(rig: Rig) -> None:
+    from bull.Modules.status.mocks import sample_status
+
+    rig.git.clean = False
+    rig.store = MockStatusStore(sample_status())
+    with pytest.raises(BullError) as raised:
+        rig.adoption.start(rig.layout)
+    assert raised.value.message == "adopt start needs a clean tree"
+
+
 def test_start_accepts_a_status_with_no_modules(rig: Rig) -> None:
     rig.store = MockStatusStore(replace(_empty_status(), app=Track(2, ("setup",))))
     rig.adoption.start(rig.layout)
