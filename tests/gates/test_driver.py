@@ -53,6 +53,7 @@ def two_parts(tmp_path: Path, **kwargs: object) -> Rig:
 
 def test_module_runs_in_its_own_part_folder(tmp_path: Path) -> None:
     rig = two_parts(tmp_path)
+    rig.triage.result = CoverageReport("Page", {}, (), (), ())
     run = rig.run(GateMode.MODULE, "Page")
     assert run.verdict is Verdict.PASS
     assert {cwd for _, cwd, _ in rig.runner.calls} == {tmp_path / "web"}
@@ -222,6 +223,7 @@ def test_module_branch_for_a_module_not_in_status_is_refused(
 
 def test_module_branch_for_a_module_in_status_runs(tmp_path: Path) -> None:
     rig = make_rig(tmp_path)
+    rig.triage.result = CoverageReport("Counter", {}, (), (), ())
     rig.git.branch = "module/Counter"
     assert rig.run(GateMode.MODULE, "Counter").verdict is Verdict.PASS
 
@@ -300,6 +302,7 @@ def test_all_outside_adoption_does_not_adopt(tmp_path: Path, stage: int | None) 
 
 def test_module_mode_step_order(tmp_path: Path) -> None:
     rig = make_rig(tmp_path)
+    rig.triage.result = CoverageReport("Counter", {}, (), (), ())
     run = rig.run(GateMode.MODULE, "Counter")
     assert shape(run) == MODULE_STEPS
     assert rig.runner.steps() == ["preflight", "setup", "build-test", "lint"]
