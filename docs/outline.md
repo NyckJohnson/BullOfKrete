@@ -1672,7 +1672,8 @@ when `readers.py` defines `detect`.
     empties it.
   - FAST: preflight, build_test_fast(M), lint, api; never coverage; never records.
   - FAILED: for each part with ids in `failed.txt`, rerun_failed with them (tests_run = the number
-    of ids); nothing to rerun → pass with note "no failed tests recorded"; never records.
+    of ids); nothing to rerun → fail `tests`, label "no failed tests recorded; run `bull gates <M> --fast`" (no step
+    runs); never records.
   - COVERAGE_REPORT: as MODULE but stops after coverage and prints the report; never records.
   - ALL: per part in name order: preflight, setup, build_test once, then for each of the part's
     modules in build order lint, api, coverage, interface; then interface snapshots
@@ -1780,7 +1781,8 @@ when `readers.py` defines `detect`.
       skip_coverage → "not recorded: coverage skipped"; dirty → "not recorded: working tree has
       changes"; FAST, FAILED,
       COVERAGE_REPORT, JOURNEYS → "not recorded: partial run (<mode value>)" (FAILED with nothing
-      to rerun: "no failed tests recorded"; JOURNEYS notes joined with "; ").
+      to rerun: verdict FAIL, one `TESTS` fail step (part "", module None, seconds 0) with that label, note
+      "no failed tests recorded"; JOURNEYS notes joined with "; ").
     - FAILED: parts in `parts.all` order; a part with ids → one `TESTS` step from rerun_failed
       (`fill(..., failed_ids=ids)`); pass → `failed.txt` emptied; fail → replaced by
       `test_results(results).failed` when that returns ids, else kept; tests_run = number of ids.
@@ -2360,3 +2362,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-11: adoption coverage triage (missed 4, not-in-spec 2) — human kept and specified both: `stack detect --apply` outside a bull app is refused (`BullError`); a failed `git for-each-ref` in detect raises `GitError`. Missed: abandon's malformed `adopt/main` backlog (`FileFormatError`: bad JSON, no `items`, item without `slug`) and `adopt` subcommands outside an app — approved by Nicholas Johnson
 - 2026-11-11: gates construction (LiveGates collaborators and per-app providers, LiveSteps/fill/step_env, pass-record and failed.txt helpers, step order and skip rules, notes, after-merge skip, JourneyRunner lifecycle, render/JSON, cli flag rules) set in the gates § "Construction" line; journeys are injected into LiveGates as a JourneyRunner (unit 3 may stub it; unit 4 builds it); render's file-marker hint uses the stack comment LiveGates remembers from coverage; internal wiring, no contract change.
 - 2026-11-11: gates unit 3 review — three choices the spec left open set in the gates § Construction: FAILED reruns get the adopt env (no scope) while adopting; a part whose setup failed gets no journeys; the not-recorded note is the first of gates failed → coverage skipped → working tree has changes. Internal behavior, no contract change.
+- 2026-11-11: gates reference scan (covered 20, missed 0, contradicts 2, not-in-spec 0, obsolete 1) — human: `gates --after-merge` keeps the spec (skip when only bookkeeping differs from the gated branch head, even if the base was never gated; v1 also required a gated base); `gates --failed` with nothing recorded fails (v1) with "no failed tests recorded; run `bull gates <M> --fast`", since a build failure leaves the list empty; unreadable test results with exit 0 still fail "no tests ran" (spec, per 2026-11-07); v1's after-merge reason lines and "pass now" text left out — approved by Nicholas Johnson
