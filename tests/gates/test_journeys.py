@@ -304,8 +304,9 @@ def test_not_ready_provider_is_still_stopped_and_earlier_ones_too(
 def test_journeys_get_a_url_per_running_provider(tmp_path: Path) -> None:
     h = _Harness(tmp_path)
     h.run([h.provider("web"), h.provider("api")])
-    env = h.runner.calls[-1][2]
-    assert h.runner.calls[-1][0] == ("PY", "journeys")
+    journeys_calls = [c for c in h.runner.calls if c[0] == ("PY", "journeys")]
+    assert len(journeys_calls) == 1
+    env = journeys_calls[0][2]
     assert env is not None
     assert env["BULL_URL_WEB"] == "http://127.0.0.1:5001"
     assert env["BULL_URL_API"] == "http://127.0.0.1:5002"
