@@ -382,3 +382,33 @@ def test_unblocked_apply_writes_nothing_to_stderr(
 ) -> None:
     rig.run("stack", "detect", "--apply")
     assert capsys.readouterr().err == ""
+
+
+# --- outside a bull app -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("leaf", ["start", "legacy", "finish", "abandon"])
+def test_adopt_leaf_outside_a_bull_app_is_refused(rig: Rig, leaf: str) -> None:
+    rig.layouts.found = None
+    with pytest.raises(BullError) as raised:
+        rig.run("adopt", leaf)
+    assert raised.value.message == "not a bull app (no .bull/ folder here or above)"
+    assert rig.adoption.calls == []
+
+
+def test_unblocked_apply_outside_a_bull_app_is_refused(rig: Rig) -> None:
+    rig.layouts.found = None
+    with pytest.raises(BullError) as raised:
+        rig.run("stack", "detect", "--apply")
+    assert raised.value.message == "`--apply` needs a bull app here"
+    assert raised.value.fix == (
+        "run `bull init` in the app's folder, or cd into a bull app"
+    )
+    assert "apply" not in rig.names()
+
+
+def test_unblocked_apply_with_a_name_outside_a_bull_app_is_refused(rig: Rig) -> None:
+    rig.layouts.found = None
+    with pytest.raises(BullError):
+        rig.run("stack", "detect", "--apply", "fixture")
+    assert "apply" not in rig.names()

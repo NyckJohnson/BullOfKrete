@@ -15,7 +15,7 @@ import pytest
 
 from bull.Modules.adoption.adopt import LiveAdoption
 from bull.Modules.adoption.Contracts import DetectionReport
-from bull.Modules.foundation.Contracts import AppLayout, BullError
+from bull.Modules.foundation.Contracts import AppLayout, BullError, FileFormatError
 from bull.Modules.foundation.mocks import MockFiles, MockRunner, sample_layout
 from bull.Modules.gitrepo.mocks import MockGit
 from bull.Modules.memo.mocks import MockMemoReader
@@ -554,3 +554,41 @@ def test_abandon_does_not_switch_branches(tmp_path: Path) -> None:
     rig.adoption.abandon(rig.layout)
     assert rig.git.branch == "main"
     assert "switch" not in rig.git_names()
+
+
+def _abandon_refused_for_backlog(
+    tmp_path: Path, text: str
+) -> tuple[Rig, FileFormatError]:
+    rig = _abandonable(tmp_path)
+    rig.files.texts[rig.layout.backlog_file] = _backlog_text([_raw("on-trunk")])
+    before = rig.files.texts[rig.layout.backlog_file]
+    rig.git.files_at[BACKLOG_ON_BRANCH] = text
+    with pytest.raises(FileFormatError) as raised:
+        rig.adoption.abandon(rig.layout)
+    assert rig.files.texts[rig.layout.backlog_file] == before
+    assert not [name for name, _ in rig.files.calls if name == "write_json"]
+    assert "abandon_adoption" not in rig.store_names()
+    assert rig.commits() == []
+    return rig, raised.value
+
+
+def test_abandon_refuses_an_adopt_main_backlog_that_is_not_json(tmp_path: Path) -> None:
+    _abandon_refused_for_backlog(tmp_path, "{not json")
+
+
+def test_abandon_refuses_a_backlog_without_an_items_list(tmp_path: Path) -> None:
+    _, error = _abandon_refused_for_backlog(tmp_path, json.dumps({"format": 1}))
+    assert "not a backlog" in str(error)
+
+
+def test_abandon_refuses_a_backlog_whose_items_is_not_a_list(tmp_path: Path) -> None:
+    _, error = _abandon_refused_for_backlog(
+        tmp_path, json.dumps({"format": 1, "items": "nope"})
+    )
+    assert "not a backlog" in str(error)
+
+
+def test_abandon_refuses_a_backlog_item_without_a_string_slug(tmp_path: Path) -> None:
+    text = json.dumps({"format": 1, "items": [{"slug": 5, "title": "x"}]})
+    _, error = _abandon_refused_for_backlog(tmp_path, text)
+    assert "slug" in str(error)

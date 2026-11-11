@@ -15,6 +15,7 @@ import pytest
 from bull.Modules.adoption.adopt import LiveAdoption
 from bull.Modules.foundation.Contracts import RunResult
 from bull.Modules.foundation.mocks import MockFiles, MockRunner
+from bull.Modules.gitrepo.Contracts import GitError
 from bull.Modules.gitrepo.mocks import MockGit
 from bull.Modules.memo.mocks import MockMemoReader
 from bull.Modules.parts.mocks import MockParts, sample_part
@@ -574,3 +575,14 @@ def test_detect_changes_nothing(rig: Rig) -> None:
     assert not {"commit_all", "create_branch", "switch", "tag"} & set(
         _names(rig.git.calls)
     )
+
+
+def test_detect_raises_a_git_error_when_for_each_ref_fails(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    rig.runner.results["git"] = RunResult(
+        FOR_EACH_REF, 128, "", "fatal: bad repo", 0.01
+    )
+    with pytest.raises(GitError) as raised:
+        rig.adoption.detect(rig.root)
+    assert raised.value.message == "git for-each-ref failed: fatal: bad repo"
+    assert raised.value.fix == "check that git works in this repository"
