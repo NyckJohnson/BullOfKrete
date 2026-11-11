@@ -84,18 +84,17 @@ class LiveAdoption(Adoption):
         branch = self._git.current_branch(root)
         if branch != trunk:
             raise BullError(
-                f"adoption starts on the trunk `{trunk}`, not `{branch}`",
-                f"run `git switch {trunk}` first",
+                f"adopt start runs on the trunk {trunk}; you are on {branch}",
+                f"git switch {trunk}",
             )
         if not self._git.is_clean(root):
             raise BullError(
-                "the working tree has uncommitted changes", "commit or stash them"
+                "adopt start needs a clean tree", "commit or stash your changes"
             )
         store = self._store(app)
         if store.load().modules:
             raise BullError(
-                "this app already has modules: the pipeline built it",
-                "adoption is only for apps built outside the pipeline",
+                "this app already has modules; adoption is for apps built outside bull"
             )
         store.start_adoption()
         self._git.commit_all(root, "chore: start adoption")

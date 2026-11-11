@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from bull.Modules.adoption.Contracts import DetectionReport
@@ -10,6 +11,7 @@ from bull.Modules.gitrepo.Contracts import Git, GitError
 from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel, StackRegistry
 
 _MIN_CONFIDENCE = 0.5
+_SKIPPED_FOLDERS = frozenset({".git", "__pycache__"})
 _PREFIXES = ("module", "feature", "adopt")
 _FOR_EACH_REF = (
     "git",
@@ -72,14 +74,23 @@ def _best_stack(
 def _repo_issues(root: Path, git: Git, runner: Runner) -> list[Issue]:
     if git.toplevel(root) != root:
         return [_NOT_ROOT]
+    submodules = git.submodules(root)
     issues = [
         Issue(
             IssueLevel.BLOCK,
             f"git submodule {path}",
             "remove the submodule or vendor its files",
         )
-        for path in git.submodules(root)
+        for path in submodules
     ]
+    issues.extend(
+        Issue(
+            IssueLevel.FIX,
+            f"nested git repository at {path}",
+            "remove its `.git` or vendor its files",
+        )
+        for path in _nested_repos(root, submodules)
+    )
     issues.extend(
         Issue(
             IssueLevel.FIX,
@@ -116,3 +127,28 @@ def _clashing_branches(root: Path, runner: Runner) -> list[str]:
             "check that git works in this repository",
         )
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _nested_repos(root: Path, submodules: list[str]) -> list[str]:
+    """Folders below `root` holding a `.git` file or folder, as sorted POSIX relative paths.
+
+    The walk never enters `.git` or `__pycache__` folders, a nested repo it has found, or a
+    submodule; submodule paths are not reported (they have their own issue).
+    """
+    skipped = {Path(path).as_posix() for path in submodules}
+    found: list[str] = []
+    for dirpath, dirnames, _ in os.walk(root):
+        kept: list[str] = []
+        for name in dirnames:
+            if name in _SKIPPED_FOLDERS:
+                continue
+            folder = Path(dirpath) / name
+            relative = folder.relative_to(root).as_posix()
+            if relative in skipped:
+                continue
+            if (folder / ".git").exists():
+                found.append(relative)
+                continue
+            kept.append(name)
+        dirnames[:] = kept
+    return sorted(found)

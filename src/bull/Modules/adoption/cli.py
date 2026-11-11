@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
@@ -18,6 +19,8 @@ from bull.Modules.foundation.Contracts import AppLayout, BullError, Layouts
 
 _Run = Callable[[argparse.Namespace, TextIO], int]
 _Provider = Callable[[], Adoption]
+# `--apply` absent: distinct from `--apply` with no name, which parses as None.
+_NOT_APPLYING = object()
 
 
 def register(
@@ -89,9 +92,12 @@ def register_detect(
             out.write(json.dumps(_report_json(report), indent=2) + "\n")
         else:
             out.writelines(f"{line}\n" for line in _report_lines(report))
+        applying = args.apply is not _NOT_APPLYING
         if report.blocked:
+            if applying:
+                sys.stderr.write("blocking issues; nothing applied\n")
             return 1
-        if args.apply is not None:
+        if applying:
             if app is None:
                 raise BullError(
                     "`--apply` needs a bull app here",
@@ -104,7 +110,13 @@ def register_detect(
         "detect", help="Detect this project's stack and what blocks adopting it"
     )
     detect.add_argument(
-        "--apply", metavar="STACK", help="Select STACK (and its detected settings)"
+        "--apply",
+        nargs="?",
+        const=None,
+        default=_NOT_APPLYING,
+        metavar="STACK",
+        help="Select STACK, or the detected stack when none is named (and its detected "
+        "settings)",
     )
     detect.add_argument("--json", action="store_true", help="Print JSON")
     detect.set_defaults(run=run)

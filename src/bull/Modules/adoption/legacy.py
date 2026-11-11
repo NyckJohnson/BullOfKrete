@@ -97,9 +97,15 @@ def _walk(base: Path) -> Iterator[Path]:
 def _paths(
     app: AppLayout, found: Iterable[Path], exclude: tuple[str, ...]
 ) -> tuple[str, ...]:
-    excluded = {_posix(e) for e in exclude}
+    """`found` relative to `app.root`, less `exclude`.
+
+    An `exclude` entry ending in `/` names a folder and covers everything under it; any other
+    entry names one file.
+    """
+    exact = {_posix(e) for e in exclude if not e.endswith("/")}
+    folders = tuple(_posix(e) + "/" for e in exclude if e.endswith("/"))
     relative = {p.relative_to(app.root).as_posix() for p in found}
-    return tuple(sorted(relative - excluded))
+    return tuple(sorted(r for r in relative - exact if not r.startswith(folders)))
 
 
 def _posix(entry: str) -> str:
