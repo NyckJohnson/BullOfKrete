@@ -1672,8 +1672,8 @@ when `readers.py` defines `detect`.
     empties it.
   - FAST: preflight, build_test_fast(M), lint, api; never coverage; never records.
   - FAILED: for each part with ids in `failed.txt`, rerun_failed with them (tests_run = the number
-    of ids); nothing to rerun → fail `tests`, label "no failed tests recorded; run `bull gates <M> --fast`" (no step
-    runs); never records.
+    of ids); nothing to rerun → fail `tests`, label "no failed tests recorded; run `bull gates <M> --fast`" (nothing
+    is rerun); never records.
   - COVERAGE_REPORT: as MODULE but stops after coverage and prints the report; never records.
   - ALL: per part in name order: preflight, setup, build_test once, then for each of the part's
     modules in build order lint, api, coverage, interface; then interface snapshots
