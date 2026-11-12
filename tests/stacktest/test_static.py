@@ -169,6 +169,17 @@ def test_missing_fixture_folder_is_reported(tmp_path: Path) -> None:
     assert "fixture" in report.problems[0]
 
 
+def test_empty_fixture_folder_is_exactly_one_problem_naming_fixture(
+    tmp_path: Path,
+) -> None:
+    home = _build(tmp_path)
+    (home / "fixture" / "a.fx").unlink()
+    report = _check(home)
+    assert len(report.problems) == 1
+    assert "fixture" in report.problems[0]
+    assert report.ok is False
+
+
 def test_fixture_that_is_a_file_is_reported(tmp_path: Path) -> None:
     home = _build(tmp_path)
     (home / "fixture" / "a.fx").unlink()
@@ -416,5 +427,5 @@ def test_several_misses_give_several_problems(tmp_path: Path) -> None:
 
 def test_static_needs_no_toolchain_or_fixture_content(tmp_path: Path) -> None:
     home = _build(tmp_path)
-    (home / "fixture" / "a.fx").unlink()
+    (home / "fixture" / "a.fx").write_text("not valid anything \x00 {{{\n")
     assert _check(home).ok is True

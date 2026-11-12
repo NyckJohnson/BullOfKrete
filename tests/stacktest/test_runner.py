@@ -606,6 +606,32 @@ def test_run_marks_every_case_not_run_when_a_required_tool_is_missing(
     assert not report.ok
 
 
+def test_run_not_run_reason_carries_the_requirements_hint(h: Harness) -> None:
+    stack = h.stack([case("a"), case("b")], requires=("no-such-tool-for-bull-tests",))
+    stack = replace(
+        stack,
+        manifest=replace(
+            stack.manifest,
+            requires=(Requirement("no-such-tool-for-bull-tests", "brew install zork"),),
+        ),
+    )
+    report, _ = h.run(stack)
+    assert len(report.cases) == 2
+    for result in report.cases:
+        assert result.verdict is CaseVerdict.NOT_RUN
+        assert "missing no-such-tool-for-bull-tests" in _text(result)
+        assert "brew install zork" in _text(result)
+    text = h.tester.render(report)
+    assert "missing no-such-tool-for-bull-tests" in text
+    assert "brew install zork" in text
+
+
+def test_run_with_an_unknown_case_id_raises_stack_error(h: Harness) -> None:
+    stack = h.stack([case("a"), case("b")])
+    with pytest.raises(StackError):
+        h.tester.run(stack, case="no-such-id")
+
+
 def test_run_marks_every_case_not_run_when_a_layout_fixture_file_is_missing(
     h: Harness,
 ) -> None:
@@ -689,6 +715,34 @@ def test_render_shows_every_problem(h: Harness) -> None:
     )
     assert "rules.md: no `## common`" in text
     assert "setup.md missing" in text
+
+
+def _last_line(text: str) -> str:
+    return text.rstrip("\n").splitlines()[-1]
+
+
+def test_render_ends_with_a_summary_line_counting_a_mixed_report(h: Harness) -> None:
+    text = h.tester.render(
+        _report(
+            CaseResult("a", CaseVerdict.PASS, "pass", "pass"),
+            CaseResult("b", CaseVerdict.PASS, "pass", "pass"),
+            CaseResult("c", CaseVerdict.PASS, "pass", "pass"),
+            CaseResult("d", CaseVerdict.FAIL, "pass", "fail"),
+            CaseResult("e", CaseVerdict.FAIL, "pass", "fail"),
+            CaseResult("f", CaseVerdict.NOT_RUN, "", "missing uv"),
+        )
+    )
+    assert _last_line(text) == "3 passed, 2 failed, 1 not run"
+
+
+def test_render_summary_line_for_an_all_pass_report(h: Harness) -> None:
+    text = h.tester.render(
+        _report(
+            CaseResult("a", CaseVerdict.PASS, "pass", "pass"),
+            CaseResult("b", CaseVerdict.PASS, "pass", "pass"),
+        )
+    )
+    assert _last_line(text) == "2 passed, 0 failed, 0 not run"
 
 
 # --- bull's output ------------------------------------------------------------
