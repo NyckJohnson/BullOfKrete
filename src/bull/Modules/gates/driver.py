@@ -51,6 +51,7 @@ from bull.Modules.status.Contracts import ModuleStatus, Refs, Status, StatusStor
 _MODULE_MODES = frozenset({GateMode.MODULE, GateMode.FAST, GateMode.COVERAGE_REPORT})
 _TAIL_LINES = 40
 _ABORT_EXIT = 2
+_NOTHING_TO_RERUN_LABEL = "no failed tests recorded; run `bull gates <M> --fast`"
 
 
 @dataclass(frozen=True)
@@ -395,12 +396,32 @@ class LiveGates(Gates):
                 out.seconds,
                 out.tail,
             )
-        note = (
-            "not recorded: partial run (failed)"
-            if tally.steps
-            else "no failed tests recorded"
+        if not tally.steps:
+            # Nothing recorded to rerun (e.g. a build failure left failed.txt empty):
+            # fail rather than pass vacuously. A FAILED request has no module, so the
+            # hint keeps the literal `<M>` placeholder.
+            self._add(
+                tally,
+                Gate.TESTS,
+                "",
+                None,
+                Verdict.FAIL,
+                (_NOTHING_TO_RERUN_LABEL,),
+                0,
+                "",
+            )
+            return self._finish(
+                session, request, tally, None, False, (), "no failed tests recorded"
+            )
+        return self._finish(
+            session,
+            request,
+            tally,
+            None,
+            False,
+            (),
+            "not recorded: partial run (failed)",
         )
-        return self._finish(session, request, tally, None, False, (), note)
 
     def _run_journeys(self, session: _Session, request: GateRequest) -> GateRun:
         app = session.app

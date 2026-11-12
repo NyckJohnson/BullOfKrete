@@ -1,7 +1,7 @@
 {
   "stage": 5,
-  "paused": true,
-  "pauseReason": "usage: 5-hour 87%; next: gates --failed empty \u2192 FAIL (test-writer then code-writer), record scan, coverage triage",
+  "paused": false,
+  "pauseReason": null,
   "checkpoints": {
     "outline-approved": "2026-11-07T23:20:19-08:00",
     "setup": "2026-11-07T23:31:13-08:00",
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-11T09:37:27-08:00",
+  "updatedAt": "2026-11-12T12:43:30-08:00",
   "features": [],
   "activeFeature": null
 }
