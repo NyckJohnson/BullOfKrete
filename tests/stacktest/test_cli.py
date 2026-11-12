@@ -201,3 +201,10 @@ def test_an_unknown_stack_name_raises_the_registrys_stack_error() -> None:
     with pytest.raises(StackError):
         _run(tester, registry, ["nope"])
     assert not [c for c in tester.calls if c[0] in ("run", "static")]
+
+
+def test_static_with_case_raises_stack_error() -> None:
+    tester, registry = MockStackTester(), MockStackRegistry()
+    with pytest.raises(StackError):
+        _run(tester, registry, ["fixture", "--static", "--case", "clean"])
+    assert not [c for c in tester.calls if c[0] in ("run", "static")]

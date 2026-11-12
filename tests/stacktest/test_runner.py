@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import tempfile
+import tomllib
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -42,6 +45,11 @@ watch = {}
 for name in filter(None, os.environ.get("FAKE_BULL_WATCH", "").split(",")):
     path = Path(name)
     watch[name] = path.read_text() if path.exists() else None
+def text(name):
+    path = Path(name)
+    return path.read_text() if path.exists() else None
+
+
 status = Path(".bull/status.json")
 calls.append(
     {
@@ -52,10 +60,26 @@ calls.append(
         "log": git("log", "--format=%s").splitlines(),
         "tracked": git("ls-files").splitlines(),
         "status": json.loads(status.read_text()) if status.exists() else None,
+        "config": text(".bull/config.toml"),
+        "backlog": text(".bull/backlog.json"),
+        "gitignore": text(".gitignore"),
         "watch": watch,
     }
 )
 log.write_text(json.dumps(calls))
+mode = os.environ.get("FAKE_BULL_MODE", "")
+if mode == "text":
+    print("this is not json, sorry")
+    sys.exit(0)
+if mode == "list":
+    print("[]")
+    sys.exit(0)
+if mode == "binary":
+    sys.stdout.buffer.write(b"\\xff\\xfe\\x80 not utf-8\\n")
+    sys.exit(1)
+if mode == "crash":
+    print("boom")
+    sys.exit(3)
 responses = json.loads(Path(os.environ["FAKE_BULL_RESPONSES"]).read_text())
 response = responses[min(len(calls), len(responses)) - 1]
 print(json.dumps(response))
@@ -153,6 +177,7 @@ class Harness:
         }.items():
             monkeypatch.setenv(key, str(value))
         monkeypatch.setenv("FAKE_BULL_WATCH", "")
+        monkeypatch.setenv("FAKE_BULL_MODE", "")
         self.monkeypatch = monkeypatch
         self.responses.write_text(json.dumps([gates_json()]))
 
@@ -163,6 +188,8 @@ class Harness:
         layout: dict[str, str] | None = None,
         files: dict[str, str] | None = None,
         requires: tuple[str, ...] = ("git",),
+        settings: dict[str, Any] | None = None,
+        gitignore: tuple[str, ...] | None = None,
     ) -> Stack:
         self.home.mkdir(exist_ok=True)
         (self.home / "cases.json").write_text(
@@ -170,7 +197,7 @@ class Harness:
                 {
                     "format": 1,
                     "layout": layout or {"app/": "."},
-                    "settings": {"source_dir": "src", "test_dir": "tests"},
+                    "settings": settings or {"source_dir": "src", "test_dir": "tests"},
                     "cases": cases,
                 }
             )
@@ -183,11 +210,23 @@ class Harness:
         manifest = replace(
             base.manifest,
             requires=tuple(Requirement(tool, "install it") for tool in requires),
+            gitignore=base.manifest.gitignore if gitignore is None else gitignore,
         )
         return replace(base, home=self.home, manifest=manifest)
 
     def respond(self, *responses: dict[str, Any]) -> None:
         self.responses.write_text(json.dumps(list(responses)))
+
+    def mode(self, mode: str) -> None:
+        self.monkeypatch.setenv("FAKE_BULL_MODE", mode)
+
+    def sandbox(self) -> Path:
+        """Point the temp folder root at an empty folder, so leftovers are visible."""
+        root = self.tmp / "sandbox"
+        root.mkdir()
+        self.monkeypatch.setenv("TMPDIR", str(root))
+        self.monkeypatch.setattr(tempfile, "tempdir", str(root))
+        return root
 
     def watch(self, *paths: str) -> None:
         self.monkeypatch.setenv("FAKE_BULL_WATCH", ",".join(paths))
@@ -650,3 +689,268 @@ def test_render_shows_every_problem(h: Harness) -> None:
     )
     assert "rules.md: no `## common`" in text
     assert "setup.md missing" in text
+
+
+# --- bull's output ------------------------------------------------------------
+
+
+def test_run_fails_a_case_when_bull_prints_text_that_is_not_json(h: Harness) -> None:
+    h.mode("text")
+    report, _ = h.run(h.stack([case("c")]))
+    assert [r.verdict for r in report.cases] == [CaseVerdict.FAIL]
+    assert "this is not json, sorry" in report.cases[0].got
+
+
+def test_run_fails_a_case_when_bull_prints_json_that_is_not_an_object(
+    h: Harness,
+) -> None:
+    h.mode("list")
+    report, _ = h.run(h.stack([case("c")]))
+    assert [r.verdict for r in report.cases] == [CaseVerdict.FAIL]
+    assert not report.ok
+
+
+def test_run_fails_a_case_when_the_bull_command_does_not_exist(h: Harness) -> None:
+    tester = LiveStackTester((str(h.tmp / "no-such-bull-command"),))
+    report = tester.run(h.stack([case("c")]))
+    assert [r.verdict for r in report.cases] == [CaseVerdict.FAIL]
+    assert "bull" in _text(report.cases[0]).lower()
+    assert "start" in _text(report.cases[0]).lower()
+
+
+def test_run_survives_bytes_that_are_not_utf8_on_bulls_stdout(h: Harness) -> None:
+    h.mode("binary")
+    report, _ = h.run(h.stack([case("c")]))
+    assert len(report.cases) == 1
+    assert report.cases[0].verdict in (CaseVerdict.FAIL, CaseVerdict.PASS)
+
+
+# --- the .bull/ set-up --------------------------------------------------------
+
+GITIGNORE = (".bull/usage.json", "results/", ".bull/passes/")
+
+
+def _lookup(data: dict[str, Any], dotted: str) -> Any:
+    if dotted in data:
+        return data[dotted]
+    node: Any = data
+    for part in dotted.split("."):
+        node = node[part]
+    return node
+
+
+def test_run_writes_config_toml_with_format_stack_and_the_cases_settings(
+    h: Harness,
+) -> None:
+    settings = {
+        "source_dir": "src",
+        "test_dir": "tests",
+        "coverage.exclude": ["a/*", "b"],
+        "models": {"reviewer": "sonnet"},
+    }
+    _, calls = h.run(h.stack([case("c")], settings=settings))
+    config = tomllib.loads(calls[0]["config"])
+    assert config["format"] == 1
+    assert config["stack"] == "mystack"
+    assert _lookup(config, "source_dir") == "src"
+    assert _lookup(config, "test_dir") == "tests"
+    assert _lookup(config, "coverage.exclude") == ["a/*", "b"]
+    assert _lookup(config, "models.reviewer") == "sonnet"
+    assert ".bull/config.toml" in calls[0]["tracked"]
+
+
+def test_run_writes_a_valid_json_backlog(h: Harness) -> None:
+    _, calls = h.run(h.stack([case("c")]))
+    assert calls[0]["backlog"] is not None
+    assert isinstance(json.loads(calls[0]["backlog"]), dict)
+
+
+def test_run_status_modules_carry_depends_and_units_from_the_memo(
+    h: Harness,
+) -> None:
+    _, calls = h.run(h.stack([case("c")]))
+    counter, greeter = calls[0]["status"]["modules"]
+    assert counter["depends"] == []
+    assert greeter["depends"] == ["counter"]
+    assert len(counter["units"]) == 1
+    assert counter["units"][0]["number"] == 1
+    assert counter["units"][0]["files"] == ["src/counter.fx"]
+    assert greeter["units"][0]["files"] == ["src/greeter.fx"]
+
+
+def test_run_gitignore_has_each_manifest_line_once(h: Harness) -> None:
+    _, calls = h.run(h.stack([case("c")], gitignore=GITIGNORE))
+    lines = calls[0]["gitignore"].splitlines()
+    for line in GITIGNORE:
+        assert lines.count(line) == 1
+
+
+def test_run_gitignore_does_not_duplicate_a_line_the_fixture_already_has(
+    h: Harness,
+) -> None:
+    files = {**BASE_FILES, "app/.gitignore": "results/\nbuild/\n"}
+    stack = h.stack([case("c")], files=files, gitignore=GITIGNORE)
+    _, calls = h.run(stack)
+    lines = calls[0]["gitignore"].splitlines()
+    assert "build/" in lines
+    for line in GITIGNORE:
+        assert lines.count(line) == 1
+
+
+def test_run_gitignore_is_correct_when_the_fixtures_lacks_a_trailing_newline(
+    h: Harness,
+) -> None:
+    files = {**BASE_FILES, "app/.gitignore": "keep.me"}
+    stack = h.stack([case("c")], files=files, gitignore=GITIGNORE)
+    _, calls = h.run(stack)
+    lines = calls[0]["gitignore"].splitlines()
+    assert lines.count("keep.me") == 1
+    for line in GITIGNORE:
+        assert lines.count(line) == 1
+
+
+def test_run_unencodable_setting_fails_every_case_without_calling_bull(
+    h: Harness,
+) -> None:
+    # TOML has no null, so a JSON null setting cannot be written to config.toml.
+    stack = h.stack(
+        [case("a"), case("b")],
+        settings={"source_dir": "src", "test_dir": None},
+    )
+    report, calls = h.run(stack)
+    assert [r.verdict for r in report.cases] == [CaseVerdict.FAIL] * 2
+    assert all("app folder" in _text(r).lower() for r in report.cases)
+    assert calls == []
+
+
+# --- a failed parent ----------------------------------------------------------
+
+THEN = {"run": ["gates", "--failed"], "expect": {"verdict": "pass"}}
+
+
+def test_run_a_change_that_does_not_apply_fails_the_case_and_skips_its_then(
+    h: Harness,
+) -> None:
+    stack = h.stack(
+        [case("p", change={"replace": {"src/missing.fx": "x\n"}}, then=THEN)]
+    )
+    report, calls = h.run(stack)
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.NOT_RUN),
+    ]
+    assert "change does not apply" in _text(report.cases[0])
+    assert calls == []
+
+
+def test_run_set_up_failure_fails_the_case_and_its_then(h: Harness) -> None:
+    bin_dir = h.tmp / "stubbin"
+    bin_dir.mkdir()
+    stub = bin_dir / "git"
+    stub.write_text("#!/bin/sh\nexit 1\n")
+    stub.chmod(0o755)
+    h.monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    report, calls = h.run(h.stack([case("p", then=THEN)]))
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.FAIL),
+    ]
+    assert calls == []
+
+
+def test_run_layout_destination_outside_the_app_folder_fails_the_case_and_its_then(
+    h: Harness,
+) -> None:
+    root = h.sandbox()
+    stack = h.stack([case("p", then=THEN)], layout={"app/": "../x"})
+    report, calls = h.run(stack)
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.FAIL),
+    ]
+    assert calls == []
+    assert not (root / "x").exists()
+
+
+def test_run_a_change_that_cannot_be_written_fails_the_case_and_skips_its_then(
+    h: Harness,
+) -> None:
+    # src/a.fx is a file, so nothing can be added beneath it.
+    stack = h.stack(
+        [case("p", change={"add": {"src/a.fx/child.fx": "x\n"}}, then=THEN)]
+    )
+    report, calls = h.run(stack)
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.NOT_RUN),
+    ]
+    assert calls == []
+
+
+# --- git environment ----------------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> str:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_DIR")}
+    env.pop("GIT_WORK_TREE", None)
+    done = subprocess.run(
+        ["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True
+    )
+    return done.stdout
+
+
+def test_run_builds_its_own_repo_when_git_dir_and_work_tree_are_set(
+    h: Harness,
+) -> None:
+    other = h.tmp / "other"
+    other.mkdir()
+    _git(other, "init", "--initial-branch=main")
+    (other / "mine.txt").write_text("mine\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "mine", "--no-verify")
+    before_log = _git(other, "log", "--format=%H")
+    before_files = sorted(p.name for p in other.iterdir())
+    h.monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    h.monkeypatch.setenv("GIT_WORK_TREE", str(other))
+    report, calls = h.run(h.stack([case("c")]))
+    assert report.cases[0].verdict is CaseVerdict.PASS
+    assert os.path.realpath(calls[0]["toplevel"]) == os.path.realpath(calls[0]["cwd"])
+    assert calls[0]["porcelain"] == ""
+    assert _git(other, "log", "--format=%H") == before_log
+    assert _git(other, "status", "--porcelain") == ""
+    assert sorted(p.name for p in other.iterdir()) == before_files
+
+
+# --- cleanup ------------------------------------------------------------------
+
+
+def test_run_removes_the_temp_folders_when_bull_fails(h: Harness) -> None:
+    root = h.sandbox()
+    h.mode("crash")
+    report, calls = h.run(h.stack([case("c")]))
+    assert calls
+    assert report.cases[0].verdict is CaseVerdict.FAIL
+    assert list(root.iterdir()) == []
+
+
+def test_run_removes_the_temp_folders_when_the_change_does_not_apply(
+    h: Harness,
+) -> None:
+    root = h.sandbox()
+    h.run(h.stack([case("c", change={"delete": ["nope.fx"]}, then=THEN)]))
+    assert list(root.iterdir()) == []
+
+
+def test_run_removes_the_temp_folders_when_the_change_cannot_be_written(
+    h: Harness,
+) -> None:
+    root = h.sandbox()
+    h.run(h.stack([case("c", change={"add": {"src/a.fx/x.fx": "x\n"}})]))
+    assert list(root.iterdir()) == []
+
+
+def test_run_removes_the_temp_folders_when_bull_does_not_start(h: Harness) -> None:
+    root = h.sandbox()
+    tester = LiveStackTester((str(h.tmp / "no-such-bull-command"),))
+    tester.run(h.stack([case("c")]))
+    assert list(root.iterdir()) == []
