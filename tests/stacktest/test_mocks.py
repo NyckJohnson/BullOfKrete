@@ -113,3 +113,24 @@ def test_calls_accumulate_in_order() -> None:
     mock.static(stack)
     mock.run(stack)
     assert [name for name, _ in mock.calls] == ["load_cases", "static", "run"]
+
+
+def test_run_with_case_id_returns_only_that_case() -> None:
+    mock = MockStackTester()
+    report = mock.run(sample_stack(), "failing-test")
+    assert [r.id for r in report.cases] == ["failing-test"]
+
+
+def test_run_with_none_returns_all_cases() -> None:
+    mock = MockStackTester()
+    report = mock.run(sample_stack(), None)
+    assert [r.id for r in report.cases] == [c.id for c in SAMPLE_CASES]
+
+
+def test_passing_results_have_got_equal_to_expected() -> None:
+    mock = MockStackTester()
+    report = mock.run(sample_stack())
+    assert report.cases
+    for result in report.cases:
+        assert result.verdict is CaseVerdict.PASS
+        assert result.got == result.expected
