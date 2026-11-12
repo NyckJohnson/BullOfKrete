@@ -492,7 +492,7 @@
         "api",
         "interfaces"
       ],
-      "state": "in_progress",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T12:43:30-08:00",
+  "updatedAt": "2026-11-12T12:45:18-08:00",
   "features": [],
   "activeFeature": null
 }

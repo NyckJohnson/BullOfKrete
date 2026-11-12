@@ -1717,7 +1717,8 @@ when `readers.py` defines `detect`.
     `LiveSteps(runner: Runner, events: EventLog, files: Files)`:
     `execute(step: str, argv: Sequence[str], cwd: Path, env: Mapping[str, str], results: Path) ->
     StepOutput` runs `runner.run(argv, cwd, env, None)`, writes stdout then stderr to
-    `results/<step>.log` (`files.write_atomic`), labels = each stdout line starting `bull-fail:`
+    `results/<step>.log` (`files.write_atomic`; a line break goes between them when both are
+    non-empty and stdout doesn't end in one), labels = each stdout line starting `bull-fail:`
     with the prefix and surrounding spaces removed, in order; non-zero exit and no labels →
     `("<step> failed (exit N)",)`; `tail` = the log's last 40 lines. `result(gate: Gate, part: str,
     module: str | None, verdict: Verdict, labels: Sequence[str], seconds: float, tail: str) ->
@@ -1747,10 +1748,13 @@ when `readers.py` defines `detect`.
       module, `parts.module_src`/`module_tests` (absolute; "" without a module).
     - Unknown module: a name matching one case-insensitively → `BullError("unknown module <m>",
       "did you mean <M>?")`; else fix "modules: a, b, c" (none → "this app has no modules
-      yet"). MODULE/FAST/COVERAGE_REPORT without a module, or other modes with one → `BullError`.
+      yet"). MODULE/FAST/COVERAGE_REPORT without a module, or other modes with one → `BullError`;
+      AFTER_MERGE without a branch → `BullError("gates --after-merge needs a branch", "run
+      `bull gates --after-merge <branch>`")`.
       Module branch: `refs(app).module_for_branch(git.current_branch(root))` naming a module
       not in status → `BullError("branch <b> is for module <m>, which is not in status", "run
-      `bull status init-modules` or switch branch")`.
+      `bull status init-modules` or switch branch")`; a detached HEAD (no current branch) skips
+      this check.
     - Adopting = `status.adoption` set with stage ≤ 5. MODULE, FAST and COVERAGE_REPORT steps get
       `adopt=True, scope_module=M` only while adopting; ALL, JOURNEYS and FAILED steps get `adopt`
       while adopting and never a scope.
@@ -1776,7 +1780,8 @@ when `readers.py` defines `detect`.
     - Verdict: ABORTED if any step aborted, else FAIL if any failed, else PASS. Recording (MODULE,
       ALL, AFTER_MERGE, not `skip_coverage`): `git.is_clean(root)` before the first step and after
       the last, verdict PASS → `passes.record(app, git.head(root, "HEAD"), current branch,
-      command, parts run)` with command "gates <M>", "gates --all" or "gates --after-merge
+      command, parts run)` (no commit at HEAD → `BullError("no commit at HEAD", "commit before
+      recording a gate pass")`) with command "gates <M>", "gates --all" or "gates --after-merge
       <branch>"; notes, the first that applies: failed/aborted → "not recorded: gates failed";
       skip_coverage → "not recorded: coverage skipped"; dirty → "not recorded: working tree has
       changes"; FAST, FAILED,
@@ -1788,7 +1793,9 @@ when `readers.py` defines `detect`.
       `test_results(results).failed` when that returns ids, else kept; tests_run = number of ids.
     - coverage(app, M): no `test_results(results)` for the module's part → `BullError("no coverage
       data for <M>", "run `bull gates <M>` first")`; exclude = `coverage.exclude` +
-      `coverage.exclude_extra` (part's settings); `triage.sources(parts.module_src(part, M),
+      `coverage.exclude_extra` (part's settings; for these and `bookkeeping_paths` a string value
+      counts as a one-item list, "" as empty, any other non-list → `BullError("setting <key> must
+      be a list of strings")`); `triage.sources(parts.module_src(part, M),
       part.root, manifest.source_glob, exclude)`, `stack.readers.uncovered(part.root, sources,
       results)`, `triage.report(M, sources, data, manifest.comment)`. LiveGates remembers each
       reported module's stack comment for render.
@@ -2363,3 +2370,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-11: gates construction (LiveGates collaborators and per-app providers, LiveSteps/fill/step_env, pass-record and failed.txt helpers, step order and skip rules, notes, after-merge skip, JourneyRunner lifecycle, render/JSON, cli flag rules) set in the gates § "Construction" line; journeys are injected into LiveGates as a JourneyRunner (unit 3 may stub it; unit 4 builds it); render's file-marker hint uses the stack comment LiveGates remembers from coverage; internal wiring, no contract change.
 - 2026-11-11: gates unit 3 review — three choices the spec left open set in the gates § Construction: FAILED reruns get the adopt env (no scope) while adopting; a part whose setup failed gets no journeys; the not-recorded note is the first of gates failed → coverage skipped → working tree has changes. Internal behavior, no contract change.
 - 2026-11-11: gates reference scan (covered 20, missed 0, contradicts 2, not-in-spec 0, obsolete 1) — human: `gates --after-merge` keeps the spec (skip when only bookkeeping differs from the gated branch head, even if the base was never gated; v1 also required a gated base); `gates --failed` with nothing recorded fails (v1) with "no failed tests recorded; run `bull gates <M> --fast`", since a build failure leaves the list empty; unreadable test results with exit 0 still fail "no tests ran" (spec, per 2026-11-07); v1's after-merge reason lines and "pass now" text left out — approved by Nicholas Johnson
+- 2026-11-12: gates coverage triage (missed 3, not-in-spec 5) — human kept and specified all five: a detached HEAD skips the module-branch check; recording with no commit at HEAD raises `BullError("no commit at HEAD")`; `--after-merge` without a branch raises `BullError`; list settings (`coverage.exclude`, `coverage.exclude_extra`, `bookkeeping_paths`) accept a string as a one-item list and refuse other non-lists; step logs put a line break between stdout and stderr when stdout lacks one. Internal behavior, no contract change — approved by Nicholas Johnson
