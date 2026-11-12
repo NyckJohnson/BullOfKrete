@@ -43,13 +43,17 @@ class MockStackTester(StackTester):
         self.report: StackTestReport | None = None
         self.calls: list[tuple[str, tuple[object, ...]]] = []
 
-    def _passing(self, stack: Stack, static: bool) -> StackTestReport:
+    def _passing(
+        self, stack: Stack, static: bool, case: str | None = None
+    ) -> StackTestReport:
         results = (
             ()
             if static
             else tuple(
-                CaseResult(c.id, CaseVerdict.PASS, str(c.expect.get("verdict")), "pass")
+                CaseResult(c.id, CaseVerdict.PASS, verdict, verdict)
                 for c in self.cases
+                if case is None or c.id == case
+                for verdict in (str(c.expect.get("verdict")),)
             )
         )
         return StackTestReport(stack.manifest.name, static, (), results)
@@ -64,7 +68,7 @@ class MockStackTester(StackTester):
 
     def run(self, stack: Stack, case: str | None = None) -> StackTestReport:
         self.calls.append(("run", (stack, case)))
-        return self.report or self._passing(stack, static=False)
+        return self.report or self._passing(stack, static=False, case=case)
 
     def render(self, report: StackTestReport) -> str:
         self.calls.append(("render", (report,)))
