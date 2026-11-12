@@ -317,10 +317,8 @@ def _build_app(
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, dest)
         _write_bull_files(stack, root, settings)
-    # coverage-exempt-begin: OSError while copying the fixture cannot be provoked portably
     except OSError as error:
         raise _SetupFailed(f"cannot build the app folder: {error}") from error
-    # coverage-exempt-end
     _git(root, "init", "--quiet", "--initial-branch=main")
     _git(root, "add", "--all")
     _git(root, "commit", "--quiet", "--no-verify", "-m", "bull: init")
@@ -492,10 +490,8 @@ def _git(root: Path, *args: str) -> None:
             errors="replace",
             check=False,
         )
-    # coverage-exempt-begin: git failing to launch (OSError) cannot be simulated without removing git
     except OSError as error:
         raise _SetupFailed(f"git {args[0]} did not start: {error}") from error
-    # coverage-exempt-end
     if done.returncode != 0:
         raise _SetupFailed(f"git {args[0]} failed: {done.stderr.strip()}")
 
