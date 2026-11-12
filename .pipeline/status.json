@@ -542,7 +542,7 @@
         "gitrepo",
         "stacks"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T12:58:48-08:00",
+  "updatedAt": "2026-11-12T12:58:58-08:00",
   "features": [],
   "activeFeature": null
 }
