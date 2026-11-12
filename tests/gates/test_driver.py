@@ -12,7 +12,7 @@ from bull.Modules.coverage.Contracts import CoverageReport
 from bull.Modules.coverage.mocks import sample_report
 from bull.Modules.events.Contracts import EventKind
 from bull.Modules.foundation.Contracts import BullError
-from bull.Modules.gates.Contracts import GateMode, Verdict
+from bull.Modules.gates.Contracts import Gate, GateMode, StepResult, Verdict
 from bull.Modules.interfaces.Contracts import InterfaceResult
 from bull.Modules.interfaces.mocks import SAMPLE_INTERFACE
 from bull.Modules.memo.Contracts import InterfaceEntry, SideRef
@@ -1062,22 +1062,48 @@ def test_failed_fail_with_no_test_results_keeps_failed_txt(tmp_path: Path) -> No
     assert path.read_text() == "t::a\n"
 
 
-def test_failed_with_nothing_recorded_passes_with_a_note(tmp_path: Path) -> None:
+def test_failed_with_nothing_recorded_fails_with_a_tests_step(tmp_path: Path) -> None:
     rig = make_rig(tmp_path)
     run = rig.run(GateMode.FAILED)
-    assert run.verdict is Verdict.PASS
-    assert run.steps == ()
+    assert run.verdict is Verdict.FAIL
+    assert run.steps == (
+        StepResult(
+            Gate.TESTS,
+            "",
+            None,
+            Verdict.FAIL,
+            ("no failed tests recorded; run `bull gates <M> --fast`",),
+            0,
+            run.steps[0].output_tail,
+        ),
+    )
     assert run.tests_run == 0
     assert run.note == "no failed tests recorded"
     assert run.recorded is False
     assert rig.runner.calls == []
 
 
-def test_failed_with_an_empty_failed_txt_has_nothing_to_rerun(tmp_path: Path) -> None:
+def test_failed_with_an_empty_failed_txt_fails_with_nothing_to_rerun(
+    tmp_path: Path,
+) -> None:
     rig = make_rig(tmp_path)
     seed_failed(rig, "app", "\n")
     run = rig.run(GateMode.FAILED)
+    assert run.verdict is Verdict.FAIL
+    assert len(run.steps) == 1
+    step = run.steps[0]
+    assert (step.gate, step.part, step.module, step.verdict) == (
+        Gate.TESTS,
+        "",
+        None,
+        Verdict.FAIL,
+    )
+    assert step.labels == ("no failed tests recorded; run `bull gates <M> --fast`",)
+    assert step.seconds == 0
+    assert run.tests_run == 0
     assert run.note == "no failed tests recorded"
+    assert run.recorded is False
+    assert rig.runner.calls == []
 
 
 def test_failed_reruns_each_part_with_ids_in_parts_order(tmp_path: Path) -> None:
