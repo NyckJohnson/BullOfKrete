@@ -1876,7 +1876,7 @@ when `readers.py` defines `detect`.
   - load_cases: parses `cases.json` (**Data models**); malformed → `StackError` with the reason.
   - static: required files (`stack.toml`, `readers.py`, `rules.md`, `setup.md`, `cases.json`,
     `fixture/`, which must not be empty), the manifest loads (no `TODO`), `readers.py` defines the required functions
-    (checked with `ast`, without importing), `rules.md` has `## common`, `## outline` and one section
+    (checked with `ast`, without importing; a top-level `def`, import or assignment counts), `rules.md` has `## common`, `## outline` and one section
     per manifest agent, `setup.md` has `## For a feature`, `cases.json` has every required id;
     each miss is one problem. Needs no toolchain.
   - run: any `requires` tool missing → every case NOT_RUN ("missing uv: <the requirement's hint>"); a fixture file the layout
@@ -1886,6 +1886,9 @@ when `readers.py` defines `detect`.
     exist → FAIL "change does not apply"), commit unless the case says `"dirty": true`, run
     `bull <run…> --json` as a subprocess (the bull command is a constructor argument), compare with
     `expect`; `then` runs in the same folder afterwards. Temp folders removed afterwards.
+  - run: a `layout` that is not a folder→folder object, or `settings` that is not an object →
+    `StackError`; an `expect` key other than verdict/gate/output/recorded/ran → the case FAILs
+    ("unsupported expect key `<key>`").
   - ok: no problems and every case PASS; NOT_RUN counts as failure.
   - render: each problem, each case with its verdict (expected/got for a failure, the reason for
     NOT_RUN), then a summary line "N passed, N failed, N not run".
@@ -2377,3 +2380,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-12: stacktest unit 3 construction — `LiveStackTester(bull: tuple[str, ...])` takes the bull command; `cli.register(stack_leaves, tester, registry)` adds `test` under the `stack` command (like adoption's `register_detect`), providers zero-argument; an argument with a path separator or naming an existing folder is a path, else a stack name; `--json` keys `stack`, `static`, `problems`, `cases[{id, verdict, expected, got}]`; `layout` keys are folders under `<stack>/fixture/`, the fixture memo is the app's `docs/outline.md`; the runner reads bull's JSON whatever its exit code (gates `run_json` shape: `gate` = failing step, `output` = substring of failing labels or check items, `ran` = `tests_run`); output that is not JSON → FAIL with the output in `got`; `--case <id>` runs that case and its `then`, an unknown id → `StackError`; a `then` runs unless its parent's change did not apply. Internal behavior, no contract change.
 - 2026-11-12: stacktest unit 3 review — the runner runs `git` itself in its throwaway folders (fixed identity, `--no-verify`, `--initial-branch=main`; `GIT_DIR`/`GIT_WORK_TREE` and other `GIT_*` repo-location variables removed from the child env), so stacktest uses nothing from gitrepo; bull's and git's output are decoded with `errors="replace"`; no timeout on bull; `--static` with `--case` → `StackError`. Internal behavior, no contract change.
 - 2026-11-12: stacktest reference scan (covered 9, missed 1, contradicts 2, not-in-spec 3, obsolete 2) — human: a report with NOT_RUN cases exits 1 like any not-ok report (spec; v1 exited 3); an empty `fixture/` is a static problem (v1); render ends with "N passed, N failed, N not run" (v1) and a missing tool's NOT_RUN reason carries the requirement's hint (v1); the failing run's raw output is not echoed (v1 did). Missed: an unknown `--case` id → `StackError` — approved by Nicholas Johnson
+- 2026-11-12: stacktest coverage triage (missed 10, exempt 3, not-in-spec 3) — human kept and specified all three: a malformed `layout`/`settings` in cases.json → `StackError`; an unknown `expect` key fails the case; a required reader bound by a top-level assignment counts as defined in the static check — approved by Nicholas Johnson

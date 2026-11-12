@@ -254,8 +254,10 @@ def _layout_and_settings(
     path = stack.home / "cases.json"
     try:
         data: object = json.loads(path.read_text(encoding="utf-8"))
+    # coverage-exempt-begin: cases.json was just parsed by load_cases; a re-read failing is a race
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise StackError(f"{path}: cannot read cases.json: {error}") from error
+    # coverage-exempt-end
     doc = cast("dict[str, object]", data) if isinstance(data, dict) else {}
     raw_layout = doc.get("layout", {"app/": "."})
     if not isinstance(raw_layout, dict) or not all(
@@ -315,8 +317,10 @@ def _build_app(
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, dest)
         _write_bull_files(stack, root, settings)
+    # coverage-exempt-begin: OSError while copying the fixture cannot be provoked portably
     except OSError as error:
         raise _SetupFailed(f"cannot build the app folder: {error}") from error
+    # coverage-exempt-end
     _git(root, "init", "--quiet", "--initial-branch=main")
     _git(root, "add", "--all")
     _git(root, "commit", "--quiet", "--no-verify", "-m", "bull: init")
@@ -488,8 +492,10 @@ def _git(root: Path, *args: str) -> None:
             errors="replace",
             check=False,
         )
+    # coverage-exempt-begin: git failing to launch (OSError) cannot be simulated without removing git
     except OSError as error:
         raise _SetupFailed(f"git {args[0]} did not start: {error}") from error
+    # coverage-exempt-end
     if done.returncode != 0:
         raise _SetupFailed(f"git {args[0]} failed: {done.stderr.strip()}")
 
