@@ -560,7 +560,7 @@
             "static.py"
           ],
           "state": "code",
-          "attempts": 0
+          "attempts": 1
         },
         {
           "number": 3,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T13:55:55-08:00",
+  "updatedAt": "2026-11-12T13:56:39-08:00",
   "features": [],
   "activeFeature": null
 }

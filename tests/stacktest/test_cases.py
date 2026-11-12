@@ -106,12 +106,94 @@ def test_then_can_nest_further(tmp_path: Path) -> None:
     assert parent.then.then.run == ("status",)
 
 
-def test_dirty_case_is_accepted(tmp_path: Path) -> None:
+def test_dirty_true_is_carried_in_change(tmp_path: Path) -> None:
     stack = _stack(tmp_path)
     _write(stack, _doc(_good(dirty=True, change={"add": {"a.fx": "x"}})))
     case = load_cases(stack)[0]
     assert case.id == "clean"
     assert case.run == ("gates", "counter")
+    assert case.change["dirty"] is True
+    assert case.change["add"] == {"a.fx": "x"}
+
+
+def test_dirty_true_without_change_is_carried(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(dirty=True)))
+    assert load_cases(stack)[0].change["dirty"] is True
+
+
+def test_dirty_false_leaves_no_dirty_key(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(dirty=False)))
+    assert "dirty" not in load_cases(stack)[0].change
+
+
+def test_absent_dirty_leaves_no_dirty_key(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(change={"add": {"a.fx": "x"}})))
+    assert "dirty" not in load_cases(stack)[0].change
+
+
+@pytest.mark.parametrize("value", ["yes", 1, 0, None, [], {}])
+def test_non_bool_dirty_raises_naming_dirty(tmp_path: Path, value: object) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(dirty=value)))
+    with pytest.raises(StackError, match="dirty"):
+        load_cases(stack)
+
+
+def test_then_case_id_is_parent_id_slash_then(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    then = {"run": ["gates", "--failed"], "expect": {"verdict": "fail"}}
+    _write(stack, _doc(_good(id="failing-test", then=then)))
+    parent = load_cases(stack)[0]
+    assert parent.then is not None
+    assert parent.then.id == "failing-test/then"
+
+
+def test_nested_then_ids_chain(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    inner = {"run": ["status"], "expect": {"verdict": "pass"}}
+    outer = {"run": ["gates"], "expect": {"verdict": "fail"}, "then": inner}
+    _write(stack, _doc(_good(id="top", then=outer)))
+    parent = load_cases(stack)[0]
+    assert parent.then is not None
+    assert parent.then.id == "top/then"
+    assert parent.then.then is not None
+    assert parent.then.then.id == "top/then/then"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"bogus": {"a": "b"}},
+        {"add": {"a": 1}},
+        {"add": ["a"]},
+        {"add": "a"},
+        {"replace": {"a": 1}},
+        {"replace": {"a": None}},
+        {"replace": ["a"]},
+        {"delete": "src/old.fx"},
+        {"delete": [1]},
+        {"delete": ["ok", 2]},
+        {"delete": {"a": "b"}},
+    ],
+)
+def test_invalid_change_content_raises_naming_change(
+    tmp_path: Path, change: object
+) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(change=change)))
+    with pytest.raises(StackError, match="change"):
+        load_cases(stack)
+
+
+def test_change_delete_comes_back_as_tuple(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    _write(stack, _doc(_good(change={"delete": ["a.fx", "b.fx"]})))
+    got = load_cases(stack)[0].change["delete"]
+    assert isinstance(got, tuple)
+    assert got == ("a.fx", "b.fx")
 
 
 def test_missing_cases_file_raises_stack_error(tmp_path: Path) -> None:

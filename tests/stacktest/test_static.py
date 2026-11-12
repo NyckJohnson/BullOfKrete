@@ -193,13 +193,49 @@ def test_missing_setup_file_alone_is_one_problem(tmp_path: Path) -> None:
     assert "setup.md" in report.problems[0]
 
 
-def test_manifest_with_todo_placeholder_is_a_problem(tmp_path: Path) -> None:
+def test_manifest_with_todo_placeholder_is_one_problem(tmp_path: Path) -> None:
     home = _build(
         tmp_path, toml=STACK_TOML.replace('title = "My stack"', 'title = "TODO"')
     )
     report = _check(home)
     assert report.ok is False
-    assert _mentions(report, "TODO") or _mentions(report, "stack.toml")
+    assert len(report.problems) == 1
+    assert "stack.toml" in report.problems[0]
+
+
+def test_manifest_with_todo_inside_a_list_is_one_problem(tmp_path: Path) -> None:
+    toml = STACK_TOML.replace(
+        'gitignore = ["results/"]', 'gitignore = ["results/", "TODO"]'
+    )
+    report = _check(_build(tmp_path, toml=toml))
+    assert len(report.problems) == 1
+    assert "stack.toml" in report.problems[0]
+
+
+@pytest.mark.parametrize(
+    ("label", "toml"),
+    [
+        ("format 2", STACK_TOML.replace("format = 1\n", "format = 2\n", 1)),
+        ("missing format", STACK_TOML.replace("format = 1\n", "", 1)),
+        ("missing gates", STACK_TOML[: STACK_TOML.index("[gates]")]),
+        (
+            "missing settings.test_dir",
+            STACK_TOML.replace(
+                '[settings.test_dir]\ntype = "str"\ndefault = "tests"\n'
+                'description = "Test folder."\n',
+                "",
+            ),
+        ),
+    ],
+)
+def test_manifest_structural_miss_is_one_problem(
+    tmp_path: Path, label: str, toml: str
+) -> None:
+    assert toml != STACK_TOML, label
+    report = _check(_build(tmp_path, toml=toml))
+    assert report.ok is False
+    assert len(report.problems) == 1, label
+    assert "stack.toml" in report.problems[0]
 
 
 def test_manifest_with_invalid_toml_is_a_problem(tmp_path: Path) -> None:
@@ -209,11 +245,15 @@ def test_manifest_with_invalid_toml_is_a_problem(tmp_path: Path) -> None:
     assert _mentions(report, "stack.toml")
 
 
-def test_manifest_missing_required_key_is_a_problem(tmp_path: Path) -> None:
+def test_manifest_missing_required_key_is_one_problem_naming_key(
+    tmp_path: Path,
+) -> None:
     home = _build(tmp_path, toml=STACK_TOML.replace('language = "fixture"\n', ""))
     report = _check(home)
     assert report.ok is False
-    assert _mentions(report, "stack.toml")
+    assert len(report.problems) == 1
+    assert "stack.toml" in report.problems[0]
+    assert "language" in report.problems[0]
 
 
 def test_readers_missing_required_function_names_it(tmp_path: Path) -> None:
