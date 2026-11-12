@@ -12,7 +12,7 @@ from bull.Modules.coverage.Contracts import CoverageReport
 from bull.Modules.coverage.mocks import sample_report
 from bull.Modules.events.Contracts import EventKind
 from bull.Modules.foundation.Contracts import BullError
-from bull.Modules.gates.Contracts import Gate, GateMode, StepResult, Verdict
+from bull.Modules.gates.Contracts import Gate, GateMode, PassRecord, StepResult, Verdict
 from bull.Modules.interfaces.Contracts import InterfaceResult
 from bull.Modules.interfaces.mocks import SAMPLE_INTERFACE
 from bull.Modules.memo.Contracts import InterfaceEntry, SideRef
@@ -1289,3 +1289,118 @@ def test_passing_run_with_skipped_coverage_on_a_dirty_tree_notes_coverage_skippe
     assert run.verdict is Verdict.PASS
     assert run.recorded is False
     assert run.note == "not recorded: coverage skipped"
+
+
+# --- coverage triage follow-ups -----------------------------------------
+
+
+def _clean_module_rig(tmp_path: Path) -> Rig:
+    rig = make_rig(tmp_path)
+    rig.triage.result = CoverageReport("Counter", {}, (), (), ())
+    return rig
+
+
+def test_detached_head_skips_the_module_branch_check(tmp_path: Path) -> None:
+    rig = _clean_module_rig(tmp_path)
+    rig.git.branch = None
+    run = rig.run(GateMode.MODULE, "Counter")
+    assert run.verdict is Verdict.PASS
+
+
+def test_recording_without_a_commit_at_head_is_refused(tmp_path: Path) -> None:
+    rig = _clean_module_rig(tmp_path)
+    del rig.git.heads["HEAD"]
+    with pytest.raises(BullError) as exc:
+        rig.run(GateMode.MODULE, "Counter")
+    assert exc.value.message == "no commit at HEAD"
+    assert exc.value.fix == "commit before recording a gate pass"
+    assert rig.passes.recorded == []
+
+
+def test_after_merge_without_a_branch_is_refused(tmp_path: Path) -> None:
+    rig = make_rig(tmp_path)
+    with pytest.raises(BullError) as exc:
+        rig.run(GateMode.AFTER_MERGE)
+    assert exc.value.message == "gates --after-merge needs a branch"
+    assert exc.value.fix == "run `bull gates --after-merge <branch>`"
+    assert rig.runner.calls == []
+
+
+def _exclude_passed(rig: Rig) -> object:
+    rig.gates.coverage(rig.app, "Counter")
+    return next(c for c in rig.triage.calls if c[0] == "sources")[1][3]
+
+
+@pytest.mark.parametrize("key", ["coverage.exclude", "coverage.exclude_extra"])
+def test_coverage_list_setting_given_as_a_string_is_a_one_item_list(
+    tmp_path: Path, key: str
+) -> None:
+    rig = make_rig(tmp_path)
+    rig.settings.values["coverage.exclude"] = ()
+    rig.settings.values["coverage.exclude_extra"] = ()
+    rig.settings.values[key] = "gen/*"
+    assert _exclude_passed(rig) == ("gen/*",)
+
+
+@pytest.mark.parametrize("key", ["coverage.exclude", "coverage.exclude_extra"])
+def test_coverage_list_setting_given_as_an_empty_string_is_empty(
+    tmp_path: Path, key: str
+) -> None:
+    rig = make_rig(tmp_path)
+    rig.settings.values["coverage.exclude"] = ()
+    rig.settings.values["coverage.exclude_extra"] = ()
+    rig.settings.values[key] = ""
+    assert _exclude_passed(rig) == ()
+
+
+@pytest.mark.parametrize("key", ["coverage.exclude", "coverage.exclude_extra"])
+@pytest.mark.parametrize("bad", [3, True])
+def test_coverage_list_setting_that_is_not_a_list_is_refused(
+    tmp_path: Path, key: str, bad: object
+) -> None:
+    rig = make_rig(tmp_path)
+    rig.settings.values[key] = bad  # type: ignore[assignment]
+    with pytest.raises(BullError) as exc:
+        rig.gates.coverage(rig.app, "Counter")
+    assert exc.value.message == f"setting {key} must be a list of strings"
+
+
+def _merged(tmp_path: Path, changed: list[str]) -> Rig:
+    from .rig import BRANCH_SHA
+
+    rig = make_rig(tmp_path)
+    rig.git.heads["feature/x"] = BRANCH_SHA
+    rig.git.changed = changed
+    rig.passes.records[BRANCH_SHA] = PassRecord(
+        BRANCH_SHA, "feature/x", "gates Counter", rig.clock.now(), ("app",)
+    )
+    rig.triage.result = CoverageReport("Counter", {}, (), (), ())
+    return rig
+
+
+def test_bookkeeping_paths_given_as_a_string_is_a_one_item_list(
+    tmp_path: Path,
+) -> None:
+    rig = _merged(tmp_path, ["CHANGELOG.md"])
+    rig.settings.values["bookkeeping_paths"] = "CHANGELOG.md"
+    run = rig.run(GateMode.AFTER_MERGE, branch="feature/x")
+    assert run.note == "merge holds the gated code"
+    assert rig.runner.calls == []
+
+
+def test_bookkeeping_paths_given_as_an_empty_string_is_empty(tmp_path: Path) -> None:
+    rig = _merged(tmp_path, ["docs/api/Counter.md"])
+    rig.settings.values["bookkeeping_paths"] = ""
+    rig.run(GateMode.AFTER_MERGE, branch="feature/x")
+    assert rig.runner.calls != []
+
+
+@pytest.mark.parametrize("bad", [3, True])
+def test_bookkeeping_paths_that_is_not_a_list_is_refused(
+    tmp_path: Path, bad: object
+) -> None:
+    rig = _merged(tmp_path, ["docs/api/Counter.md"])
+    rig.settings.values["bookkeeping_paths"] = bad  # type: ignore[assignment]
+    with pytest.raises(BullError) as exc:
+        rig.run(GateMode.AFTER_MERGE, branch="feature/x")
+    assert exc.value.message == "setting bookkeeping_paths must be a list of strings"

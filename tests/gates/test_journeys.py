@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,7 @@ import pytest
 
 from bull.Modules.events.Contracts import EventKind
 from bull.Modules.events.mocks import MockEventLog
-from bull.Modules.foundation.Contracts import RunResult, Spawned
+from bull.Modules.foundation.Contracts import BullError, RunResult, Spawned
 from bull.Modules.foundation.files import LiveFiles
 from bull.Modules.foundation.mocks import MockClock
 from bull.Modules.gates.Contracts import Gate, Verdict
@@ -367,3 +368,48 @@ def test_a_failing_stop_command_is_ignored_and_the_process_is_still_stopped(
     result = h.run([h.provider("web"), h.provider("api")])
     assert result.verdict is Verdict.PASS  # type: ignore[attr-defined]
     assert [p.stops for p in h.runner.procs] == [[5.0], [5.0]]
+
+
+def test_default_free_port_is_a_bindable_loopback_port(tmp_path: Path) -> None:
+    h = _Harness(tmp_path)
+    steps = LiveSteps(h.runner, h.events, LiveFiles())
+    jr = JourneyRunner(h.runner, steps, h.clock, sleep=h._sleep)
+    jr.run(h.part, h.stack, h.env, h.values, h.results, [h.provider("web")], False)
+    port = int(h.runner.spawns[0][0][2])
+    assert 1 <= port <= 65535
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", port))
+
+
+def test_a_stack_without_a_journeys_step_is_refused(tmp_path: Path) -> None:
+    h = _Harness(tmp_path)
+    h.stack = make_stack("nojourneys", journeys=False)
+    with pytest.raises(BullError) as exc:
+        h.run([h.provider("web")])
+    assert exc.value.message == "stack nojourneys has no journeys step"
+    assert h.runner.spawns == []
+    assert h.runner.calls == []
+
+
+def test_a_provider_whose_stack_has_no_run_commands_is_refused(
+    tmp_path: Path,
+) -> None:
+    h = _Harness(tmp_path)
+    bad = replace(h.provider("web"), stack=make_stack("plainstack"))
+    with pytest.raises(BullError) as exc:
+        h.run([bad])
+    assert exc.value.message == "part web has no [run] commands"
+    assert "plainstack" in (exc.value.fix or "")
+    assert h.runner.spawns == []
+
+
+def test_providers_already_started_are_stopped_when_a_later_one_has_no_run(
+    tmp_path: Path,
+) -> None:
+    h = _Harness(tmp_path)
+    bad = replace(h.provider("api"), stack=make_stack("plainstack"))
+    with pytest.raises(BullError, match="part api has no \\[run\\] commands"):
+        h.run([h.provider("web"), bad])
+    assert h.runner.steps_of("stop") == [("P-web", "stop", "5001")]
+    assert [p.stops for p in h.runner.procs] == [[5.0]]
+    assert h.runner.steps_of("journeys") == []

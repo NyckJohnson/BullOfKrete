@@ -449,3 +449,22 @@ def test_each_result_call_appends_its_own_event() -> None:
     steps.result(Gate.SETUP, "app", None, Verdict.PASS, [], 0.0, "")
     steps.result(Gate.BUILD, "app", None, Verdict.PASS, [], 0.0, "")
     assert [d["gate"] for _, d in gate_events(events)] == ["setup", "build"]
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected"),
+    [
+        ("OUT", "ERR\n", "OUT\nERR\n"),
+        ("OUT\n", "ERR\n", "OUT\nERR\n"),
+        ("OUT\n", "", "OUT\n"),
+        ("", "ERR\n", "ERR\n"),
+        ("OUT", "", "OUT"),
+    ],
+)
+def test_execute_log_breaks_the_line_between_stdout_and_stderr_only_when_needed(
+    stdout: str, stderr: str, expected: str
+) -> None:
+    steps, runner, _, files = make()
+    runner.results["tool"] = run_result(stdout=stdout, stderr=stderr)
+    execute(steps, step="lint")
+    assert files.texts[RESULTS / "lint.log"] == expected
