@@ -912,6 +912,58 @@ def test_run_set_up_failure_fails_the_case_and_its_then(h: Harness) -> None:
     assert calls == []
 
 
+def test_run_git_that_cannot_start_fails_the_case_and_its_then(h: Harness) -> None:
+    bin_dir = h.tmp / "brokenbin"
+    bin_dir.mkdir()
+    stub = bin_dir / "git"
+    stub.write_text("#!/nonexistent/sh\nexit 0\n")
+    stub.chmod(0o755)
+    # Only the stub is on PATH: a missing interpreter makes the launch fall through
+    # to the next git on PATH otherwise.
+    h.monkeypatch.setenv("PATH", str(bin_dir))
+    report, calls = h.run(h.stack([case("p", then=THEN)]))
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.FAIL),
+    ]
+    for result in report.cases:
+        text = _text(result).lower()
+        assert "app folder" in text
+        assert "git" in text
+        assert "start" in text
+    assert calls == []
+
+
+def test_run_layout_whose_entries_collide_fails_the_case_and_its_then(
+    h: Harness,
+) -> None:
+    # A file is copied to x, then a folder is copied into x/sub.
+    stack = h.stack(
+        [case("p", then=THEN)],
+        layout={"app/src/a.fx": "x", "app/": "x/sub"},
+    )
+    report, calls = h.run(stack)
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.FAIL),
+    ]
+    assert all("app folder" in _text(r).lower() for r in report.cases)
+    assert calls == []
+
+
+def test_run_fixture_containing_a_bull_file_fails_the_case_and_its_then(
+    h: Harness,
+) -> None:
+    files = {**BASE_FILES, "app/.bull": "not a folder\n"}
+    report, calls = h.run(h.stack([case("p", then=THEN)], files=files))
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.FAIL),
+    ]
+    assert all("app folder" in _text(r).lower() for r in report.cases)
+    assert calls == []
+
+
 def test_run_layout_destination_outside_the_app_folder_fails_the_case_and_its_then(
     h: Harness,
 ) -> None:
