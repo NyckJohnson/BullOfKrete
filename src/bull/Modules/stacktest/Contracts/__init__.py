@@ -42,7 +42,10 @@ class StackTestReport:
 
     @property
     def ok(self) -> bool:
-        raise NotImplementedError(f"{type(self).__name__}.ok")
+        """True when there are no problems and every case PASSed (NOT_RUN fails)."""
+        return not self.problems and all(
+            result.verdict is CaseVerdict.PASS for result in self.cases
+        )
 
 
 class StackTester(Protocol):
