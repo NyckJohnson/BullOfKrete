@@ -492,7 +492,7 @@
         "api",
         "interfaces"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -500,7 +500,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -510,7 +510,7 @@
             "passes.py",
             "failed.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -519,7 +519,7 @@
             "driver.py",
             "after_merge.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -529,7 +529,7 @@
             "report.py",
             "cli.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-11T08:59:53-08:00",
+  "updatedAt": "2026-11-12T12:45:18-08:00",
   "features": [],
   "activeFeature": null
 }

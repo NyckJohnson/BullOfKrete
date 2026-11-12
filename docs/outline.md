@@ -1672,7 +1672,8 @@ when `readers.py` defines `detect`.
     empties it.
   - FAST: preflight, build_test_fast(M), lint, api; never coverage; never records.
   - FAILED: for each part with ids in `failed.txt`, rerun_failed with them (tests_run = the number
-    of ids); nothing to rerun → pass with note "no failed tests recorded"; never records.
+    of ids); nothing to rerun → fail `tests`, label "no failed tests recorded; run `bull gates <M> --fast`" (nothing
+    is rerun); never records.
   - COVERAGE_REPORT: as MODULE but stops after coverage and prints the report; never records.
   - ALL: per part in name order: preflight, setup, build_test once, then for each of the part's
     modules in build order lint, api, coverage, interface; then interface snapshots
@@ -1699,6 +1700,145 @@ when `readers.py` defines `detect`.
     marker in the part's stack comment syntax, e.g. `add "# coverage-exempt-file: <reason>" in the
     first 10 lines of a file that only declares types`), failed ids, then "recorded" or the note. `--json` gives `GateRun` as JSON.
     Exit 0 on pass, 1 on fail, 2 on aborted.
+- Construction (internal; not contracts):
+  - steps.py (unit 2): `PLACEHOLDERS` = python, stack_dir, app_root, part_root, results, module,
+    module_src, module_tests, port, failed_ids. `fill(argv: Sequence[str], values: Mapping[str,
+    str], failed_ids: Sequence[str] = ()) -> list[str]`: an argument that is exactly
+    `{failed_ids}` becomes one argument per id (none → removed); every other `{name}` of
+    `PLACEHOLDERS` inside an argument is replaced from `values` (a name missing from `values` →
+    empty string); any other text, braces included, is kept as is. `step_env(base:
+    Mapping[str, str], app: AppLayout, part: Part, stack: Stack, results: Path, settings_json:
+    str, adopt: bool, scope_module: str | None) -> dict[str, str]`: `base` (normally
+    `os.environ`) plus `BULL_PART`, `BULL_PART_ROOT`, `BULL_APP_ROOT`, `BULL_RESULTS`,
+    `BULL_STACK_DIR` (`stack.home`), `BULL_ADOPT_MODE` (`1`/`0`), `BULL_SCOPE_MODULE` (module or
+    ""), `BULL_SETTINGS`; paths absolute. `settings_json(settings: Settings, part: str | None) ->
+    str`: `{r.key: r.value for r in settings.show(part)}` as JSON, keys sorted, tuples as lists.
+    `StepOutput` (frozen): `exit: int, labels: tuple[str, ...], tail: str, seconds: float`.
+    `LiveSteps(runner: Runner, events: EventLog, files: Files)`:
+    `execute(step: str, argv: Sequence[str], cwd: Path, env: Mapping[str, str], results: Path) ->
+    StepOutput` runs `runner.run(argv, cwd, env, None)`, writes stdout then stderr to
+    `results/<step>.log` (`files.write_atomic`; a line break goes between them when both are
+    non-empty and stdout doesn't end in one), labels = each stdout line starting `bull-fail:`
+    with the prefix and surrounding spaces removed, in order; non-zero exit and no labels →
+    `("<step> failed (exit N)",)`; `tail` = the log's last 40 lines. `result(gate: Gate, part: str,
+    module: str | None, verdict: Verdict, labels: Sequence[str], seconds: float, tail: str) ->
+    StepResult` builds the result and appends one `gate_step` event (data: gate value, part,
+    module or None, verdict value, seconds); every step bull reports, its own gates included,
+    goes through it.
+  - passes.py (unit 2): `LivePassRecords(files: Files, clock: Clock)`; record writes
+    `app.passes_dir / "<sha>.json"` per **Data models** (time = `clock.now()`, naive treated as
+    UTC); get: missing file, invalid JSON, not an object, `format` ≠ 1, or a missing/mistyped
+    field → None (never raises), else the `PassRecord` (time timezone-aware UTC).
+  - failed.py (unit 2): `read_failed(files: Files, results: Path) -> tuple[str, ...]` (lines of
+    `results/failed.txt`, blanks and surrounding spaces dropped; missing → `()`),
+    `write_failed(files: Files, results: Path, ids: Sequence[str]) -> None` (one id per line with
+    a trailing newline; no ids → empty file).
+  - driver.py (unit 3): `LiveGates(files: Files, git: Git, runner: Runner, events: EventLog,
+    clock: Clock, stacks: StackRegistry, parts: Parts, triage: CoverageTriage, api: ApiSnapshots,
+    passes: PassRecords, journeys: JourneyRunner, settings: Callable[[AppLayout], Settings],
+    store: Callable[[AppLayout], StatusStore], refs: Callable[[AppLayout], Refs], memo:
+    Callable[[AppLayout], Memo], interfaces: Callable[[AppLayout], Interfaces], python: str =
+    sys.executable, environ: Mapping[str, str] | None = None)` (`environ` None → `os.environ`);
+    it builds its own `LiveSteps(runner, events, files)`.
+    - Modules come from `store(app).load().modules` (build order); a module's part is
+      `parts.get(app, status.part or None)`, its stack `stacks.get(part.stack)`; the settings part
+      argument is None for the implicit part (no `app.parts_dir / "<name>.toml"`), else the name.
+      Results folder `app.results_dir / part.name`, created (parents too) before the part's
+      first step. Placeholder values: python, `stack.home`, `app.root`, `part.root`, results,
+      module, `parts.module_src`/`module_tests` (absolute; "" without a module).
+    - Unknown module: a name matching one case-insensitively → `BullError("unknown module <m>",
+      "did you mean <M>?")`; else fix "modules: a, b, c" (none → "this app has no modules
+      yet"). MODULE/FAST/COVERAGE_REPORT without a module, or other modes with one → `BullError`;
+      AFTER_MERGE without a branch → `BullError("gates --after-merge needs a branch", "run
+      `bull gates --after-merge <branch>`")`.
+      Module branch: `refs(app).module_for_branch(git.current_branch(root))` naming a module
+      not in status → `BullError("branch <b> is for module <m>, which is not in status", "run
+      `bull status init-modules` or switch branch")`; a detached HEAD (no current branch) skips
+      this check.
+    - Adopting = `status.adoption` set with stage ≤ 5. MODULE, FAST and COVERAGE_REPORT steps get
+      `adopt=True, scope_module=M` only while adopting; ALL, JOURNEYS and FAILED steps get `adopt`
+      while adopting and never a scope.
+    - Step verdicts: exit 0 → pass, else fail; preflight exit 2 → `ABORTED` and nothing more runs
+      (in ALL: no later part either). A setup failure stops that part's remaining steps, its
+      journeys included (ALL goes on with the next part). build_test (and build_test_fast) gives a `TESTS` step and, on a
+      non-zero exit with no failed ids, a `BUILD` fail step first; when it passes, one `BUILD`
+      pass then `TESTS`; the `TESTS` step's seconds are the run's, `BUILD` 0. Failed ids
+      (`TestRun.failed`) are written with `write_failed` after every build_test and
+      build_test_fast (none → emptied). `tests_run` sums `TestRun.count`; `failed_ids` holds only
+      parts with ids. Coverage is skipped (no step) when that part's build or tests failed. Every
+      other step still runs after a fail, so one run shows every problem.
+    - Bull's own steps: `API` from `api.check(app, M)` (not ok → labels ("contract differs from
+      docs/api/<M>.md",), tail = the diff's last 40 lines); `COVERAGE` from `coverage(app, M)`
+      (not clean → labels ("coverage not clean for <M>",); the report goes into `GateRun.coverage`
+      whether clean or not); `INTERFACE` (module) from `interfaces(app).check_module(app,
+      memo(app), M)` (labels "<interface>: <item> — <fix>" per failed item; no results → pass).
+      ALL's app-wide `INTERFACE` step (part "", module None) collects `api.check_interface` of
+      every `memo.interfaces` entry (labels "interface <Name> differs from its snapshot") and
+      `interfaces(app).problems(memo)` as labels. seconds = measured wall time.
+    - Journeys go through `journeys.run(...)` (journeys.py); a part whose stack has no
+      `gates.journeys` gets no step (JOURNEYS mode adds "no journey tests: <part>" to the note).
+    - Verdict: ABORTED if any step aborted, else FAIL if any failed, else PASS. Recording (MODULE,
+      ALL, AFTER_MERGE, not `skip_coverage`): `git.is_clean(root)` before the first step and after
+      the last, verdict PASS → `passes.record(app, git.head(root, "HEAD"), current branch,
+      command, parts run)` (no commit at HEAD → `BullError("no commit at HEAD", "commit before
+      recording a gate pass")`) with command "gates <M>", "gates --all" or "gates --after-merge
+      <branch>"; notes, the first that applies: failed/aborted → "not recorded: gates failed";
+      skip_coverage → "not recorded: coverage skipped"; dirty → "not recorded: working tree has
+      changes"; FAST, FAILED,
+      COVERAGE_REPORT, JOURNEYS → "not recorded: partial run (<mode value>)" (FAILED with nothing
+      to rerun: verdict FAIL, one `TESTS` fail step (part "", module None, seconds 0) with that label, note
+      "no failed tests recorded"; JOURNEYS notes joined with "; ").
+    - FAILED: parts in `parts.all` order; a part with ids → one `TESTS` step from rerun_failed
+      (`fill(..., failed_ids=ids)`); pass → `failed.txt` emptied; fail → replaced by
+      `test_results(results).failed` when that returns ids, else kept; tests_run = number of ids.
+    - coverage(app, M): no `test_results(results)` for the module's part → `BullError("no coverage
+      data for <M>", "run `bull gates <M>` first")`; exclude = `coverage.exclude` +
+      `coverage.exclude_extra` (part's settings; for these and `bookkeeping_paths` a string value
+      counts as a one-item list, "" as empty, any other non-list → `BullError("setting <key> must
+      be a list of strings")`); `triage.sources(parts.module_src(part, M),
+      part.root, manifest.source_glob, exclude)`, `stack.readers.uncovered(part.root, sources,
+      results)`, `triage.report(M, sources, data, manifest.comment)`. LiveGates remembers each
+      reported module's stack comment for render.
+    - render delegates to `report.render(run, triage, comments)` (`comments`: module → comment
+      remembered by this instance; unknown → "#").
+  - after_merge.py (unit 3): `after_merge_skip(app: AppLayout, branch: str, git: Git, passes:
+    PassRecords, bookkeeping: Sequence[str]) -> PassRecord | None`: branch head
+    (`git.head(root, branch)`; None → `BullError("no branch <branch>")`) has a record and every
+    `git.changed_paths(root, head, "HEAD")` path is bookkeeping → that record, else None. A
+    bookkeeping entry ending in `/` matches paths under it; otherwise the exact path or paths
+    under `<entry>/`. LiveGates: a record → `passes.record` for HEAD with the record's parts and
+    command "gates --after-merge <branch>", a `GateRun` with no steps, tests_run 0, recorded
+    True, note "merge holds the gated code"; None → an ALL run whose request stays AFTER_MERGE.
+  - journeys.py (unit 4): `JourneyRunner(runner: Runner, steps: LiveSteps, clock: Clock, sleep:
+    Callable[[float], None] = time.sleep, free_port: Callable[[], int] = <bind 127.0.0.1:0>)`;
+    `run(part: Part, stack: Stack, env: Mapping[str, str], values: Mapping[str, str], results:
+    Path, providers: Sequence[Provider], adopt: bool) -> StepResult` where `Provider` (frozen) =
+    `part: Part, stack: Stack, env: Mapping[str, str], values: Mapping[str, str], results:
+    Path`, built by the driver from `interfaces(app).parts_to_run(memo, part.name)`. Per
+    provider in order: port = `free_port()`, `runner.spawn(fill(run.start, values+port),
+    provider.part.root, provider.env, results/"run.log")`, then `runner.run(fill(run.ready, …))`
+    every 0.5 s (`sleep`) until exit 0 or `clock.now()` passes start + `ready_timeout` → `JOURNEYS`
+    fail, labels ("<provider> not ready",), journeys not run. Then `execute("journeys", …)` with
+    `BULL_URL_<PROVIDER UPPER>=http://127.0.0.1:<port>` added to `env`. In a `finally`, for each
+    started provider (reverse order): `runner.run(fill(run.stop, …))` (errors ignored) and
+    `spawned.stop(5.0)`. The step's part is `part.name`, module None.
+  - report.py (unit 4): `render(run: GateRun, triage: CoverageTriage, comments: Mapping[str, str])
+    -> str`: per step `✓`/`✗`/`!` (aborted) `<gate> <part>[ <module>]` (empty part left out) and
+    ` — <labels joined by "; ">` when it has labels; then per failed/aborted step with a tail
+    `--- <gate> <part> output ---` and the tail; then each coverage report with `triage.render`,
+    followed (when it has no_data) by the hint `add "<comment> coverage-exempt-file: <reason>" in
+    the first 10 lines of a file that only declares types`; then `failed tests (<part>):` and one
+    id per line; then "<n> tests run"; last "recorded" (plus the note on the next line when
+    non-empty) or the note. `run_json(run: GateRun) -> dict[str, object]`: dataclass fields,
+    enums by value, paths POSIX strings, coverage reports with `clean` added, exemption `lines`
+    null for whole-file.
+  - cli.py (unit 4; decisions-log convention): `register(commands, gates: Callable[[], Gates],
+    app: Callable[[], AppLayout], triage: Callable[[], CoverageTriage]) -> None` adds `gates` and
+    `coverage`. `gates`: exactly one of `<M>`, `--failed`, `--all`, `--after-merge <branch>`,
+    `--journeys`; `--fast`/`--coverage-report` only with `<M>` (not together); `--skip-coverage`
+    only with `<M>` or `--all` (not with `--fast`/`--coverage-report`); else `BullError`. Prints
+    `render(run)` or, with `--json`, `run_json(run)`; exit 0 pass, 1 fail, 2 aborted. `coverage
+    <M> [--json]`: `triage.render(report)` or the report as JSON; exit 0 clean, else 1.
 - Reference tests: v1-tests/test_gate_speed.py::test_skips_when_the_merge_holds_the_gated_code, test_ungated_bookkeeping_commits_on_the_base_still_skip, test_runs_everything_when_the_base_moved, test_runs_everything_without_an_earlier_gated_commit, test_runs_everything_when_another_module_changed, test_runs_everything_when_the_branch_head_was_not_gated, test_reruns_only_what_failed, test_a_passing_run_clears_the_list, test_module_runs_are_scoped_only_while_adopting, test_zero_tests_fail_the_run; v1-tests/test_gates_and_coverage.py::test_only_full_runs_record_a_pass, test_dirty_tree_records_nothing, test_failures, test_exclude_extra_adds_to_default; v1-tests/test_parts.py::test_gates_run_the_module_part, test_gates_all_covers_every_part, test_failed_tests_rerun_in_their_part, test_unknown_module_names_the_right_one, test_ui_tests_only_where_the_stack_defines_them; v1-tests/test_adopt_gates.py::test_full_runs_add_journey_tests_while_adopting, test_normal_app_and_stage_6_use_the_normal_gates, test_failing_journey_test_fails_the_run, test_no_modules_yet
 - Contract: see `docs/api/gates.md` (generated; do not edit by hand)
 
@@ -2227,3 +2367,7 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-10: interfaces coverage triage — human: keep, specify and test the `parts_to_run` guard for a non-string `stack` setting (`BullError` "part <part>: the stack setting is not a name") — approved by Nicholas Johnson
 - 2026-11-11: adoption reference scan (covered 13, missed 0, contradicts 2, not-in-spec 6, obsolete/out of scope 3) — human: dotfiles stay ignored by `legacy` (spec over v1); `App shell`/`App shell tests` entries ending in `/` cover their folder (v1); detect reports nested git repositories as a fix issue (v1); `stack detect --apply` takes an optional stack name, none → the detected stack (v1); `adopt start` refusals name the problem and fix (v1); a blocked `--apply` writes "blocking issues; nothing applied" to stderr (v1); left out: abandon printing carried-over items (would change the `abandon` contract) — approved by Nicholas Johnson
 - 2026-11-11: adoption coverage triage (missed 4, not-in-spec 2) — human kept and specified both: `stack detect --apply` outside a bull app is refused (`BullError`); a failed `git for-each-ref` in detect raises `GitError`. Missed: abandon's malformed `adopt/main` backlog (`FileFormatError`: bad JSON, no `items`, item without `slug`) and `adopt` subcommands outside an app — approved by Nicholas Johnson
+- 2026-11-11: gates construction (LiveGates collaborators and per-app providers, LiveSteps/fill/step_env, pass-record and failed.txt helpers, step order and skip rules, notes, after-merge skip, JourneyRunner lifecycle, render/JSON, cli flag rules) set in the gates § "Construction" line; journeys are injected into LiveGates as a JourneyRunner (unit 3 may stub it; unit 4 builds it); render's file-marker hint uses the stack comment LiveGates remembers from coverage; internal wiring, no contract change.
+- 2026-11-11: gates unit 3 review — three choices the spec left open set in the gates § Construction: FAILED reruns get the adopt env (no scope) while adopting; a part whose setup failed gets no journeys; the not-recorded note is the first of gates failed → coverage skipped → working tree has changes. Internal behavior, no contract change.
+- 2026-11-11: gates reference scan (covered 20, missed 0, contradicts 2, not-in-spec 0, obsolete 1) — human: `gates --after-merge` keeps the spec (skip when only bookkeeping differs from the gated branch head, even if the base was never gated; v1 also required a gated base); `gates --failed` with nothing recorded fails (v1) with "no failed tests recorded; run `bull gates <M> --fast`", since a build failure leaves the list empty; unreadable test results with exit 0 still fail "no tests ran" (spec, per 2026-11-07); v1's after-merge reason lines and "pass now" text left out — approved by Nicholas Johnson
+- 2026-11-12: gates coverage triage (missed 3, not-in-spec 5) — human kept and specified all five: a detached HEAD skips the module-branch check; recording with no commit at HEAD raises `BullError("no commit at HEAD")`; `--after-merge` without a branch raises `BullError`; list settings (`coverage.exclude`, `coverage.exclude_extra`, `bookkeeping_paths`) accept a string as a one-item list and refuse other non-lists; step logs put a line break between stdout and stderr when stdout lacks one. Internal behavior, no contract change — approved by Nicholas Johnson
