@@ -569,7 +569,7 @@
             "cli.py"
           ],
           "state": "code",
-          "attempts": 0
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T14:03:28-08:00",
+  "updatedAt": "2026-11-12T14:04:34-08:00",
   "features": [],
   "activeFeature": null
 }
