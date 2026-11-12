@@ -45,6 +45,30 @@ _GIT_IDENTITY = {
     "GIT_COMMITTER_NAME": "bull stack test",
     "GIT_COMMITTER_EMAIL": "stack-test@bull.invalid",
 }
+# Variables that point git at some other repository (`git rev-parse
+# --local-env-vars`, plus the work tree and discovery settings). Left in the
+# child env they would make git, and bull's own git calls, act on the caller's
+# repo instead of the throwaway app folder.
+_GIT_LOCATION_VARS = frozenset(
+    {
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_PREFIX",
+        "GIT_CEILING_DIRECTORIES",
+        "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_GRAFT_FILE",
+        "GIT_REPLACE_REF_BASE",
+        "GIT_NO_REPLACE_OBJECTS",
+        "GIT_SHALLOW_FILE",
+        "GIT_QUARANTINE_PATH",
+        "GIT_INTERNAL_SUPER_PREFIX",
+    }
+)
 
 
 class _ChangeDoesNotApply(Exception):
@@ -176,7 +200,13 @@ class LiveStackTester(StackTester):
         expected = _describe(case.expect)
         try:
             done = subprocess.run(
-                argv, cwd=root, capture_output=True, text=True, check=False
+                argv,
+                cwd=root,
+                env=_child_env(),
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
             )
         except OSError as error:
             return CaseResult(
@@ -289,7 +319,9 @@ def _write_bull_files(stack: Stack, root: Path, settings: Mapping[str, object]) 
     bull_dir = root / ".bull"
     bull_dir.mkdir(exist_ok=True)
     config = ["format = 1", f"stack = {_toml_value(stack.manifest.name)}"]
-    config += [f"{_toml_key(k)} = {_toml_value(v)}" for k, v in settings.items()]
+    config += [
+        f"{_toml_key(k, dotted=True)} = {_toml_value(v)}" for k, v in settings.items()
+    ]
     (bull_dir / "config.toml").write_text("\n".join(config) + "\n", encoding="utf-8")
 
     memo = root / "docs" / "outline.md"
@@ -329,15 +361,27 @@ def _write_json(path: Path, data: object) -> None:
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def _toml_key(key: str) -> str:
-    """A dotted settings key (`coverage.exclude`) stays dotted; odd parts are quoted."""
+def _toml_key(key: str, *, dotted: bool = False) -> str:
+    """A TOML key; quoted unless bare.
+
+    With `dotted` (top-level settings keys), `coverage.exclude` stays a dotted
+    key and each part is quoted on its own; keys inside a nested object are
+    single keys, dots and all.
+    """
+    parts = key.split(".") if dotted else [key]
     return ".".join(
-        part if _BARE_KEY.match(part) else json.dumps(part) for part in key.split(".")
+        part if _BARE_KEY.match(part) else json.dumps(part) for part in parts
     )
 
 
 def _toml_value(value: object) -> str:
-    """A TOML literal for a JSON value (str, bool, int, float, list)."""
+    """A TOML literal for a JSON value (str, bool, int, float, list, object).
+
+    An object becomes an inline table. JSON null has no TOML form.
+
+    Raises:
+        _SetupFailed: the value (or one inside it) is null or another type.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int | float):
@@ -347,6 +391,10 @@ def _toml_value(value: object) -> str:
     if isinstance(value, list):
         items = cast("list[object]", value)
         return "[" + ", ".join(_toml_value(item) for item in items) + "]"
+    if isinstance(value, dict):
+        table = cast("dict[object, object]", value)
+        entries = [f"{_toml_key(str(k))} = {_toml_value(v)}" for k, v in table.items()]
+        return "{" + ", ".join(entries) + "}"
     raise _SetupFailed(f"setting value {value!r} cannot be written to config.toml")
 
 
@@ -413,8 +461,13 @@ def _status_module(name: str, fields: Mapping[str, str]) -> dict[str, object]:
     }
 
 
+def _child_env() -> dict[str, str]:
+    """This process's env without the git repo-location variables."""
+    return {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_VARS}
+
+
 def _git(root: Path, *args: str) -> None:
-    env = dict(os.environ)
+    env = _child_env()
     for key, value in _GIT_IDENTITY.items():
         env.setdefault(key, value)
     try:
@@ -423,7 +476,8 @@ def _git(root: Path, *args: str) -> None:
             cwd=root,
             env=env,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
     except OSError as error:

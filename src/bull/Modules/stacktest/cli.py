@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-from bull.Modules.stacks.Contracts import Stack, StackRegistry
+from bull.Modules.stacks.Contracts import Stack, StackError, StackRegistry
 from bull.Modules.stacktest.Contracts import StackTester, StackTestReport
 
 
@@ -21,6 +21,9 @@ def register(
     """Add `test` to the `stack` command's subcommands (owned by stacks.cli)."""
 
     def run(args: argparse.Namespace, out: TextIO) -> int:
+        """Raises StackError for `--static` with `--case`, or an unknown stack."""
+        if args.static and args.case is not None:
+            raise StackError("`--static` and `--case` cannot be used together")
         stack = _load(registry(), args.stack)
         provided = tester()
         report = (
