@@ -551,7 +551,7 @@
             "mocks/__init__.py"
           ],
           "state": "code",
-          "attempts": 0
+          "attempts": 1
         },
         {
           "number": 2,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T13:00:06-08:00",
+  "updatedAt": "2026-11-12T13:00:24-08:00",
   "features": [],
   "activeFeature": null
 }
