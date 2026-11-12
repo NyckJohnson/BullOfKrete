@@ -429,3 +429,32 @@ def test_static_needs_no_toolchain_or_fixture_content(tmp_path: Path) -> None:
     home = _build(tmp_path)
     (home / "fixture" / "a.fx").write_text("not valid anything \x00 {{{\n")
     assert _check(home).ok is True
+
+
+def test_rules_that_is_not_utf8_is_reported_without_crashing(tmp_path: Path) -> None:
+    home = _build(tmp_path)
+    (home / "rules.md").write_bytes(b"## common\n\xff\xfe\x80 not utf-8\n")
+    report = _check(home)
+    assert not report.ok
+    # one problem per required section: common, outline and each manifest agent
+    assert len(report.problems) == 2 + len(AGENTS)
+    assert _mentions(report, "rules.md")
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "check = _impl\n",
+        "check: object = _impl\n",
+    ],
+)
+def test_readers_function_bound_by_assignment_counts_as_defined(
+    tmp_path: Path, binding: str
+) -> None:
+    readers = READERS.replace(
+        "def check(part_root, settings, adopting):\n    return []\n",
+        "def _impl(part_root, settings, adopting):\n    return []\n\n" + binding,
+    )
+    assert "def check(" not in readers
+    report = _check(_build(tmp_path, readers=readers))
+    assert report.problems == ()

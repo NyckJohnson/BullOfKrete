@@ -317,3 +317,17 @@ def test_error_in_a_later_case_still_raises(tmp_path: Path) -> None:
     _write(stack, _doc(_good(), bad))
     with pytest.raises(StackError, match="run"):
         load_cases(stack)
+
+
+def test_cases_file_that_is_not_utf8_raises_stack_error(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    (stack.home / "cases.json").write_bytes(b'{"format": 1, "x": "\xff\xfe\x80"}')
+    with pytest.raises(StackError):
+        load_cases(stack)
+
+
+def test_cases_file_that_is_a_directory_raises_stack_error(tmp_path: Path) -> None:
+    stack = _stack(tmp_path)
+    (stack.home / "cases.json").mkdir()
+    with pytest.raises(StackError):
+        load_cases(stack)

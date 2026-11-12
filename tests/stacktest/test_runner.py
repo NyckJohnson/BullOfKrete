@@ -1008,3 +1008,153 @@ def test_run_removes_the_temp_folders_when_bull_does_not_start(h: Harness) -> No
     tester = LiveStackTester((str(h.tmp / "no-such-bull-command"),))
     tester.run(h.stack([case("c")]))
     assert list(root.iterdir()) == []
+
+
+# --- coverage triage ----------------------------------------------------------
+
+
+def test_run_layout_entry_naming_one_file_copies_it_to_a_nested_destination(
+    h: Harness,
+) -> None:
+    h.watch("nested/dir/a.fx")
+    stack = h.stack(
+        [case("c")],
+        layout={
+            "app/docs/outline.md": "docs/outline.md",
+            "app/src/a.fx": "nested/dir/a.fx",
+        },
+    )
+    report, calls = h.run(stack)
+    assert calls[0]["watch"]["nested/dir/a.fx"] == "alpha\n"
+    assert report.cases[0].verdict is CaseVerdict.PASS
+
+
+def test_run_writes_boolean_settings_as_toml_booleans(h: Harness) -> None:
+    settings = {"source_dir": "src", "on": True, "off": False}
+    _, calls = h.run(h.stack([case("c")], settings=settings))
+    config = tomllib.loads(calls[0]["config"])
+    assert config["on"] is True
+    assert config["off"] is False
+
+
+def test_run_writes_int_and_float_settings_as_toml_numbers(h: Harness) -> None:
+    settings = {"source_dir": "src", "count": 3, "ratio": 0.5}
+    _, calls = h.run(h.stack([case("c")], settings=settings))
+    config = tomllib.loads(calls[0]["config"])
+    assert config["count"] == 3
+    assert isinstance(config["count"], int)
+    assert config["ratio"] == 0.5
+    assert isinstance(config["ratio"], float)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"replace": {"../x": "y\n"}},
+        {"delete": ["../x"]},
+        {"replace": {"../../outside.txt": "y\n"}},
+    ],
+)
+def test_run_change_path_outside_the_app_folder_fails_and_skips_then(
+    h: Harness, change: dict[str, Any]
+) -> None:
+    stack = h.stack([case("p", change=change, then=THEN)])
+    (h.home / "fixture" / "x").write_text("keep\n")
+    report, calls = h.run(stack)
+    assert [(r.id, r.verdict) for r in report.cases] == [
+        ("p", CaseVerdict.FAIL),
+        ("p/then", CaseVerdict.NOT_RUN),
+    ]
+    assert "change does not apply" in _text(report.cases[0])
+    assert calls == []
+
+
+ITEMS_JSON = {
+    "verdict": "fail",
+    "items": [
+        {"item": "src/a.fx: warning unused", "fix": "remove the variable"},
+    ],
+}
+
+
+@pytest.mark.parametrize("text", ["unused", "remove the variable"])
+def test_run_output_matches_an_item_or_its_fix_when_bull_has_no_steps(
+    h: Harness, text: str
+) -> None:
+    h.respond(ITEMS_JSON)
+    expect = {"verdict": "fail", "output": text}
+    report, _ = h.run(h.stack([case("c", expect=expect)]))
+    assert report.cases[0].verdict is CaseVerdict.PASS
+
+
+def test_run_output_that_matches_no_item_or_fix_fails(h: Harness) -> None:
+    h.respond(ITEMS_JSON)
+    expect = {"verdict": "fail", "output": "nothing like this"}
+    report, _ = h.run(h.stack([case("c", expect=expect)]))
+    assert report.cases[0].verdict is CaseVerdict.FAIL
+
+
+def test_run_expected_gate_fails_when_bull_json_has_only_items(h: Harness) -> None:
+    h.respond(ITEMS_JSON)
+    expect = {"verdict": "fail", "gate": "lint"}
+    report, _ = h.run(h.stack([case("c", expect=expect)]))
+    assert report.cases[0].verdict is CaseVerdict.FAIL
+    assert (
+        "null" in report.cases[0].got.lower() or "none" in report.cases[0].got.lower()
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [gates_json("pass"), gates_json("fail", tests_run=1)],
+    ids=["passing-report", "report-with-no-failed-step"],
+)
+def test_run_gate_is_null_when_no_step_failed(
+    h: Harness, response: dict[str, Any]
+) -> None:
+    h.respond(response)
+    expect = {"verdict": response["verdict"], "gate": "tests"}
+    report, _ = h.run(h.stack([case("c", expect=expect)]))
+    assert report.cases[0].verdict is CaseVerdict.FAIL
+    assert not report.ok
+
+
+def _rewrite_cases(stack: Stack, **override: Any) -> None:
+    path = stack.home / "cases.json"
+    doc = json.loads(path.read_text())
+    doc.update(override)
+    path.write_text(json.dumps(doc))
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [["app/"], "app/", {"app/": 3}, {"app/": ["."]}, {"app/": None}, 7, None],
+)
+def test_run_layout_that_is_not_a_folder_to_folder_object_raises_stack_error(
+    h: Harness, layout: Any
+) -> None:
+    stack = h.stack([case("c")])
+    _rewrite_cases(stack, layout=layout)
+    with pytest.raises(StackError):
+        h.tester.run(stack, None)
+    assert h.calls() == []
+
+
+@pytest.mark.parametrize("settings", [["source_dir"], "src", 3, True, None])
+def test_run_settings_that_is_not_an_object_raises_stack_error(
+    h: Harness, settings: Any
+) -> None:
+    stack = h.stack([case("c")])
+    _rewrite_cases(stack, settings=settings)
+    with pytest.raises(StackError):
+        h.tester.run(stack, None)
+    assert h.calls() == []
+
+
+def test_run_unknown_expect_key_fails_the_case_naming_the_key(h: Harness) -> None:
+    expect = {"verdict": "pass", "colour": "red"}
+    report, _ = h.run(h.stack([case("c", expect=expect)]))
+    result = report.cases[0]
+    assert result.verdict is CaseVerdict.FAIL
+    assert "unsupported expect key" in result.got
+    assert "colour" in result.got
