@@ -60,7 +60,7 @@ _HEADING = re.compile(r"^##\s+(.+?)\s*$")
 def static(stack: Stack) -> StackTestReport:
     """Check the shape of `stack.home` without running anything.
 
-    Checks the required files and `fixture/` folder, that `stack.toml` parses with
+    Checks the required files and a non-empty `fixture/` folder, that `stack.toml` parses with
     the required tables and keys and no `TODO` placeholder, that `readers.py`
     defines the required functions (via `ast`, never imported), that `rules.md`
     has `## common`, `## outline` and one section per manifest agent, that
@@ -75,8 +75,11 @@ def static(stack: Stack) -> StackTestReport:
             present.add(name)
         else:
             problems.append(f"missing {name}")
-    if not (home / "fixture").is_dir():
+    fixture = home / "fixture"
+    if not fixture.is_dir():
         problems.append("missing fixture/ folder")
+    elif not any(fixture.iterdir()):
+        problems.append("fixture/ folder is empty")
 
     if "stack.toml" in present:
         problems.extend(_manifest_problems(home / "stack.toml"))

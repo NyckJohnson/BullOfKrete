@@ -132,6 +132,12 @@ class LiveStackTester(StackTester):
                 lines.append(f"    {result.got}")
         lines.extend(f"  problem: {problem}" for problem in report.problems)
         lines.append("ok" if report.ok else "FAILED")
+        verdicts = [result.verdict for result in report.cases]
+        lines.append(
+            f"{verdicts.count(CaseVerdict.PASS)} passed, "
+            f"{verdicts.count(CaseVerdict.FAIL)} failed, "
+            f"{verdicts.count(CaseVerdict.NOT_RUN)} not run"
+        )
         return "\n".join(lines) + "\n"
 
     # --- one case ---------------------------------------------------------------
@@ -270,10 +276,12 @@ def _layout_and_settings(
 
 def _not_run_reason(stack: Stack, layout: Mapping[str, str]) -> str | None:
     """Why no case can run: a required tool or a layout fixture folder is missing."""
-    tools = ["git", *(req.tool for req in stack.manifest.requires)]
-    missing = [tool for tool in dict.fromkeys(tools) if shutil.which(tool) is None]
+    hints = {"git": "install git"}
+    for req in stack.manifest.requires:
+        hints.setdefault(req.tool, req.hint)
+    missing = [tool for tool in hints if shutil.which(tool) is None]
     if missing:
-        return "; ".join(f"missing {tool}" for tool in missing)
+        return "; ".join(f"missing {tool}: {hints[tool]}" for tool in missing)
     fixture = stack.home / "fixture"
     absent = [name for name in layout if not (fixture / name).exists()]
     if absent:
