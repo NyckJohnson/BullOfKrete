@@ -559,7 +559,7 @@
             "cases.py",
             "static.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T13:56:39-08:00",
+  "updatedAt": "2026-11-12T13:57:33-08:00",
   "features": [],
   "activeFeature": null
 }
