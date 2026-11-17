@@ -58,6 +58,19 @@ def in_order(name: str, *terms: str) -> None:
         pos = found + len(t)
 
 
+TAG_UI = "git tag $(bull status ref tag ui-approved)"
+NEGATION = re.compile(r"\b(not|never|don't|do not|skip|without|except|no)\b")
+
+
+def sentences(name: str) -> list[str]:
+    return [x for x in re.split(r"(?<=[.;:!?])\s", _norm(_body(name))) if x]
+
+
+def negated(name: str, word: str) -> bool:
+    """Some sentence says `word` together with a negation."""
+    return any(word in x and NEGATION.search(x) for x in sentences(name))
+
+
 # --- frontmatter -------------------------------------------------------------------------
 
 
@@ -99,7 +112,7 @@ def test_feature_argument_hint_names_idea_file_or_nothing() -> None:
 
 
 def test_prototype_sets_stage_four() -> None:
-    in_order("prototype", "bull status stage 4")
+    assert "bull status stage 4" in _norm(_body("prototype"))
 
 
 def test_prototype_gauge_lists_one_item_per_screen() -> None:
@@ -176,14 +189,24 @@ def test_prototype_protocol_change_updates_the_memo_first() -> None:
 
 
 def test_prototype_approval_checkpoint_comes_before_the_approval_commit() -> None:
-    norm = _norm(_body("prototype"))
-    first = norm.find("bull status checkpoint ui-approved")
-    assert first >= 0
-    assert "commit" in norm[:first]
+    in_order(
+        "prototype",
+        "bull status checkpoint ui-approved",
+        "chore: prototype approved",
+    )
 
 
 def test_prototype_tags_ui_approved_after_the_status_change() -> None:
-    in_order("prototype", "bull status checkpoint ui-approved", "git tag ui-approved")
+    in_order("prototype", "bull status checkpoint ui-approved", TAG_UI)
+
+
+def test_prototype_tags_through_status_ref_in_both_paths() -> None:
+    norm = _norm(_body("prototype"))
+    assert norm.count(TAG_UI) >= 2
+
+
+def test_prototype_never_uses_a_bare_ui_approved_tag() -> None:
+    assert "git tag ui-approved" not in _norm(_raw("prototype"))
 
 
 def test_prototype_clears_the_gauge_at_the_end() -> None:
@@ -208,17 +231,15 @@ def test_prototype_no_screens_path_records_the_checkpoint_and_tag() -> None:
     assert start >= 0
     tail = norm[start:]
     assert "bull status checkpoint ui-approved" in tail
-    assert "git tag ui-approved" in tail
-    assert tail.find("bull status checkpoint ui-approved") < tail.find(
-        "git tag ui-approved"
-    )
+    assert TAG_UI in tail
+    assert tail.find("bull status checkpoint ui-approved") < tail.find(TAG_UI)
 
 
 # --- build -------------------------------------------------------------------------------
 
 
 def test_build_sets_stage_five() -> None:
-    in_order("build", "bull status stage 5")
+    assert "bull status stage 5" in _norm(_body("build"))
 
 
 def test_build_stage_during_a_feature_is_the_features() -> None:
@@ -258,7 +279,7 @@ def test_build_in_a_feature_or_adoption_continues_with_their_stage_six() -> None
 
 
 def test_build_stops_on_pause_and_pauses() -> None:
-    has_all("build", "pause")
+    has_all("build", "bull status pause")
 
 
 def test_build_stops_and_asks_on_blocked_unit_contract_change_or_findings() -> None:
@@ -284,7 +305,7 @@ def test_build_reports_at_module_boundaries_one_short_line() -> None:
 
 
 def test_verify_sets_stage_six() -> None:
-    in_order("verify", "bull status stage 6")
+    assert "bull status stage 6" in _norm(_body("verify"))
 
 
 def test_verify_gauge_has_every_item() -> None:
@@ -387,7 +408,16 @@ def test_verify_acceptance_checkpoint_comes_before_the_tag() -> None:
 
 
 def test_verify_acceptance_is_committed() -> None:
-    has_all("verify", "commit")
+    has_all("verify", "chore: app accepted")
+
+
+def test_verify_says_a_feature_takes_acceptance_and_next_step_from_feature() -> None:
+    norm = _norm(_body("verify"))
+    assert "/bull:feature" in norm
+    assert any(
+        "feature" in x and "acceptance" in x and "/bull:feature" in x
+        for x in sentences("verify")
+    )
 
 
 def test_verify_backlog_previews_both_sections_with_dry_run() -> None:
@@ -670,7 +700,8 @@ def test_feature_acceptance_records_accepted_before_feature_accept() -> None:
 
 
 def test_feature_acceptance_adds_the_feature_to_the_memos_features_section() -> None:
-    has_all("feature", "features", "section")
+    has_all("feature", "docs: feature <slug> accepted", "features", "section")
+    in_order("feature", "bull feature accept", "docs: feature <slug> accepted")
 
 
 def test_feature_acceptance_runs_all_gates_on_the_feature_branch_then_merges() -> None:
@@ -716,3 +747,42 @@ def test_feature_abandon_switches_to_trunk_then_abandons() -> None:
 
 def test_feature_abandon_leaves_trunk_untouched_and_carries_queued_ideas() -> None:
     has_all("feature", "untouched", "carried over")
+
+
+def test_feature_verify_runs_the_checks_from_mocks_check_through_hands_on() -> None:
+    has_all("feature", "/bull:verify", "mocks-check", "hands-on")
+    in_order("feature", "mocks-check", "hands-on")
+
+
+def test_feature_verify_does_not_run_verifys_acceptance() -> None:
+    assert negated("feature", "acceptance")
+    assert negated("feature", "app-accepted")
+
+
+def test_feature_verify_does_not_run_verifys_backlog_step() -> None:
+    assert negated("feature", "backlog")
+
+
+def test_feature_never_tags_app_accepted() -> None:
+    assert "git tag app-accepted" not in _norm(_raw("feature"))
+
+
+def test_feature_accepted_tag_is_written_out_because_ref_has_no_prefix_any_more() -> (
+    None
+):
+    norm = _norm(_body("feature"))
+    i = norm.find("git tag feature/<slug>/accepted")
+    assert i >= 0
+    window = norm[max(0, i - 400) : i + 400]
+    assert "ref" in window
+    assert "ended" in window or "no longer" in window
+
+
+def test_feature_no_setup_needed_puts_the_note_in_the_commit_message() -> None:
+    norm = _norm(_body("feature"))
+    assert re.search(r"chore\(<slug>\):[^.]*no setup", norm)
+
+
+def test_feature_no_skeleton_needed_puts_the_note_in_the_commit_message() -> None:
+    norm = _norm(_body("feature"))
+    assert re.search(r"chore\(<slug>\):[^.]*no skeleton", norm)
