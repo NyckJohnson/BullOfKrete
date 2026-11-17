@@ -433,7 +433,7 @@ when `readers.py` defines `detect`.
 17. stacktest (depends on: foundation, gitrepo, stacks)
 18. stackflow (depends on: foundation, gitrepo, stacks, stacktest)
 19. hooks (depends on: foundation, gitrepo, events, settings, memo, usage, stacks, parts, status, gates)
-20. plugin_text (depends on: none)
+20. plugin_text (depends on: foundation)
 21. claude_code (depends on: foundation, settings, usage, hooks, plugin_text)
 22. appinit (depends on: foundation, gitrepo, settings, formats, stacks, status, adoption, stackflow, claude_code)
 23. cli (depends on: foundation, gitrepo, events, settings, formats, memo, usage, stacks, parts, status, features, coverage, api, interfaces, adoption, gates, stacktest, stackflow, hooks, plugin_text, claude_code, appinit)
@@ -2017,7 +2017,7 @@ when `readers.py` defines `detect`.
 ### plugin_text
 - Purpose: the plugin's Markdown: orchestrator instructions, slash commands and agent definitions,
   stack-neutral and in `bull` terms.
-- Depends on: none
+- Depends on: foundation
 - Files: Contracts/__init__.py, mocks/__init__.py, plugin_files.py | orchestrator.md | commands/discuss.md, commands/outline.md, commands/setup.md, commands/skeleton.md | commands/prototype.md, commands/build.md, commands/verify.md, commands/feature.md | commands/adopt.md, commands/resume.md, commands/status.md, commands/stack.md | agents/skeleton-builder.md, agents/screen-builder.md, agents/test-writer.md, agents/code-writer.md | agents/reviewer.md, agents/coverage-analyst.md, agents/journey-test-writer.md | agents/surveyor.md, agents/legacy-test-scanner.md
 - Protocol (draft; lives in `Contracts/`):
   ```python
@@ -2422,3 +2422,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: hooks coverage triage (missed 9, not-in-spec 1) — human kept and specified the one: in merge_targets, an unquoted `#` starting a word begins a comment (ignored, as the shell does). Missed cases are tested from the spec's quote-aware parsing (backslash escapes and line continuations, escapes inside double quotes), wrapper options and `--` (`sudo -u root`, `sudo -E`, `env --`), wrappers with no command after them, `sh`/`bash` without a `-c` string, a module branch absent from status, and Protection allowing other kinds — approved by Nicholas Johnson
 - 2026-11-16: source note `docs/process/plugin_text.md` approved, with its six choices (§5): `/bull:stack` uses test-writer, code-writer and reviewer in `MODE: stack` with a "Stack files" spec section in `commands/stack.md`; legacy-test-scanner has `MODE: adopt` and `MODE: reference` and ends with a `COUNTS:` line; `/bull:prototype` has a no-screens path; verify's device test becomes "hands-on"; feature stage 6 records checkpoint `accepted` before `bull feature accept`; agents carry explicit `tools:` lists. Adoption survey starts from `bull adopt legacy` (no inventory command in v2.0; the stacks' `inventory` reader stays unused) — approved by Nicholas Johnson
 - 2026-11-16: plugin_text construction (LivePluginText root and file set, frontmatter parsing, errors; text-rule tests over every real file, command check limited to code spans and fenced blocks) set in the plugin_text § Construction line; internal, no contract change.
+- 2026-11-16: plugin_text depends on foundation (its errors are `BullError`, per the Construction line); build order line and module block updated. Foundation is done, so nothing moves.
