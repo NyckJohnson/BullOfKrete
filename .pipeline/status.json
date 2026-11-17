@@ -647,7 +647,7 @@
             "merge_guard.py",
             "protection.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T19:55:16-08:00",
+  "updatedAt": "2026-11-16T19:57:16-08:00",
   "features": [],
   "activeFeature": null
 }
