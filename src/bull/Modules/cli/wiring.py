@@ -219,7 +219,11 @@ class _LiveWiring:
             sorted({root.parent for root in builtin_stack_roots()}),
             self.layouts.user_data_dir(),
         )
-        self.settings_loader: SettingsLoader = LiveSettingsLoader()
+        # One wiring serves one command: each app's settings are loaded once, then shared by
+        # the preamble and every collaborator.
+        self.settings_loader: SettingsLoader = _CachingSettingsLoader(
+            LiveSettingsLoader()
+        )
         self.stack_layer: Callable[[str], StackLayer] = self._stack_layer
         self.memo_reader = LiveMemoReader()
         self.ideas: IdeaReader = LiveIdeaReader()
@@ -556,6 +560,26 @@ def _subcommands(parser: argparse.ArgumentParser) -> _Commands:
     raise RuntimeError(
         f"`{parser.prog}` has no subcommands"
     )  # unreachable: stacks adds them
+
+
+class _CachingSettingsLoader(SettingsLoader):
+    """Loads each app's settings once (per app root and stack layer); failures are not kept."""
+
+    def __init__(self, loader: SettingsLoader) -> None:
+        self._loader = loader
+        self._loaded: dict[
+            tuple[Path | None, Callable[[str], StackLayer]], Settings
+        ] = {}
+
+    def load(
+        self, app: AppLayout | None, stack_layer: Callable[[str], StackLayer]
+    ) -> Settings:
+        key = (None if app is None else app.root, stack_layer)
+        found = self._loaded.get(key)
+        if found is None:
+            found = self._loader.load(app, stack_layer)
+            self._loaded[key] = found
+        return found
 
 
 class _LazySettings(Settings):

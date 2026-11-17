@@ -17,6 +17,8 @@ from bull.Modules.settings.Contracts import ConfigError, ConfigProblem
 # answered before parsing).
 _EXEMPT = frozenset({"init", "doctor", "help", "hook", "statusline", "migrate"})
 _HELP = frozenset({"help", "-h", "--help"})
+# Commands that must never fail the Claude Code session, whatever goes wrong.
+_SHIELDED = frozenset({"hook", "statusline"})
 
 # Exit codes: a reported error, and a bull bug (EX_SOFTWARE).
 _ERROR = 1
@@ -41,7 +43,8 @@ def main(argv: Sequence[str] | None = None, *, wiring: Wiring | None = None) -> 
         sys.stdout.write(f"bull {__version__}\n")
         return 0
 
-    command: str | None = None
+    # Known before anything can fail, so a broken wiring or command table is still shielded.
+    command: str | None = words[0] if words[0] in _SHIELDED else None
     try:
         built = wiring if wiring is not None else get_wiring()
         parser = argparse.ArgumentParser(prog="bull", description="See `bull help`.")
@@ -53,7 +56,10 @@ def main(argv: Sequence[str] | None = None, *, wiring: Wiring | None = None) -> 
         try:
             args = parser.parse_args(words)
         except SystemExit as stop:  # argparse: --help (0) or a usage error (2)
-            return _exit_code(stop.code)
+            status = _exit_code(stop.code)
+            if command is not None and status != 0:
+                return _failed(command, _UsageError("arguments not understood"))
+            return status
         command = args.command
         run = getattr(args, "run", None)
         if run is None:
@@ -65,6 +71,10 @@ def main(argv: Sequence[str] | None = None, *, wiring: Wiring | None = None) -> 
         return code
     except Exception as error:  # noqa: BLE001 - every failure is reported; none escapes as a traceback
         return _failed(command, error)
+
+
+class _UsageError(Exception):
+    """A shielded command's arguments did not parse (argparse already printed why)."""
 
 
 def _preamble(wiring: Wiring) -> None:

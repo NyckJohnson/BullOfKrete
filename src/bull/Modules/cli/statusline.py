@@ -54,24 +54,36 @@ def _line(
     app = layouts.find(given.cwd)
     if app is None:
         return _PLAIN
+    # The sample is recorded first, so a broken status still stores it.
+    sample = _sample(usage, app, given.usage, err)
     data = progress(app).as_json()
-    sample = _sample(usage(app), given.usage, err)
     return _SEPARATOR.join([_PLAIN, *_status_parts(data), *_usage_parts(sample)])
 
 
-def _sample(usage: Usage, given: UsageSample | None, err: TextIO) -> UsageSample | None:
+def _sample(
+    usage: Callable[[AppLayout], Usage],
+    app: AppLayout,
+    given: UsageSample | None,
+    err: TextIO,
+) -> UsageSample | None:
     """Record `given` (if any) and return the sample to show.
 
-    A failed record or read is reported on `err`; the line is still printed.
+    A failed record or read (or a usage store that cannot be built) is reported on `err`;
+    the line is still printed.
     """
+    try:
+        store = usage(app)
+    except Exception as error:  # noqa: BLE001 - no usage store: the usage parts are omitted
+        _report(err, error)
+        return given
     if given is not None:
         try:
-            usage.record(given)
+            store.record(given)
         except Exception as error:  # noqa: BLE001 - recording is best effort; the line still shows
             _report(err, error)
         return given
     try:
-        return usage.latest()
+        return store.latest()
     except Exception as error:  # noqa: BLE001 - no readable sample: the usage parts are omitted
         _report(err, error)
         return None
