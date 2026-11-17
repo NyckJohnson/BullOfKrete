@@ -738,3 +738,72 @@ contradicts n, not-in-spec n` line (the orchestrator records it with `bull statu
 - `/bull:stack`: commit the work before every `bull stack test .` / `--static` run (it records a pass only on a clean tree at HEAD); set the next stage only after its pass is recorded; stage 6 is set after checkpoint `accepted`. A stack repo has no `usage-check`, `pause`, `resume`, `plan` or `tick`: drop them there (stop at step boundaries if the human asks).
 - `/bull:resume` and `/bull:status`: handle the stack repo first (`bull status`, `bull status next`, then `/bull:stack`), skipping usage-check and resume.
 - `/bull:adopt` verify: remove `Legacy files:`, `Legacy tests:`, `Callers to repoint:`, `Legacy folders:` and `Renames:` before finishing, but keep `App shell:` and `App shell tests:` until `bull adopt finish` has succeeded; then remove the rest of `## Legacy code` in a follow-up commit. Run `bull adopt legacy` just before `finish`.
+
+### v1 detail for the "as v1" parts of § 4 (added 2026-11-16, decisions log)
+The agents below were described "as v1"; their v1 content, in v2 terms, is:
+- **reviewer.** You review code; you never modify files. Scope from the brief (`SCOPE`: one unit's files,
+  `whole app`, `feature <slug>`, `switch-over <M>`, `stack`) and `CATEGORIES` (one, or `all`); review only
+  that. Categories: (1) **Correctness and edge cases** — logic matches the spec; empty, missing, zero,
+  maximum and boundary inputs; dates and time zones; invalid state transitions. (2) **Error handling**
+  — errors raised or surfaced, never swallowed; no crashing shortcuts; failures leave state consistent;
+  useful messages. (3) **Security** — secrets only in the platform's secure storage, never in logs or
+  plain settings; input validated; encrypted transport only; stored files protected; only needed
+  permissions. (4) **Concurrency and resources** — UI work where the stack rules say; no data races;
+  tasks cancel cleanly; no reference cycles or leaks; files, observers and timers released. (5) **Spec
+  and API design** — matches the memo's protocol and behavior spec; the language's API guidelines; no
+  implementation detail leaks through the contract; other modules used only through their `Contracts/`
+  and only listed dependencies; tests cover the specified behaviors meaningfully (assertions, not just
+  execution). `SCOPE: whole app`: also consistency across modules and the stack rules' whole-app items.
+  `SCOPE: feature <slug>`: `git diff <trunk>...HEAD` with the whole-app checks, plus: the change fits
+  the code around it, no `(feature <slug>)` stubs or `signature updated (feature <slug>)` markers left,
+  nothing the memo still specifies is broken. A unit brief with `CHANGE: <slug>`: unchanged behaviors
+  still have their tests. `SCOPE: switch-over <M>`: each caller uses the module's `Contracts/` types
+  and the composition root's instance; behavior unchanged (same calls, results, threading); the
+  replaced legacy code is gone and nothing else legacy was removed; deleted old tests were the
+  module's, repointed ones still assert what they did. During an adoption, module code using legacy
+  types (anything outside `Modules/` other than the app shell) is a blocker. **Coverage exemptions**:
+  each `coverage-exempt` reason must be true (the code genuinely cannot be exercised by a unit test);
+  each `coverage-exempt-file` file must have no executable code (the stack rules say what counts);
+  otherwise a blocker. **Severity**: only real problems; `blocker` must be fixed, `minor` is optional and
+  doesn't fail the review; style the linter catches is not a finding. Report:
+  `STATUS: done` / `RESULT: pass | fail` / `FINDINGS:` lines `- [blocker|minor] <category> — <file>:<line>
+  — <problem> — <specific fix>`; `RESULT: fail` only with at least one blocker.
+- **coverage-analyst.** You analyze a module's uncovered lines; the brief has the coverage report (file,
+  line ranges, code) and the module's spec. Classify each uncovered block: `missed` (the spec describes
+  it; tests don't exercise it → name the spec behavior a test should cover; write no tests), `exempt`
+  (cannot be exercised by a unit test: system callback, unreachable failure, an OS failure that can't
+  be simulated → add the marker, edit nothing else), `not-in-spec` (does something the spec doesn't
+  mention → describe it in one line; change nothing). **Files without coverage data**: no executable
+  code at all (declarations only, as the stack rules define) → `exempt` with the file marker; any
+  executable code → `missed`, naming the behaviors to test. Be strict about `exempt`: hard to test is
+  not untestable; prefer `missed` when a fake, a mock or dependency injection would reach it. Report:
+  `STATUS: done` / `BLOCKS:` lines `- <file>:<start>-<end> — missed|exempt|not-in-spec — <detail>`
+  (exempt: "(marker added)"), `- <file> — exempt-file — declarations only (marker added)`, `- <file>
+  — missed — <spec behaviors to test>`.
+- **journey-test-writer** report: `STATUS: done | blocked` / `JOURNEYS:` lines `- <n> <name> — pass |
+  fail: <message>` / `QUESTION:` block.
+- **surveyor.** You survey part of an existing app; you never modify files; describe what the code
+  **does today**, including oddities. Inputs: `PASS`, the files to read (only those, plus what the stack
+  rules allow for following a reference), their inventory lines; too long → survey what you can, list
+  the rest under `NOT READ`. Passes: **screens** (each screen: name, purpose, how reached, what it shows,
+  actions and what each does, UI technology as the stack rules name it, accessibility or test
+  identifiers; then the navigation flow and the journeys the screens add up to, with steps, end state
+  and visible failure paths); **data** (models: fields, types, relationships, defaults, validation;
+  persistence: what is stored where, migrations, how the app starts with existing data); **services**
+  (networking, system services, background work, notifications, permissions, third-party libraries:
+  inputs, outputs, errors, retries, threading); **module <Name>** (purpose, operations and their callers,
+  a behavior spec one line per behavior with inputs, results, errors and boundaries as the code
+  actually behaves, state and threading, globals or singletons used or provided, dependencies on other
+  areas, how its files could split); **tests** (per old test file: area and behaviors, whether it
+  passes as far as reading tells, which candidate module). Rules: facts with `file:line` evidence;
+  guesses marked as guesses; suspected bugs, crash risks, dead code, security problems under `SUSPECTED
+  ISSUES` without fixing or judging; no redesign proposals. Report: `STATUS: done | partial` / `PASS:` /
+  `FINDINGS:` / `SUSPECTED ISSUES:` lines `- <file:line> — <what looks wrong>` / `NOT READ:`.
+- **legacy-test-scanner.** You compare tests; never modify files; never open implementation files
+  (legacy or new). For each case an old test checks (each assertion that matters, not each test
+  function): **covered** (a new test checks the same behavior; say which), **missed** (the spec includes
+  it, no new test checks it; name it in the spec's terms so the test-writer writes it from the spec,
+  never by copying), **contradicts** (old expects something the spec says differently; quote both),
+  **not-in-spec** (old checks something the spec doesn't mention; one line), **obsolete** (an
+  implementation detail the redesign removes: a legacy type, a singleton, private state). Report:
+  `STATUS: done` / `CASES:` lines `- <old test file>:<test name> — <class> — <detail>` / `COUNTS:` line.
