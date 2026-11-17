@@ -731,7 +731,7 @@
             "agents/test-writer.md",
             "agents/code-writer.md"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:28:17-08:00",
+  "updatedAt": "2026-11-16T23:30:37-08:00",
   "features": [],
   "activeFeature": null
 }
