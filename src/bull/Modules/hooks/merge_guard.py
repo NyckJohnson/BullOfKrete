@@ -152,19 +152,101 @@ _MERGE_OPTIONS_WITH_VALUE = frozenset(
 _MERGE_CONTROL = frozenset({"--abort", "--continue", "--quit"})
 
 
+# Words that run the rest of the line as a command: `env X=1 git merge`, `sudo git merge`.
+# Each maps to its options that take the next word as their value.
+_WRAPPERS: dict[str, frozenset[str]] = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "command": frozenset(),
+    "exec": frozenset({"-a"}),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+    "nohup": frozenset(),
+    "sudo": frozenset(
+        {
+            "-u",
+            "--user",
+            "-g",
+            "--group",
+            "-h",
+            "--host",
+            "-p",
+            "--prompt",
+            "-C",
+            "--close-from",
+            "-D",
+            "--chdir",
+            "-r",
+            "--role",
+            "-t",
+            "--type",
+            "-T",
+            "--command-timeout",
+            "-U",
+            "--other-user",
+        }
+    ),
+}
+# Shell keywords that may start a simple command before the real command word.
+_KEYWORDS = frozenset({"{", "!", "then", "do", "else"})
+# Shells whose `-c <string>` argument is itself a command line.
+_SHELLS = frozenset({"sh", "bash", "zsh"})
+# How deep `sh -c "bash -c '...'"` nesting is followed.
+_MAX_SHELL_DEPTH = 4
+
+
 def _is_assignment(word: str) -> bool:
     name, eq, _ = word.partition("=")
     return bool(eq) and name.isidentifier()
 
 
+def _basename(word: str) -> str:
+    return word.rsplit("/", 1)[-1]
+
+
+def _command_start(words: list[str]) -> int:
+    """Index of the real command word, past assignments, wrapper words and keywords."""
+    i = 0
+    while i < len(words):
+        word = words[i]
+        if _is_assignment(word) or word in _KEYWORDS:
+            i += 1
+            continue
+        wrapper = _WRAPPERS.get(_basename(word))
+        if wrapper is None:
+            return i
+        i += 1
+        # The wrapper's own options (and, for `env`, its `VAR=value` arguments).
+        while i < len(words):
+            arg = words[i]
+            if arg == "--":
+                i += 1
+                break
+            if arg.startswith("-") and arg != "-":
+                i += 2 if arg in wrapper else 1
+            elif _basename(word) == "env" and _is_assignment(arg):
+                i += 1
+            else:
+                break
+    return i
+
+
+def _shell_string(words: list[str]) -> str | None:
+    """The command string of `sh -c <string>` (also bash, zsh), else None."""
+    if not words or _basename(words[0]) not in _SHELLS:
+        return None
+    i = 1
+    while i < len(words) and words[i].startswith("-") and words[i] != "-":
+        option = words[i]
+        i += 1
+        if not option.startswith("--") and "c" in option[1:]:
+            return words[i] if i < len(words) else None
+    return None
+
+
 def _merge_args(words: list[str]) -> list[str] | None:
     """The arguments after `merge` if `words` is a `git merge` command, else None."""
-    i = 0
-    while i < len(words) and _is_assignment(words[i]):
-        i += 1  # `VAR=x git merge ...`
-    if i >= len(words) or words[i].rsplit("/", 1)[-1] != "git":
+    if not words or _basename(words[0]) != "git":
         return None
-    i += 1
+    i = 1
     while i < len(words) and words[i].startswith("-"):
         i += 2 if words[i] in _GIT_OPTIONS_WITH_VALUE else 1
     if i >= len(words) or words[i] != "merge":
@@ -200,10 +282,23 @@ def merge_targets(command: str) -> list[str]:
 
     Splits on `&&`, `||`, `;`, `|` and newlines (quote-aware), handles redirections and
     `git -C <dir>`, skips option values such as `-m <msg>`, and ignores `--abort`,
-    `--continue` and `--quit`. An octopus merge returns each of its refs.
+    `--continue` and `--quit`. Leading `VAR=value` assignments, wrapper words (`env`,
+    `command`, `exec`, `time`, `nohup`, `sudo`) and the keywords `{`, `!`, `then`, `do`,
+    `else` are skipped before `git`; the string of `sh -c`/`bash -c`/`zsh -c` is parsed in
+    turn. Other quoted text is never read as a command. An octopus merge returns each ref.
     """
+    return _targets(command, 0)
+
+
+def _targets(command: str, depth: int) -> list[str]:
     targets: list[str] = []
     for words in _simple_commands(command):
+        words = words[_command_start(words) :]
+        inner = _shell_string(words)
+        if inner is not None:
+            if depth < _MAX_SHELL_DEPTH:
+                targets.extend(_targets(inner, depth + 1))
+            continue
         args = _merge_args(words)
         if args is not None:
             targets.extend(_merge_refs(args))
