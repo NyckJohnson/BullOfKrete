@@ -10,10 +10,11 @@ from bull.Modules.parts.Contracts import Parts
 from bull.Modules.settings.Contracts import Settings
 
 _ALLOW = HookDecision(True, "")
-_REFERENCE_BARRED = frozenset({"test-writer", "code-writer"})
+# Agents kept away from the reference folder.
+REFERENCE_BARRED = frozenset({"test-writer", "code-writer"})
 
 
-def _agent_name(agent: str | None) -> str | None:
+def agent_name(agent: str | None) -> str | None:
     """The agent's name without its namespace (`bull:code-writer` -> `code-writer`)."""
     if agent is None:
         return None
@@ -23,6 +24,19 @@ def _agent_name(agent: str | None) -> str | None:
 def _inside(path: Path, folder: Path) -> bool:
     """Whether `path` is `folder` or below it, compared component by component."""
     return path.parts[: len(folder.parts)] == folder.parts
+
+
+def reference_folder(app: AppLayout, settings: Settings) -> Path:
+    """The `reference_dir` setting, relative to the app root unless absolute.
+
+    Raises:
+        TypeError: the setting is not a string (the settings schema says it is).
+    """
+    value = settings.get("reference_dir", None)
+    if not isinstance(value, str):
+        raise TypeError(f"reference_dir must be a string, got {value!r}")
+    folder = Path(value)
+    return folder if folder.is_absolute() else app.root / folder
 
 
 class Protection:
@@ -36,7 +50,7 @@ class Protection:
         self._settings = settings
 
     def check(self, app: AppLayout, event: HookEvent) -> HookDecision:
-        agent = _agent_name(event.agent)
+        agent = agent_name(event.agent)
         if event.kind is HookKind.BEFORE_EDIT:
             return self._check_edit(app, agent, event.paths)
         if event.kind is HookKind.BEFORE_READ:
@@ -60,9 +74,9 @@ class Protection:
         cwd: Path,
         paths: tuple[Path, ...],
     ) -> HookDecision:
-        if agent not in _REFERENCE_BARRED:
+        if agent not in REFERENCE_BARRED:
             return _ALLOW
-        reference = self._reference_folder(app)
+        reference = reference_folder(app, self._settings)
         if not reference.is_dir():
             return _ALLOW
         reference = reference.resolve()
@@ -75,15 +89,3 @@ class Protection:
                     "only legacy-test-scanner reads it",
                 )
         return _ALLOW
-
-    def _reference_folder(self, app: AppLayout) -> Path:
-        """The `reference_dir` setting, relative to the app root unless absolute.
-
-        Raises:
-            TypeError: the setting is not a string (the settings schema says it is).
-        """
-        value = self._settings.get("reference_dir", None)
-        if not isinstance(value, str):
-            raise TypeError(f"reference_dir must be a string, got {value!r}")
-        folder = Path(value)
-        return folder if folder.is_absolute() else app.root / folder
