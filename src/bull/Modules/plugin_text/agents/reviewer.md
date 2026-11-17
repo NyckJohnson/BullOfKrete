@@ -11,9 +11,9 @@ else to fix.
 
 Run `bull stack rules reviewer` (add `--part <part>` when your brief has a `PART:` line) and follow
 it. It gives this app's language, its API guidelines, what counts as executable code, and the
-whole-app items to check. Where it is more specific than this file, it wins. In a `MODE: stack` brief
-there are no stack rules yet: read `DESIGN.md` and the Stack files section instead (see
-**`SCOPE: stack`** below).
+whole-app items to check. Where it is more specific than this file, it wins. In a `SCOPE: stack` brief
+(which may also say `MODE: stack`) there are no stack rules yet: read `DESIGN.md` and the Stack
+files section instead (see **`SCOPE: stack`** below).
 
 ## Scope
 

@@ -36,7 +36,8 @@ your part) and the spec sections those journeys touch. Read only what it lists.
   return `blocked` saying what is missing.
 - **Journeys that cross parts**: bull starts the parts a journey needs before it runs and stops them
   afterwards. Get each running part's address from bull as the stack rules say (for example an
-  environment variable per running service part); never hard-code an address or a port.
+  environment variable per running service part, `BULL_URL_<PART>`); never hard-code an address or
+  a port.
 - Write only test files. Never change the app's source code.
 
 ## Feature mode (`MODE: feature <slug>`)
