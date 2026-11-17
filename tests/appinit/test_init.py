@@ -307,6 +307,96 @@ def test_existing_subfolder_of_an_app_is_refused_and_left_alone(env: Env) -> Non
     assert list(sub.iterdir()) == []
 
 
+def test_subfolder_refusal_fix_names_init_dot_and_the_app_root(env: Env) -> None:
+    env.app_at(env.root)
+    target = env.root / "sub"
+    with pytest.raises(BullError) as raised:
+        env.make().init(target)
+    assert "bull init ." in raised.value.fix
+    assert str(env.root) in raised.value.fix
+    assert not target.exists()
+    assert env.commits() == []
+
+
+def _empty_git_repo(env: Env) -> None:
+    (env.root / ".git").mkdir()
+    env.git.repo = True
+    env.git.heads.clear()
+
+
+def test_init_on_an_empty_git_repo_does_not_run_git_init_again(env: Env) -> None:
+    _empty_git_repo(env)
+    env.make().init(env.root)
+    assert "init" not in env.names(env.git.calls)
+
+
+def test_init_on_an_empty_git_repo_writes_bull_files_and_commits(env: Env) -> None:
+    _empty_git_repo(env)
+    env.make().init(env.root)
+    assert (env.root / ".bull" / "config.toml").is_file()
+    assert (env.root / ".bull" / "backlog.json").is_file()
+    assert ("create", ()) in env.status.calls
+    lines = (env.root / ".gitignore").read_text().splitlines()
+    for line in env.layouts.machine_local_ignores():
+        assert line in lines
+    assert (env.root / "CLAUDE.md").is_file()
+    assert (env.root / ".claude" / "settings.json").is_file()
+    assert env.commits() == ["chore: bull init"]
+
+
+def test_init_on_an_empty_git_repo_reports_created_like_an_empty_folder(
+    env: Env,
+) -> None:
+    _empty_git_repo(env)
+    result = env.make().init(env.root)
+    assert (result.root, result.created, result.relinked, result.adopting) == (
+        env.root,
+        True,
+        False,
+        False,
+    )
+
+
+def test_init_on_an_empty_git_repo_on_another_branch_still_succeeds(env: Env) -> None:
+    _empty_git_repo(env)
+    env.git.branch = "trunk"
+    result = env.make().init(env.root)
+    assert result.created is True
+    assert "init" not in env.names(env.git.calls)
+
+
+def test_init_dot_in_an_empty_git_repo_succeeds(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _empty_git_repo(env)
+    monkeypatch.chdir(env.root)
+    result = env.make().init(Path("."))
+    assert result.created is True
+    assert result.root.resolve() == env.root.resolve()
+    assert "init" not in env.names(env.git.calls)
+    assert env.commits() == ["chore: bull init"]
+
+
+def test_git_repo_with_other_files_is_still_refused_without_adopt(env: Env) -> None:
+    _empty_git_repo(env)
+    (env.root / "main.py").write_text("print('hi')\n")
+    with pytest.raises(BullError) as raised:
+        env.make().init(env.root)
+    assert "bull init --adopt" in f"{raised.value.message} {raised.value.fix}"
+    assert not (env.root / ".bull").exists()
+    assert env.commits() == []
+
+
+def test_git_repo_with_commits_is_still_refused_without_adopt(env: Env) -> None:
+    (env.root / ".git").mkdir()
+    env.git.repo = True  # MockGit.heads still reports a HEAD commit
+    with pytest.raises(BullError) as raised:
+        env.make().init(env.root)
+    assert "bull init --adopt" in f"{raised.value.message} {raised.value.fix}"
+    assert not (env.root / ".bull").exists()
+    assert env.commits() == []
+
+
 def test_non_empty_folder_without_adopt_is_refused_naming_adopt(env: Env) -> None:
     (env.root / "main.py").write_text("print('hi')\n")
     with pytest.raises(BullError) as raised:
