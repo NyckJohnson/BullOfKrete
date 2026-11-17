@@ -610,7 +610,7 @@
             "install.py",
             "cli.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T18:13:04-08:00",
+  "updatedAt": "2026-11-16T18:14:06-08:00",
   "features": [],
   "activeFeature": null
 }
