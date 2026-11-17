@@ -2071,7 +2071,7 @@ when `readers.py` defines `detect`.
     **Commands** (`init open doctor status feature adopt stack stacks gates coverage api part config
     migrate template hook statusline help`, or a flag such as `--version`); for `status`, `feature`,
     `adopt`, `stack`, `part`, `config`, `template` and `hook` a following bare lowercase word is one
-    of that command's subcommands in the table (`status` may also be followed by a flag or nothing).
+    of that command's subcommands in the table (`status` may also be followed by a flag or nothing). A word starting with `<` (a placeholder such as `bull <command>` or `bull status <sub>`) is skipped, at either position.
 - Reference tests: v1-tests/test_cli_misc.py::test_every_agent_has_frontmatter_and_its_stack_rules_exist
 - Contract: see `docs/api/plugin_text.md` (generated; do not edit by hand)
 
