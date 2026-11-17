@@ -227,3 +227,38 @@ def test_doctor_json_exits_one_when_not_ok(h: Harness) -> None:
     code, out = h.run("doctor", "--json")
     assert code == 1
     assert json.loads(out)["ok"] is False
+
+
+# --- open: argument splitting ----------------------------------------------------------
+
+
+@pytest.mark.parametrize("extra", [("-p", "hi"), ("--model", "x")])
+def test_open_without_a_path_sends_args_after_double_dash_to_claude(
+    h: Harness, extra: tuple[str, ...]
+) -> None:
+    _, out = h.run("open", "--print-command", "--", *extra)
+    assert h.app_init.calls == [("open_argv", (Path("."), extra))]
+    assert shlex.split(out)[-len(extra) :] == list(extra)
+
+
+def test_open_with_a_path_does_not_pass_the_double_dash_on(
+    h: Harness,
+) -> None:
+    h.run("open", "app", "--print-command", "--", "hi")
+    assert h.app_init.calls == [("open_argv", (Path("app"), ("hi",)))]
+
+
+# --- init: relinked message ------------------------------------------------------------
+
+
+def test_init_on_an_existing_app_prints_the_relinked_message(
+    h: Harness, tmp_path: Path
+) -> None:
+    class Relinking(MockAppInit):
+        def init(self, path: Path, adopt: bool = False) -> InitResult:
+            return InitResult(path, created=False, relinked=True, adopting=False)
+
+    h.app_init = Relinking()
+    code, out = h.run("init", str(tmp_path))
+    assert code == 0
+    assert f"relinked the bull app at {tmp_path}" in out

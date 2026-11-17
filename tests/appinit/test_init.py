@@ -407,6 +407,41 @@ def test_non_empty_folder_without_adopt_is_refused_naming_adopt(env: Env) -> Non
     assert "init" not in env.names(env.git.calls)
 
 
+def test_relink_appends_missing_lines_when_gitignore_lacks_a_trailing_newline(
+    env: Env,
+) -> None:
+    _existing_app(env)
+    (env.root / ".gitignore").write_text("node_modules/")
+    env.make().init(env.root)
+    lines = (env.root / ".gitignore").read_text().splitlines()
+    assert "node_modules/" in lines
+    for line in env.layouts.machine_local_ignores():
+        assert line in lines
+
+
+def test_init_on_an_existing_file_is_refused_and_creates_nothing(env: Env) -> None:
+    target = env.root / "afile"
+    target.write_text("data")
+    with pytest.raises(BullError) as raised:
+        env.make().init(target)
+    assert "not empty" in raised.value.message
+    assert "bull init --adopt" in f"{raised.value.message} {raised.value.fix}"
+    assert target.read_text() == "data"
+    assert not (env.root / ".bull").exists()
+    assert "init" not in env.names(env.git.calls)
+
+
+def test_init_where_the_folder_cannot_be_created_names_the_folder(env: Env) -> None:
+    parent = env.root / "afile"
+    parent.write_text("data")
+    target = parent / "app"
+    with pytest.raises(BullError) as raised:
+        env.make().init(target)
+    assert raised.value.message.startswith(f"cannot create {target}")
+    assert "writable" in raised.value.fix
+    assert "init" not in env.names(env.git.calls)
+
+
 # --- adopt -----------------------------------------------------------------------------
 
 
