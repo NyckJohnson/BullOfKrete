@@ -2054,6 +2054,24 @@ when `readers.py` defines `detect`.
   - test-writer: before it reports, it runs the stack's formatter and lint on the test files it
     wrote or changed and fixes what they find, so a formatting slip never costs a gate attempt
     (stack-neutral wording; the stack's rules name the tools).
+- Construction (internal; not contracts):
+  - plugin_files.py: `LivePluginText(root: Path | None = None)`; `root` defaults to the module's own
+    folder (`Path(__file__).parent`). files: `orchestrator.md`, `commands/*.md`, `agents/*.md` under
+    `root` (nothing else: no `.py`, no other folders), read as UTF-8, paths POSIX relative to `root`,
+    sorted by path. orchestrator: the text of `orchestrator.md`. Frontmatter = the lines between a
+    first line `---` and the next `---` line; each `key: value`, value trimmed and stripped of one
+    pair of surrounding `"` or `'`; `tools` split on `,`, entries trimmed, empty ones dropped.
+    agents: one `AgentDoc` per agent file in path order, `model_setting = "models.<name>"`. An agent
+    file without frontmatter or missing `name`, `description` or `tools`, or whose `name` differs
+    from its file name → `BullError` naming the file (`agents/<file>`) and the problem; a missing
+    `orchestrator.md` → `BullError` naming it.
+  - Text-rule tests live in `tests/plugin_text/` and run over every real file (they pass on the
+    skeleton placeholders and keep holding as units fill the files). Only code spans and fenced
+    blocks are checked for commands: the first word after `bull ` is a top-level command of
+    **Commands** (`init open doctor status feature adopt stack stacks gates coverage api part config
+    migrate template hook statusline help`, or a flag such as `--version`); for `status`, `feature`,
+    `adopt`, `stack`, `part`, `config`, `template` and `hook` a following bare lowercase word is one
+    of that command's subcommands in the table (`status` may also be followed by a flag or nothing).
 - Reference tests: v1-tests/test_cli_misc.py::test_every_agent_has_frontmatter_and_its_stack_rules_exist
 - Contract: see `docs/api/plugin_text.md` (generated; do not edit by hand)
 
@@ -2403,3 +2421,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: hooks reference scan (covered 13, missed 4, contradicts 0, not-in-spec 2, obsolete 1) — human: merge_targets is hardened against env assignments, wrapper words, shell keywords and `sh -c` strings; "unknown ref <ref>" wording and no shell fragments in block messages are pinned; missed cases (env assignment, quoted `git merge` in an echo, `git log --merges`, `git mergetool`) get tests from the spec — approved by Nicholas Johnson
 - 2026-11-16: hooks coverage triage (missed 9, not-in-spec 1) — human kept and specified the one: in merge_targets, an unquoted `#` starting a word begins a comment (ignored, as the shell does). Missed cases are tested from the spec's quote-aware parsing (backslash escapes and line continuations, escapes inside double quotes), wrapper options and `--` (`sudo -u root`, `sudo -E`, `env --`), wrappers with no command after them, `sh`/`bash` without a `-c` string, a module branch absent from status, and Protection allowing other kinds — approved by Nicholas Johnson
 - 2026-11-16: source note `docs/process/plugin_text.md` approved, with its six choices (§5): `/bull:stack` uses test-writer, code-writer and reviewer in `MODE: stack` with a "Stack files" spec section in `commands/stack.md`; legacy-test-scanner has `MODE: adopt` and `MODE: reference` and ends with a `COUNTS:` line; `/bull:prototype` has a no-screens path; verify's device test becomes "hands-on"; feature stage 6 records checkpoint `accepted` before `bull feature accept`; agents carry explicit `tools:` lists. Adoption survey starts from `bull adopt legacy` (no inventory command in v2.0; the stacks' `inventory` reader stays unused) — approved by Nicholas Johnson
+- 2026-11-16: plugin_text construction (LivePluginText root and file set, frontmatter parsing, errors; text-rule tests over every real file, command check limited to code spans and fenced blocks) set in the plugin_text § Construction line; internal, no contract change.
