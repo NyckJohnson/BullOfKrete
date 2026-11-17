@@ -523,3 +523,98 @@ def test_statusline_whose_arguments_do_not_parse_still_prints_a_plain_line(
 
 def test_other_commands_still_exit_two_when_their_arguments_do_not_parse() -> None:
     assert main(["status", "--bogus"], wiring=_realistic()) == 2
+
+
+def test_a_parent_command_without_a_subcommand_prints_help_on_stderr_and_exits_2(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _ParentWiring(_Wiring):
+        def register_commands(
+            self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+        ) -> None:
+            commands.add_parser("group")  # no `run`: needs a subcommand
+
+    base = _make()
+    wiring = _ParentWiring(
+        layouts=base.layouts,
+        formats=base.formats,
+        settings_loader=base.settings_loader,
+        commands=base.commands,
+    )
+
+    code = main(["group"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert captured.err == render_help()
+    assert captured.out == ""
+
+
+def test_a_config_error_with_problems_and_a_fix_prints_the_fix_after_the_problems(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    error = ConfigError("settings are invalid", "edit the file")
+    error.problems = [ConfigProblem(Path("/tmp/c.toml"), 3, "pause_5h", "bad")]
+
+    code = main(["status"], wiring=_make(loader=_FailingSettings(error)))
+
+    lines = capsys.readouterr().err.splitlines()
+    assert code == 1
+    assert lines == [
+        "bull: settings are invalid",
+        "/tmp/c.toml:3: pause_5h: bad",
+        "  fix: edit the file",
+    ]
+
+
+def test_argparse_exit_with_a_string_message_prints_it_and_returns_1(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class _ExitWiring(_Wiring):
+        def register_commands(
+            self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+        ) -> None:
+            parser = commands.add_parser("status")
+
+            class _Action(argparse.Action):
+                def __call__(self, parser, namespace, values, option_string=None):  # type: ignore[no-untyped-def]
+                    raise SystemExit("custom stop message")
+
+            parser.add_argument("--stop", nargs=0, action=_Action)
+
+    base = _make()
+    wiring = _ExitWiring(
+        layouts=base.layouts,
+        formats=base.formats,
+        settings_loader=base.settings_loader,
+        commands=base.commands,
+    )
+
+    code = main(["status", "--stop"], wiring=wiring)
+
+    assert code == 1
+    assert capsys.readouterr().err == "custom stop message\n"
+
+
+def test_argparse_exit_without_a_code_returns_0() -> None:
+    class _ExitWiring(_Wiring):
+        def register_commands(
+            self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+        ) -> None:
+            parser = commands.add_parser("status")
+
+            class _Action(argparse.Action):
+                def __call__(self, parser, namespace, values, option_string=None):  # type: ignore[no-untyped-def]
+                    raise SystemExit
+
+            parser.add_argument("--stop", nargs=0, action=_Action)
+
+    base = _make()
+    wiring = _ExitWiring(
+        layouts=base.layouts,
+        formats=base.formats,
+        settings_loader=base.settings_loader,
+        commands=base.commands,
+    )
+
+    assert main(["status", "--stop"], wiring=wiring) == 0

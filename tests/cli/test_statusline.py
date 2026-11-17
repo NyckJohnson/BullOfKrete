@@ -323,3 +323,59 @@ def test_statusline_records_the_sample_even_when_building_the_status_raises() ->
     assert out.getvalue() == "bull\n"
     assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
     assert "cannot build progress" in err.getvalue()
+
+
+class _UnbuildableUsage:
+    """A `usage` factory that cannot build the store."""
+
+    def __call__(self, app: AppLayout) -> Usage:
+        raise OSError("usage dir unreadable")
+
+
+def _run_with_usage_factory(
+    factory: object, sample: UsageSample | None
+) -> tuple[str, str, int]:
+    out, err = io.StringIO(), io.StringIO()
+    layouts = MockLayouts()
+    code = run_statusline(
+        "{}",
+        out,
+        err,
+        provider=_Provider(Path("/tmp/apps/tally"), sample),
+        layouts=layouts,
+        usage=factory,  # type: ignore[arg-type]
+        progress=lambda app: _Progress(_status()),
+    )
+    return out.getvalue(), err.getvalue(), code
+
+
+def test_statusline_with_unbuildable_usage_store_reports_and_keeps_input_usage() -> (
+    None
+):
+    line, err, code = _run_with_usage_factory(_UnbuildableUsage(), _sample(92, 40))
+
+    assert code == 0
+    assert line == "bull · stage 5 · units 1/3 · 5h 92% · wk 40%\n"
+    assert "usage dir unreadable" in err
+
+
+def test_statusline_with_unbuildable_usage_store_and_no_input_usage_omits_usage() -> (
+    None
+):
+    line, err, code = _run_with_usage_factory(_UnbuildableUsage(), None)
+
+    assert code == 0
+    assert line == "bull · stage 5 · units 1/3\n"
+    assert "usage dir unreadable" in err
+
+
+def test_statusline_when_latest_raises_reports_and_omits_usage_parts() -> None:
+    class _LatestBroken(MockUsage):
+        def latest(self) -> UsageSample | None:
+            raise RuntimeError("corrupt usage file")
+
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=_LatestBroken())
+
+    assert run.line == "bull · stage 5 · units 1/3\n"
+    assert "corrupt usage file" in run.err.getvalue()
+    assert run.code == 0

@@ -14,7 +14,7 @@ import bull
 from bull.Modules.claude_code.mocks import MockProvider
 from bull.Modules.cli import wiring
 from bull.Modules.cli.main import main
-from bull.Modules.foundation.Contracts import AppLayout
+from bull.Modules.foundation.Contracts import AppLayout, BullError
 from bull.Modules.hooks.Contracts import HookDecision, HookEvent, HookKind
 from bull.Modules.hooks.mocks import MockHooks
 from bull.Modules.settings.loader import LiveSettingsLoader
@@ -564,3 +564,384 @@ def test_a_command_loads_the_apps_settings_once(
     assert code == 0
     assert capsys.readouterr().out != ""
     assert len(loads) == 1
+
+
+# --- the hook command reads stdin -------------------------------------------------------
+
+
+def test_the_hook_command_reads_stdin_and_runs_the_hook(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = wiring.get_wiring()
+    hooks = _Hooks()
+    monkeypatch.setattr(built, "hooks", hooks)
+    monkeypatch.setattr(built, "provider", MockProvider())
+    monkeypatch.chdir(isolated)
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+
+    code = main(["hook", "before-shell"])
+
+    assert code == 0
+    assert len(hooks.events) == 1
+    assert hooks.events[0].kind is HookKind.BEFORE_SHELL
+
+
+# --- finding the app --------------------------------------------------------------------
+
+
+def test_app_outside_an_app_raises_not_a_bull_app_with_a_fix(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(isolated)
+
+    with pytest.raises(BullError) as raised:
+        wiring.get_wiring()._app()  # private: no public route to the bare lookup
+
+    assert "not a bull app" in raised.value.message
+    assert raised.value.fix
+
+
+def test_app_inside_an_app_returns_its_layout(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = _folder(isolated / "app", _APP_STATUS)
+    monkeypatch.chdir(app)
+
+    found = wiring.get_wiring()._app()  # private: no public route to the bare lookup
+
+    assert found.root.resolve() == app.resolve()
+
+
+def test_a_command_outside_an_app_reports_not_a_bull_app(
+    isolated: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(isolated)
+
+    code = main(["gates", "--all"])
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "not a bull app" in err
+    assert "fix:" in err
+
+
+def test_the_stack_settings_accessor_returns_the_registry_stacks_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = wiring.get_wiring()
+    registry = MockStackRegistry()
+    monkeypatch.setattr(built, "registry", registry)
+
+    layer = built.stack_layer("fixture")
+
+    assert layer == registry.get("fixture").manifest.settings
+
+
+# --- factories over a real app ----------------------------------------------------------
+# These builders are private; there is no public route to each, so they are called directly
+# (or, where a command reaches them, through main) and checked for what they build.
+
+
+@pytest.fixture
+def real_app(isolated: Path, monkeypatch: pytest.MonkeyPatch) -> AppLayout:
+    app = _folder(isolated / "app", _APP_STATUS)
+    monkeypatch.chdir(app)
+    return wiring.get_wiring().layouts.at(app)
+
+
+@pytest.mark.parametrize(
+    ("builder", "kind"),
+    [
+        ("_events", "LiveEventLog"),
+        ("_store", "LiveStatusStore"),
+        ("_refs", "LiveRefs"),
+        ("_progress", "LiveProgress"),
+        ("_usage", "LiveUsage"),
+        ("_interfaces", "LiveInterfaces"),
+        ("live_hooks", "LiveHooks"),
+    ],
+)
+def test_per_app_builders_return_the_real_implementation(
+    builder: str, kind: str, real_app: AppLayout
+) -> None:
+    built = wiring.get_wiring()
+
+    made = getattr(built, builder)(real_app)
+
+    assert type(made).__name__ == kind
+
+
+def test_memo_parses_the_apps_outline_and_is_empty_when_missing(
+    real_app: AppLayout,
+) -> None:
+    built = wiring.get_wiring()
+
+    empty = built._memo(real_app)
+    real_app.memo_file.parent.mkdir(parents=True, exist_ok=True)
+    real_app.memo_file.write_text("# Demo outline\n\n## Purpose\nx\n", encoding="utf-8")
+    parsed = built._memo(real_app)
+
+    assert empty != parsed or empty == built.memo_reader.parse("")
+    assert parsed == built.memo_reader.parse(real_app.memo_file.read_text("utf-8"))
+
+
+@pytest.mark.parametrize(
+    ("builder", "kind"),
+    [
+        ("_app_init", "LiveAppInit"),
+        ("_doctor", "LiveDoctor"),
+        ("_adoption", "LiveAdoption"),
+        ("_backlog", "LiveBacklog"),
+        ("_cycle", "LiveFeatureCycle"),
+        ("_gates", "LiveGates"),
+        ("_snapshots", "LiveApiSnapshots"),
+    ],
+)
+def test_command_providers_return_the_real_implementation(
+    builder: str, kind: str, real_app: AppLayout
+) -> None:
+    made = getattr(wiring.get_wiring(), builder)()
+
+    assert type(made).__name__ == kind
+
+
+def test_the_stack_init_provider_is_the_app_inits_init_stack(
+    real_app: AppLayout,
+) -> None:
+    init = wiring.get_wiring()._stack_init()
+
+    assert callable(init)
+    assert init.__name__ == "init_stack"
+
+
+def test_ops_builds_stack_operations(real_app: AppLayout) -> None:
+    ops = wiring.get_wiring()._ops()
+
+    assert type(ops).__name__ == "_AppOps"
+
+
+# --- adapters ---------------------------------------------------------------------------
+# The adapters are private classes with no public constructor route; each is built here
+# around a recording fake to check that it forwards.
+
+
+class _Schema:
+    pass
+
+
+def test_lazy_settings_forwards_schema_get_and_set_to_the_loaded_settings() -> None:
+    from bull.Modules.settings.Contracts import Layer
+    from bull.Modules.settings.mocks import MockSettings
+
+    inner = MockSettings()
+    lazy = wiring._LazySettings(lambda: inner)
+
+    expected_value = inner.get("base_branch", "p")
+    schema = lazy.schema()
+    value = lazy.get("base_branch", "p")
+    resolved = lazy.set("base_branch", "dev", Layer.APP, "p")
+
+    assert schema == inner.schema()
+    assert value == expected_value
+    assert resolved.key == "base_branch"
+    assert ("set", ("base_branch", "dev", Layer.APP, "p")) in inner.calls
+
+
+def test_app_ops_forwards_each_operation_with_the_settings_of_the_app_it_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bull.Modules.foundation.mocks import MockRunner, sample_layout
+    from bull.Modules.settings.mocks import MockSettings
+    from bull.Modules.stacks.mocks import MockStackOps
+
+    ops = MockStackOps()
+    made: list[object] = []
+
+    def factory(registry: object, settings: object, runner: object) -> MockStackOps:
+        made.append(settings)
+        return ops
+
+    monkeypatch.setattr(wiring, "LiveStackOps", factory)
+    asked: list[AppLayout | None] = []
+    settings = MockSettings()
+
+    def settings_for(app: AppLayout | None) -> MockSettings:
+        asked.append(app)
+        return settings
+
+    app = sample_layout()
+    stack = sample_stack()
+    adapter = wiring._AppOps(MockStackRegistry(), MockRunner(), settings_for)
+
+    adapter.select(app, "fixture")
+    rules = adapter.rules(stack, "coder")
+    guide = adapter.setup_guide(stack, "mac")
+    items = adapter.check(app, "p")
+    code = adapter.run_command(app, "build", "p")
+
+    assert ops.calls == [
+        ("select", (app, "fixture")),
+        ("rules", (stack, "coder")),
+        ("setup_guide", (stack, "mac")),
+        ("check", (app, "p")),
+        ("run_command", (app, "build", "p")),
+    ]
+    assert rules.startswith("# ")
+    assert guide.startswith("# Setup")
+    assert items == ops.items
+    assert code == 0
+    assert asked == [app, None, None, app, app]
+    assert all(s is settings for s in made)
+
+
+def test_app_formats_forwards_current_inspect_and_migrate() -> None:
+    from bull.Modules.formats.mocks import MockFormats
+    from bull.Modules.foundation.mocks import sample_layout
+
+    inner = MockFormats()
+    inner.found = 0
+    inner.migrated = [Path("/tmp/x")]
+    app = sample_layout()
+    formats = wiring._AppFormats(inner, lambda a: True)
+
+    expected = inner.inspect(app)
+    current = formats.current()
+    inspected = formats.inspect(app)
+    migrated = formats.migrate(app)
+
+    assert current == inner.current_format
+    assert inspected == expected
+    assert migrated == [Path("/tmp/x")]
+    assert ("migrate", (app,)) in inner.calls
+
+
+def test_apps_only_forwards_at_and_user_folders_and_ignores() -> None:
+    from bull.Modules.foundation.mocks import MockLayouts
+
+    inner = MockLayouts()
+    layouts = wiring._AppsOnly(inner, lambda a: False)
+
+    assert layouts.at(Path("/tmp/a")) == inner.at(Path("/tmp/a"))
+    assert layouts.user_config_dir() == inner.user_config_dir()
+    assert layouts.user_data_dir() == inner.user_data_dir()
+    assert layouts.machine_local_ignores() == inner.machine_local_ignores()
+
+
+def test_apps_only_find_returns_the_app_and_none_in_a_stack_repo() -> None:
+    from bull.Modules.foundation.mocks import MockLayouts
+
+    inner = MockLayouts()
+
+    assert wiring._AppsOnly(inner, lambda a: False).find(Path("/x")) == inner.found
+    assert wiring._AppsOnly(inner, lambda a: True).find(Path("/x")) is None
+
+
+def test_apps_only_find_returns_none_when_no_app_is_found() -> None:
+    from bull.Modules.foundation.mocks import MockLayouts
+
+    inner = MockLayouts()
+    inner.found = None
+
+    assert wiring._AppsOnly(inner, lambda a: False).find(Path("/x")) is None
+
+
+def test_templates_list_design_among_the_memo_templates_sorted() -> None:
+    names = wiring.get_wiring().templates.names()
+
+    assert "design" in names
+    assert names == sorted(names)
+    assert {"outline", "backlog"} <= set(names)
+
+
+def test_the_design_template_is_the_stackflow_design_template() -> None:
+    from bull.Modules.stackflow import cli as stackflow_cli
+
+    text = wiring.get_wiring().templates.text("design")
+
+    assert text == stackflow_cli.design_template()
+
+
+def test_other_template_names_come_from_the_memo_templates() -> None:
+    from bull.Modules.memo.mocks import MockTemplates
+
+    inner = MockTemplates()
+    templates = wiring._Templates(inner)
+
+    assert templates.text("backlog") == inner.texts["backlog"]
+    assert templates.names() == ["backlog", "design", "outline"]
+
+
+def test_recording_tester_forwards_load_cases() -> None:
+    tester = MockStackTester()
+    stack = sample_stack()
+    recorder = wiring._RecordingTester(tester, lambda s, r: None)
+
+    cases = recorder.load_cases(stack)
+
+    assert cases == tester.cases
+    assert ("load_cases", (stack,)) in tester.calls
+
+
+def test_the_hook_handler_allows_when_no_app_is_found_for_the_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bull.Modules.foundation.mocks import MockLayouts
+
+    built = wiring.get_wiring()
+    layouts = MockLayouts()
+    layouts.found = None
+    monkeypatch.setattr(built, "layouts", layouts)
+    monkeypatch.setattr(
+        built, "live_hooks", lambda app: pytest.fail("no app: no safeguards")
+    )
+
+    decision = built.hooks.handle(_event())
+
+    assert decision == HookDecision(True, "")
+
+
+def test_the_hook_handler_hands_the_event_to_the_found_apps_live_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bull.Modules.foundation.mocks import MockLayouts
+
+    built = wiring.get_wiring()
+    layouts = MockLayouts()
+    hooks = _Hooks()
+    hooks.decision = HookDecision(False, "no")
+    built_for: list[AppLayout] = []
+
+    def live(app: AppLayout) -> _Hooks:
+        built_for.append(app)
+        return hooks
+
+    monkeypatch.setattr(built, "layouts", layouts)
+    monkeypatch.setattr(built, "live_hooks", live)
+    event = _event()
+
+    decision = built.hooks.handle(event)
+
+    assert decision == HookDecision(False, "no")
+    assert built_for == [layouts.found]
+    assert hooks.events == [event]
+
+
+def test_the_hook_handler_finds_merge_targets_in_a_command() -> None:
+    hooks = wiring.get_wiring().hooks
+
+    assert hooks.merge_targets("git merge --no-ff feature-x") == ["feature-x"]
+    assert hooks.merge_targets("ls -la") == []
+
+
+def _event() -> HookEvent:
+    return HookEvent(
+        kind=HookKind.BEFORE_SHELL,
+        cwd=Path("/tmp/apps/tally"),
+        agent=None,
+        target_agent=None,
+        prompt=None,
+        command="ls",
+        paths=(),
+    )
