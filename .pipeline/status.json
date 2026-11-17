@@ -709,7 +709,7 @@
             "commands/verify.md",
             "commands/feature.md"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:08:24-08:00",
+  "updatedAt": "2026-11-16T23:10:18-08:00",
   "features": [],
   "activeFeature": null
 }
