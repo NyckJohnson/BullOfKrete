@@ -2064,7 +2064,12 @@ when `readers.py` defines `detect`.
     agents: one `AgentDoc` per agent file in path order, `model_setting = "models.<name>"`. An agent
     file without frontmatter or missing `name`, `description` or `tools`, or whose `name` differs
     from its file name → `BullError` naming the file (`agents/<file>`) and the problem; a missing
-    `orchestrator.md` → `BullError` naming it.
+    `orchestrator.md` → `BullError` naming it, from `files()` as well as `orchestrator()`; a file that
+    can't be read or isn't UTF-8 → `BullError` naming it; text is returned exactly as written (no
+    newline translation); a frontmatter block never closed counts as no frontmatter. Fenced blocks
+    in the text-rule tests: a fence line may be indented, and it closes only on a fence of the same
+    character and at least the opening length (as CommonMark). v1 file names (`config.sh`, …) match
+    as whole names only (`config.show` is fine).
   - Text-rule tests live in `tests/plugin_text/` and run over every real file (they pass on the
     skeleton placeholders and keep holding as units fill the files). Only code spans and fenced
     blocks are checked for commands: the first word after `bull ` is a top-level command of
@@ -2423,3 +2428,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: source note `docs/process/plugin_text.md` approved, with its six choices (§5): `/bull:stack` uses test-writer, code-writer and reviewer in `MODE: stack` with a "Stack files" spec section in `commands/stack.md`; legacy-test-scanner has `MODE: adopt` and `MODE: reference` and ends with a `COUNTS:` line; `/bull:prototype` has a no-screens path; verify's device test becomes "hands-on"; feature stage 6 records checkpoint `accepted` before `bull feature accept`; agents carry explicit `tools:` lists. Adoption survey starts from `bull adopt legacy` (no inventory command in v2.0; the stacks' `inventory` reader stays unused) — approved by Nicholas Johnson
 - 2026-11-16: plugin_text construction (LivePluginText root and file set, frontmatter parsing, errors; text-rule tests over every real file, command check limited to code spans and fenced blocks) set in the plugin_text § Construction line; internal, no contract change.
 - 2026-11-16: plugin_text depends on foundation (its errors are `BullError`, per the Construction line); build order line and module block updated. Foundation is done, so nothing moves.
+- 2026-11-16: plugin_text unit 1 review — `files()` also refuses a missing `orchestrator.md` (a rendered plugin is never incomplete); unreadable/non-UTF-8 files, unclosed frontmatter and exact-text reads are specified; text-rule fence parsing follows CommonMark fence lengths and indentation; v1 file names match whole names only. Internal, no contract change.
