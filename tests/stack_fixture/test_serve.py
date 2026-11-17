@@ -16,6 +16,9 @@ Each test drives `main` in a subprocess so the background server is reparented a
 
 from __future__ import annotations
 
+import ast
+import importlib.util
+import json
 import os
 import socket
 import subprocess
@@ -72,7 +75,9 @@ class Service:
     def cleanup(self) -> None:
         for pid_file in self.pid_files():
             try:
-                os.kill(int(pid_file.read_text().strip()), 9)
+                pid = int(pid_file.read_text().strip())
+                if pid > 1:  # never 0/-1/1: those would signal groups or everything
+                    os.kill(pid, 9)
             except (ValueError, ProcessLookupError, OSError):
                 pass
 
@@ -168,3 +173,144 @@ def test_unknown_step_or_empty_argv_returns_non_zero(
     service: Service, argv: list[str]
 ) -> None:
     assert service.main(*argv).returncode != 0
+
+
+# --- process safety, usage errors, log file, portability (unit 4 review) ---
+
+_USAGE = 64
+
+
+# Runs `main` with os.kill/os.killpg replaced by recorders that never deliver a real signal
+# (only the harmless signal 0 probe goes through), so a buggy `stop` cannot hurt the machine
+# running the tests. Prints the exit code and every recorded call as JSON.
+def _recording_driver_source() -> str:
+    return (
+        "import json, os, sys\n"
+        "calls = []\n"
+        "real = os.kill\n"
+        "def fake_kill(pid, sig):\n"
+        "    calls.append(['kill', pid, int(sig)])\n"
+        "    if int(sig) == 0:\n"
+        "        return real(pid, 0)\n"
+        "os.kill = fake_kill\n"
+        "os.killpg = lambda pg, sig: calls.append(['killpg', pg, int(sig)])\n"
+        "from bull.Modules.stack_fixture.fixture_service.serve import main\n"
+        "rc = main(sys.argv[1:])\n"
+        "print(json.dumps({'rc': rc, 'calls': calls}))\n"
+    )
+
+
+@pytest.fixture
+def canary() -> Iterator[subprocess.Popen[bytes]]:
+    proc = subprocess.Popen(["sleep", "120"], start_new_session=True)
+    yield proc
+    proc.kill()
+    proc.wait()
+
+
+@pytest.mark.parametrize("content", ["0", "-1", "1", "abc"])
+def test_stop_with_corrupt_pid_file_signals_nothing_and_removes_it(
+    service: Service, canary: subprocess.Popen[bytes], content: str
+) -> None:
+    pid_file = service.results / f"serve-{service.port}.pid"
+    pid_file.write_text(content + "\n")
+    env = dict(os.environ, BULL_RESULTS=str(service.results))
+    result = subprocess.run(
+        [sys.executable, "-c", _recording_driver_source(), "stop", str(service.port)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report["rc"] == 0
+    delivered = [c for c in report["calls"] if c[2] != 0]
+    assert delivered == []
+    assert not pid_file.exists()
+    assert canary.poll() is None
+
+
+@pytest.mark.parametrize("content", ["0", "-1", "1", "abc"])
+def test_start_with_corrupt_pid_file_treats_it_as_no_server(
+    service: Service, content: str
+) -> None:
+    pid_file = service.results / f"serve-{service.port}.pid"
+    pid_file.write_text(content + "\n")
+    assert service.main("start", str(service.port)).returncode == 0
+    assert service.main("ready", str(service.port), "--timeout", "20").returncode == 0
+    assert int(pid_file.read_text().strip()) > 1
+
+
+def test_stop_with_stale_pid_file_naming_unrelated_process_leaves_it_running(
+    service: Service, canary: subprocess.Popen[bytes]
+) -> None:
+    pid_file = service.results / f"serve-{service.port}.pid"
+    pid_file.write_text(f"{canary.pid}\n")
+    assert service.main("stop", str(service.port)).returncode == 0
+    time.sleep(0.3)
+    assert canary.poll() is None
+    assert _alive(canary.pid)
+
+
+def test_start_with_stale_pid_file_naming_unrelated_process_replaces_it(
+    service: Service, canary: subprocess.Popen[bytes]
+) -> None:
+    pid_file = service.results / f"serve-{service.port}.pid"
+    pid_file.write_text(f"{canary.pid}\n")
+    assert service.main("start", str(service.port)).returncode == 0
+    assert service.main("ready", str(service.port), "--timeout", "20").returncode == 0
+    assert int(pid_file.read_text().strip()) != canary.pid
+    assert canary.poll() is None
+
+
+def test_start_twice_while_server_is_live_returns_1(service: Service) -> None:
+    _start_ready(service)
+    first_pid = service.pid_files()[0].read_text()
+    assert service.main("start", str(service.port)).returncode == 1
+    assert service.pid_files()[0].read_text() == first_pid
+    assert service.get("/health")[0] == 200
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["bogus"],
+        ["bogus", "1234"],
+        ["start"],
+        ["stop"],
+        ["ready"],
+        ["start", "abc"],
+        ["stop", "abc"],
+        ["ready", "abc"],
+        ["start", "0"],
+        ["start", "70000"],
+        ["start", "-5"],
+        ["ready", "1", "--timeout", "abc"],
+        ["ready", "1", "--timeout"],
+        ["ready", "1", "--bogus", "5"],
+    ],
+)
+def test_usage_errors_exit_exactly_64(service: Service, argv: list[str]) -> None:
+    assert service.main(*argv).returncode == _USAGE
+
+
+def test_start_writes_server_output_log_in_results_folder(service: Service) -> None:
+    _start_ready(service)
+    assert (service.results / f"serve-{service.port}.log").is_file()
+
+
+def test_background_launch_does_not_use_python_313_only_setsid_keyword() -> None:
+    # pyproject requires Python >=3.11; `os.posix_spawn(..., setsid=True)` exists only in 3.13+.
+    spec = importlib.util.find_spec("bull.Modules.stack_fixture.fixture_service.serve")
+    assert spec is not None and spec.origin is not None
+    tree = ast.parse(Path(spec.origin).read_text())
+    keywords = {
+        kw.arg
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for kw in node.keywords
+    }
+    assert "setsid" not in keywords
