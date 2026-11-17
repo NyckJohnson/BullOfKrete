@@ -79,6 +79,34 @@ def test_merge_targets_parses_git_merge_commands(
     assert merge_targets(command) == expected
 
 
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("GIT_EDITOR=true git merge feature/a/main", ["feature/a/main"]),
+        ("env X=1 git merge x", ["x"]),
+        ("command git merge x", ["x"]),
+        ("exec git merge x", ["x"]),
+        ("time git merge x", ["x"]),
+        ("nohup git merge x", ["x"]),
+        ("sudo git merge x", ["x"]),
+        ("{ git merge x; }", ["x"]),
+        ("! git merge x", ["x"]),
+        ("if true; then git merge x; fi", ["x"]),
+        ("for b in a; do git merge x; done", ["x"]),
+        ("if false; then :; else git merge x; fi", ["x"]),
+        ("sh -c 'git merge x'", ["x"]),
+        ('bash -c "git merge x && git merge y"', ["x", "y"]),
+        ('echo "git merge fake"', []),
+        ("git log --merges", []),
+        ("git mergetool", []),
+    ],
+)
+def test_merge_targets_sees_through_wrappers_and_ignores_quoted_text(
+    command: str, expected: list[str]
+) -> None:
+    assert merge_targets(command) == expected
+
+
 # --- the guard
 
 
@@ -239,3 +267,22 @@ def test_an_allowed_merge_appends_no_event(tmp_path: Path) -> None:
     _record(rig, SHA_B, "feature/x")
     rig.guard.check(rig.app, "git merge feature/x")
     assert rig.events.events == []
+
+
+def test_unknown_ref_message_says_unknown_ref_and_names_it(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    decision = rig.guard.check(rig.app, "git merge ghost")
+    assert not decision.allow
+    assert "unknown ref ghost" in decision.message
+
+
+def test_block_message_never_contains_shell_redirection_fragments(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    decision = rig.guard.check(
+        rig.app, "git merge --no-ff module/Counter 2>&1 | tail -3"
+    )
+    assert not decision.allow
+    assert "module/Counter" in decision.message
+    assert "2>&1" not in decision.message
