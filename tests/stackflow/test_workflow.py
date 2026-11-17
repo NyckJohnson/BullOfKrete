@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from bull.Modules.foundation.Contracts import BullError
+from bull.Modules.foundation.Contracts import BullError, FileFormatError
+from bull.Modules.foundation.files import LiveFiles
+from bull.Modules.foundation.layout import LiveLayouts
+from bull.Modules.foundation.runner import LiveRunner
+from bull.Modules.gitrepo.git import LiveGit
 from bull.Modules.stackflow.Contracts import StackStage
+from bull.Modules.stackflow.workflow import LiveStackWorkflow
+from bull.Modules.stacks.mocks import MockStackRegistry
 
 from .workflow_support import (
     at_stage,
@@ -57,6 +64,14 @@ def test_init_writes_the_status_file(tmp_path: Path) -> None:
     assert data["checkpoints"] == []
 
 
+def test_status_file_holds_only_format_kind_name_stage_and_checkpoints(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    data = json.loads((path / ".bull" / "status.json").read_text())
+    assert set(data) == {"format", "kind", "name", "stage", "checkpoints"}
+
+
 def test_init_writes_stack_toml_with_the_name_filled_and_todo_placeholders(
     tmp_path: Path,
 ) -> None:
@@ -78,6 +93,17 @@ def test_init_writes_design_md_with_the_template_sections(tmp_path: Path) -> Non
 def test_init_writes_a_gitignore(tmp_path: Path) -> None:
     path = new_repo(tmp_path)
     assert (path / ".gitignore").is_file()
+
+
+def test_init_git_ignores_the_passes_file(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", ".bull/passes/stack.json"],
+        cwd=path,
+        capture_output=True,
+        check=False,
+    )
+    assert ignored.returncode == 0
 
 
 def test_init_makes_one_commit_with_the_init_message(tmp_path: Path) -> None:
@@ -153,6 +179,59 @@ def test_init_refuses_inside_a_bull_app_and_creates_nothing(tmp_path: Path) -> N
     assert not path.exists()
 
 
+def test_init_succeeds_inside_another_stack_repo(tmp_path: Path) -> None:
+    outer = new_repo(tmp_path, "outer")
+    inner = outer / "inner"
+    status = make_workflow().init(inner)
+    assert status.name == "inner"
+    assert Path(git(inner, "rev-parse", "--show-toplevel").strip()).resolve() == (
+        inner.resolve()
+    )
+
+
+def test_init_refuses_a_missing_parent_folder_and_creates_nothing(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nope" / "my_stack"
+    with pytest.raises(BullError):
+        make_workflow().init(path)
+    assert not (tmp_path / "nope").exists()
+
+
+class _FailingCommitGit(LiveGit):
+    """A real git whose commit always fails, to make `init` fail part way."""
+
+    def commit_all(self, root: Path, message: str) -> str | None:
+        raise BullError("commit failed")
+
+
+def _failing_workflow() -> LiveStackWorkflow:
+    return LiveStackWorkflow(
+        LiveFiles(),
+        LiveLayouts(),
+        _FailingCommitGit(LiveRunner()),
+        MockStackRegistry(),
+    )
+
+
+def test_init_failure_removes_the_folder_it_created(tmp_path: Path) -> None:
+    path = tmp_path / "my_stack"
+    with pytest.raises(BullError):
+        _failing_workflow().init(path)
+    assert not path.exists()
+
+
+def test_init_failure_leaves_a_pre_existing_empty_folder_empty(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "my_stack"
+    path.mkdir()
+    with pytest.raises(BullError):
+        _failing_workflow().init(path)
+    assert path.is_dir()
+    assert list(path.iterdir()) == []
+
+
 # --- load
 
 
@@ -176,6 +255,35 @@ def test_load_refuses_an_app_status_file(tmp_path: Path) -> None:
     )
     with pytest.raises(BullError):
         make_workflow().load(tmp_path)
+
+
+def _edit_status(path: Path, **changes: object) -> None:
+    file = path / ".bull" / "status.json"
+    data = json.loads(file.read_text())
+    data.update(changes)
+    file.write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"format": 2},
+        {"format": "1"},
+        {"stage": 0},
+        {"stage": 7},
+        {"stage": "one"},
+        {"checkpoints": "design-approved"},
+        {"checkpoints": [1, 2]},
+        {"checkpoints": ["nonsense"]},
+    ],
+)
+def test_load_raises_a_file_format_error_for_bad_status_values(
+    tmp_path: Path, changes: dict[str, object]
+) -> None:
+    path = new_repo(tmp_path)
+    _edit_status(path, **changes)
+    with pytest.raises(FileFormatError):
+        make_workflow().load(path)
 
 
 # --- set_stage
@@ -256,6 +364,59 @@ def test_set_stage_five_moves_on_with_a_full_test_pass(tmp_path: Path) -> None:
     status = at_stage(path, 5)
     assert status.stage is StackStage.REVIEW
     assert make_workflow().load(path).stage is StackStage.REVIEW
+
+
+def test_set_stage_five_needs_a_full_pass_but_not_one_at_head(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    at_stage(path, 4)
+    commit(path)
+    make_workflow().record_test(path, report(static=False))
+    (path / "more.txt").write_text("later work")
+    commit(path)
+    assert make_workflow().set_stage(path, 5).stage is StackStage.REVIEW
+
+
+def test_set_stage_refuses_to_skip_a_stage(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    workflow = make_workflow()
+    workflow.checkpoint(path, "design-approved")
+    with pytest.raises(BullError):
+        workflow.set_stage(path, 3)
+    assert workflow.load(path).stage is StackStage.DISCUSS
+
+
+@pytest.mark.parametrize("stage", [0, 7, -1])
+def test_set_stage_refuses_a_stage_outside_one_to_six(
+    tmp_path: Path, stage: int
+) -> None:
+    path = new_repo(tmp_path)
+    with pytest.raises(BullError):
+        make_workflow().set_stage(path, stage)
+    assert make_workflow().load(path).stage is StackStage.DISCUSS
+
+
+def test_set_stage_allows_going_back_a_stage(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    at_stage(path, 3)
+    assert make_workflow().set_stage(path, 2).stage is StackStage.SCAFFOLD
+    assert make_workflow().load(path).stage is StackStage.SCAFFOLD
+
+
+def test_set_stage_six_is_refused_without_accepted(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    _ready_to_accept(path)
+    with pytest.raises(BullError) as error:
+        make_workflow().set_stage(path, 6)
+    assert "accepted" in fails(error)
+    assert make_workflow().load(path).stage is StackStage.REVIEW
+
+
+def test_set_stage_six_moves_on_once_accepted(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    _ready_to_accept(path)
+    make_workflow().checkpoint(path, "accepted")
+    assert make_workflow().set_stage(path, 6).stage is StackStage.ACCEPTED
+    assert make_workflow().load(path).stage is StackStage.ACCEPTED
 
 
 # --- checkpoint
@@ -340,6 +501,47 @@ def test_checkpoint_accepted_is_refused_on_a_dirty_tree(tmp_path: Path) -> None:
     assert "accepted" not in make_workflow().load(path).checkpoints
 
 
+def test_checkpoint_repeated_is_a_no_op(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    make_workflow().checkpoint(path, "design-approved")
+    status = make_workflow().checkpoint(path, "design-approved")
+    assert status.checkpoints == ("design-approved",)
+    assert make_workflow().load(path).checkpoints == ("design-approved",)
+
+
+def test_checkpoint_repeated_rules_approved_is_a_no_op_even_after_going_back(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    at_stage(path, 5)
+    make_workflow().checkpoint(path, "rules-approved")
+    make_workflow().set_stage(path, 4)
+    status = make_workflow().checkpoint(path, "rules-approved")
+    assert status.checkpoints.count("rules-approved") == 1
+
+
+def test_checkpoint_repeated_accepted_is_a_no_op_after_head_moved(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    _ready_to_accept(path)
+    make_workflow().checkpoint(path, "accepted")
+    commit(path)
+    status = make_workflow().checkpoint(path, "accepted")
+    assert status.checkpoints.count("accepted") == 1
+
+
+def test_checkpoint_repeated_accepted_is_a_no_op_on_a_dirty_tree(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    _ready_to_accept(path)
+    make_workflow().checkpoint(path, "accepted")
+    (path / "scratch.txt").write_text("uncommitted")
+    status = make_workflow().checkpoint(path, "accepted")
+    assert status.checkpoints.count("accepted") == 1
+
+
 # --- record_test
 
 
@@ -401,6 +603,73 @@ def test_record_test_replaces_the_pass_with_the_new_head(tmp_path: Path) -> None
     assert status.test_pass == second
 
 
+def _passes(path: Path) -> Path:
+    return path / ".bull" / "passes" / "stack.json"
+
+
+def _write_passes(path: Path, text: str) -> None:
+    _passes(path).parent.mkdir(parents=True, exist_ok=True)
+    _passes(path).write_text(text)
+
+
+def test_record_test_leaves_git_status_clean(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    make_workflow().record_test(path, report(static=True))
+    make_workflow().record_test(path, report(static=False))
+    assert git(path, "status", "--porcelain").strip() == ""
+
+
+def test_record_test_keeps_passes_out_of_the_status_file(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    make_workflow().record_test(path, report(static=True))
+    make_workflow().record_test(path, report(static=False))
+    data = json.loads((path / ".bull" / "status.json").read_text())
+    assert set(data) == {"format", "kind", "name", "stage", "checkpoints"}
+    assert head(path) in _passes(path).read_text()
+
+
+def test_load_without_a_passes_file_means_no_pass(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    make_workflow().record_test(path, report(static=False))
+    _passes(path).unlink(missing_ok=True)
+    status = make_workflow().load(path)
+    assert status.static_pass is None
+    assert status.test_pass is None
+
+
+@pytest.mark.parametrize(
+    "text", ["not json at all", "[1, 2]", '"x"', '{"test_pass": 5}']
+)
+def test_load_with_a_malformed_passes_file_means_no_pass(
+    tmp_path: Path, text: str
+) -> None:
+    path = new_repo(tmp_path)
+    make_workflow().record_test(path, report(static=False))
+    _write_passes(path, text)
+    status = make_workflow().load(path)
+    assert status.static_pass is None
+    assert status.test_pass is None
+
+
+def test_a_malformed_passes_file_blocks_the_stage_that_needs_a_pass(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    at_stage(path, 3)
+    commit(path)
+    make_workflow().record_test(path, report(static=True))
+    _write_passes(path, "garbage")
+    with pytest.raises(BullError):
+        make_workflow().set_stage(path, 4)
+
+
+def test_record_test_recovers_from_a_malformed_passes_file(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    _write_passes(path, "garbage")
+    status = make_workflow().record_test(path, report(static=False))
+    assert status.test_pass == head(path)
+
+
 # --- next_step
 
 
@@ -448,3 +717,20 @@ def test_ref_tags_a_checkpoint_under_stack(checkpoint: str) -> None:
 @pytest.mark.parametrize("stage", ["scaffold", "fixture", "gate-code", "review"])
 def test_ref_branches_a_stage_under_stack(stage: str) -> None:
     assert make_workflow().ref("branch", stage) == f"stack/{stage}"
+
+
+def test_ref_refuses_an_unknown_kind() -> None:
+    with pytest.raises(BullError):
+        make_workflow().ref("bogus", "accepted")
+
+
+@pytest.mark.parametrize("name", ["bogus", "scaffold", ""])
+def test_ref_refuses_an_unknown_checkpoint_for_a_tag(name: str) -> None:
+    with pytest.raises(BullError):
+        make_workflow().ref("tag", name)
+
+
+@pytest.mark.parametrize("name", ["bogus", "design-approved", ""])
+def test_ref_refuses_an_unknown_stage_name_for_a_branch(name: str) -> None:
+    with pytest.raises(BullError):
+        make_workflow().ref("branch", name)
