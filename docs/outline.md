@@ -1981,7 +1981,12 @@ when `readers.py` defines `detect`.
       def merge_targets(self, command: str) -> list[str]: ...
   ```
 - Behavior spec:
-  - Outside a bull app (no layout found from `cwd`) every hook allows with an empty message.
+  - Outside a bull app (no layout found from `cwd`), and in a stack repo (its `status.json` has kind
+    `"stack"`), every hook allows with an empty message.
+  - A safeguard that fails (any exception, e.g. a corrupt `status.json` or a mistyped setting) fails
+    closed: BEFORE_AGENT, BEFORE_SHELL, BEFORE_EDIT and BEFORE_READ block with "bull safeguard could
+    not run: <reason>" (plus the fix when the error has one); SESSION_START and AGENT_END allow with
+    that message.
   - Agent names compare by the part after the last `:` (`bull:code-writer` → `code-writer`).
   - SESSION_START: message = stage and mode, the paused unit and reason if paused ("run
     `/bull:resume`"), the waiting approval if any, and the next step.
@@ -2391,3 +2396,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: stackflow coverage triage (missed 2, not-in-spec 7) — human kept and specified all seven: a missing or malformed built-in template (DESIGN.md or other template file missing, no `name` line in the stack.toml template, no title line in the DESIGN.md template) → `BullError` with fix "reinstall bull" (init and `design_template`); `init` on a path that is an existing file → refused, nothing created; `set_stage` to the current stage is a no-op (nothing written); `record_test` with no commit at HEAD records nothing and returns the status unchanged. Missed: `load` refuses a status file that is not a JSON object or whose `name` is not a string (`FileFormatError`). Internal behavior, no contract change — approved by Nicholas Johnson
 - 2026-11-16: hooks unit 2 construction — merge_guard.py: pure `merge_targets(command) -> list[str]` (quote-aware split; `-m`/`--message=`/`-s` values skipped; octopus merges return every ref); `MergeGuard(git, passes: PassRecords, refs: Refs, status: StatusStore, events: EventLog).check(app, command) -> HookDecision` (target resolved by `git.head`; the first blocking target blocks; one `hook_block` event per block; allow has an empty message). protection.py: `Protection(parts, settings).check(app, event) -> HookDecision` for BEFORE_EDIT/BEFORE_READ (others allowed); "inside the reference folder" is a path-component match; `reference_dir` relative to the app root or absolute. Internal wiring, no contract change.
 - 2026-11-16: hooks unit 3 construction — `UsageGuard(usage, status: StatusStore, settings, events).check(app, event)` handles BEFORE_AGENT (order: usage PAUSE, waiting approval, reference mention; UNKNOWN allows with a warning; appends `agent_start` on allow); `SessionStart(status: StatusStore, progress: Progress).check(app, event)` always allows (stage of the active track, mode, pause line, waiting line, next step); `LiveHooks(layouts, session, usage_guard, merge_guard, protection, events)` finds the app with `layouts.find(event.cwd)`, routes each kind, appends `agent_end` itself, allows BEFORE_SHELL without a command. App-bound collaborators (Usage, StatusStore, Progress, EventLog) are built by `cli.wiring` for the app found from the hook's cwd. Internal wiring, no contract change.
+- 2026-11-16: hooks unit 3 review — a failing safeguard fails closed (guarded kinds block with "bull safeguard could not run: <reason>"; session start and agent end allow with the message); in a stack repo every hook allows with an empty message, like outside an app (`LiveHooks` also takes foundation `Files` to read the status file's `kind`) — approved by Nicholas Johnson
