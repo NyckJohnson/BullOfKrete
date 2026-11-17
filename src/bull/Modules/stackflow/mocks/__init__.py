@@ -11,9 +11,8 @@ from bull.Modules.stackflow.Contracts import (
     StackStage,
     StackWorkflow,
 )
-from bull.Modules.stacks.Contracts import Stack
+from bull.Modules.stacks.Contracts import Maturity, Stack
 from bull.Modules.stacks.mocks import sample_stack
-from bull.Modules.stacks.Contracts import Maturity
 from bull.Modules.stacktest.Contracts import StackTestReport
 
 SAMPLE_SHA = "3f9c2a1e8b7d6c5f4a3b2c1d0e9f8a7b6c5d4e3f"
@@ -56,7 +55,10 @@ class MockStackWorkflow(StackWorkflow):
         return self.status
 
     def record_test(self, path: Path, report: StackTestReport) -> StackRepoStatus:
+        """Record the call; store `SAMPLE_SHA` only when `report.ok` is true."""
         self.calls.append(("record_test", (path, report)))
+        if not report.ok:
+            return self.status
         if report.static:
             self.status = replace(self.status, static_pass=SAMPLE_SHA)
         else:
@@ -71,6 +73,7 @@ class MockStackWorkflow(StackWorkflow):
         )
 
     def ref(self, kind: str, name: str) -> str:
+        """Record the call and return `stack/<name>`; `kind` is ignored."""
         self.calls.append(("ref", (kind, name)))
         return f"stack/{name}"
 

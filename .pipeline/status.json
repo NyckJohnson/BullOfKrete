@@ -582,7 +582,7 @@
         "stacks",
         "stacktest"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -590,8 +590,8 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 2,
@@ -601,8 +601,8 @@
             "template/stack.toml",
             "template/cases.json"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 3,
@@ -610,8 +610,8 @@
             "install.py",
             "cli.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-12T14:27:47-08:00",
+  "updatedAt": "2026-11-16T18:47:08-08:00",
   "features": [],
   "activeFeature": null
 }
