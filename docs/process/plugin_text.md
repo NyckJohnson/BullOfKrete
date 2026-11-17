@@ -719,7 +719,7 @@ contradicts n, not-in-spec n` line (the orchestrator records it with `bull statu
    `disallowedTools: Agent` becomes an explicit list without the agent tool.
 
 ### Open question
-1. **No inventory command** (decided 2026-11-16: option (a)).** v1's adoption survey starts from `ios-pipeline stack inventory` (every
+1. **No inventory command** (decided 2026-11-16: option (a)). v1's adoption survey starts from `ios-pipeline stack inventory` (every
    legacy file with size, declared and used types). v2's memo has an optional `inventory` stack
    reader but no `bull` command calls it, and the text rules forbid naming a command that isn't in
    the Commands table. Options: (a) **recommended** — `/bull:adopt` plans its passes from `bull
