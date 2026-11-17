@@ -2129,6 +2129,16 @@ when `readers.py` defines `detect`.
     existing file without dropping the user's keys; `CLAUDE.md` with a marked block
     (`<!-- bull:begin -->…<!-- bull:end -->`) importing `@.bull/plugin/orchestrator.md`, replacing
     only that block in an existing file. No absolute paths.
+- Construction (internal; not contracts):
+  - plugin.py: `LiveProvider(plugin_text: PluginText)`; `name = "claude"`. render_plugin takes the
+    plugin's files from `plugin_text.files()`; for each `agents/*.md` it reads `models.<name>` with
+    `Settings.get` and inserts `model: <value>` inside the frontmatter (nothing when `inherit`),
+    leaving the rest unchanged. launch.py and hooks_json.py hold helpers used by `LiveProvider`.
+  - hooks.json uses Claude Code's shape: `{"hooks": {<Event>: [{"matcher": "A|B", "hooks":
+    [{"type": "command", "command": "bull hook <kind>"}]}]}}`; the agent-launch matcher names
+    `Task` and `Agent`.
+  - tool_check looks `claude` up on `PATH` at call time; the `claude --version` output goes in the
+    item text.
 - Reference tests: none.
 - Contract: see `docs/api/claude_code.md` (generated; do not edit by hand)
 
@@ -2434,3 +2444,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: plugin_text unit 5 review — corrections to the source note (§ 3), found against the stackflow, adoption and status specs: in `/bull:stack` every test run (`bull stack test .`, `--static`) happens on a clean, committed tree (it records a pass only then), and a stage is set only after the pass it needs; stage 6 is set after checkpoint `accepted`; a stack repo has no usage-check, pause, resume, plan or tick (`bull status` there has only `next|stage|checkpoint|ref`), so `/bull:stack`, `/bull:resume` and `/bull:status` skip them there (resume handles the stack repo first); `/bull:adopt` verify keeps `App shell:` and `App shell tests:` until `bull adopt finish` has succeeded (finish reads them), removing the rest of `## Legacy code` before and the section after.
 - 2026-11-16: the source note gains "v1 detail for the 'as v1' parts of § 4" (reviewer, coverage-analyst, journey-test-writer report, surveyor, legacy-test-scanner), since agents may not read v1; content unchanged from v1 apart from v2 terms.
 - 2026-11-16: plugin_text reference scan (covered 3, missed 0, contradicts 0, not-in-spec 1) — the not-in-spec case (each stack's rules.md has a section for every agent whose text runs `stack rules <agent>`) is already specified in stacktest's static check (`rules.md` has one section per manifest agent); plugin_text's half (each agent names `bull stack rules <name>`, legacy-test-scanner none) is tested. No spec change.
+- 2026-11-17: claude_code construction (`LiveProvider(plugin_text)`, `name = "claude"`, agent model lines, hooks.json shape, tool_check lookup) set in the claude_code § "Construction" line; claude_code's depends-on line now lists stacks (contract only, for `CheckItem`); internal wiring, no contract change.
