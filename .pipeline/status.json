@@ -750,7 +750,7 @@
             "agents/surveyor.md",
             "agents/legacy-test-scanner.md"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         }
       ]
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:36:30-08:00",
+  "updatedAt": "2026-11-16T23:37:36-08:00",
   "features": [],
   "activeFeature": null
 }
