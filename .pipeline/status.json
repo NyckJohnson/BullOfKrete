@@ -698,7 +698,7 @@
             "commands/setup.md",
             "commands/skeleton.md"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T22:56:12-08:00",
+  "updatedAt": "2026-11-16T22:57:21-08:00",
   "features": [],
   "activeFeature": null
 }
