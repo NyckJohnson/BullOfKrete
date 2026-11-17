@@ -557,7 +557,7 @@ def _subcommands(parser: argparse.ArgumentParser) -> _Commands:
         if isinstance(action, argparse._SubParsersAction):
             found: _Commands = action
             return found
-    raise RuntimeError(
+    raise RuntimeError(  # coverage-exempt: unreachable, the stacks module always adds subcommands
         f"`{parser.prog}` has no subcommands"
     )  # unreachable: stacks adds them
 

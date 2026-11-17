@@ -880,7 +880,7 @@
             "help.py",
             "statusline.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         }
       ]
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T14:07:06-08:00",
+  "updatedAt": "2026-11-17T14:11:32-08:00",
   "features": [],
   "activeFeature": null
 }
