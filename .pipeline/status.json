@@ -601,7 +601,7 @@
             "template/stack.toml",
             "template/cases.json"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T18:04:51-08:00",
+  "updatedAt": "2026-11-16T18:08:41-08:00",
   "features": [],
   "activeFeature": null
 }
