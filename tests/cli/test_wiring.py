@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,8 +13,15 @@ import pytest
 import bull
 from bull.Modules.claude_code.mocks import MockProvider
 from bull.Modules.cli import wiring
+from bull.Modules.cli.main import main
+from bull.Modules.foundation.Contracts import AppLayout
 from bull.Modules.hooks.Contracts import HookDecision, HookEvent, HookKind
 from bull.Modules.hooks.mocks import MockHooks
+from bull.Modules.settings.loader import LiveSettingsLoader
+from bull.Modules.stackflow.mocks import MockStackWorkflow
+from bull.Modules.stacks.Contracts import Stack
+from bull.Modules.stacks.mocks import MockStackRegistry, sample_stack
+from bull.Modules.stacktest.mocks import MockStackTester
 
 _COMMANDS = [
     "init",
@@ -265,3 +274,293 @@ def test_a_hook_that_raises_still_allows_session_start() -> None:
 
     assert code == 0
     assert "safeguard exploded" in err
+
+
+# --- stack repo routing -----------------------------------------------------------------
+
+_STACK_STATUS = {
+    "format": 1,
+    "kind": "stack",
+    "name": "demo",
+    "stage": 1,
+    "checkpoints": [],
+}
+_APP_STATUS = {"format": 1, "kind": "app"}
+
+
+def _folder(root: Path, status: object | None, *, raw: str | None = None) -> Path:
+    """A folder with `.bull/status.json` holding `status` (or the text `raw`)."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / ".bull").mkdir(exist_ok=True)
+    if raw is not None:
+        (root / ".bull" / "status.json").write_text(raw, encoding="utf-8")
+    elif status is not None:
+        (root / ".bull" / "status.json").write_text(
+            json.dumps(status), encoding="utf-8"
+        )
+    return root
+
+
+@pytest.fixture
+def isolated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Keep user-level folders inside the test's temporary directory."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    return tmp_path
+
+
+def test_status_in_a_stack_repo_is_the_stack_workflow_status(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    monkeypatch.chdir(repo)
+
+    code = main(["status"])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "demo" in captured.out
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["part", "list"],
+        ["feature", "list"],
+        ["gates", "--all"],
+        ["api", "Counter"],
+        ["config", "show"],
+    ],
+)
+def test_app_commands_refuse_in_a_stack_repo(
+    argv: list[str],
+    isolated: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    monkeypatch.chdir(repo)
+
+    code = main(argv)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "bull: this is a stack repo" in captured.err
+    assert "fix:" in captured.err
+
+
+def test_the_formats_check_is_skipped_in_a_stack_repo(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = wiring.get_wiring()
+    checked: list[AppLayout] = []
+    monkeypatch.setattr(built.app_formats, "check", checked.append)
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+
+    built.formats.check(built.layouts.at(repo))
+
+    assert checked == []
+
+
+def test_the_formats_check_runs_in_an_app(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = wiring.get_wiring()
+    checked: list[AppLayout] = []
+    monkeypatch.setattr(built.app_formats, "check", checked.append)
+    app = built.layouts.at(_folder(isolated / "app", _APP_STATUS))
+
+    built.formats.check(app)
+
+    assert checked == [app]
+
+
+@pytest.mark.parametrize(
+    ("status", "raw"),
+    [
+        (None, None),
+        (None, "{this is not json"),
+        (None, "[1, 2, 3]"),
+        (None, '"stack"'),
+        ({"format": 1}, None),
+        ({"format": 1, "kind": "app"}, None),
+    ],
+    ids=["missing", "unreadable", "list", "string", "no-kind", "app-kind"],
+)
+def test_a_missing_unreadable_or_non_object_status_file_is_not_a_stack_repo(
+    status: object | None,
+    raw: str | None,
+    isolated: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = wiring.get_wiring()
+    checked: list[AppLayout] = []
+    monkeypatch.setattr(built.app_formats, "check", checked.append)
+    folder = _folder(isolated / "folder", status, raw=raw)
+    layout = built.layouts.at(folder)
+
+    built.formats.check(layout)
+
+    assert checked == [layout]
+
+
+def test_statusline_in_a_stack_repo_prints_a_plain_line_and_records_nothing(
+    isolated: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    monkeypatch.chdir(repo)
+    payload = {
+        "cwd": str(repo),
+        "rate_limits": {"five_hour": {"used_percentage": 50}},
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    code = main(["statusline"])
+
+    assert code == 0
+    assert capsys.readouterr().out == "bull\n"
+    assert not (repo / ".bull" / "usage.json").exists()
+
+
+class _HomeRegistry(MockStackRegistry):
+    """`load_path` returns a stack whose home is the folder asked for."""
+
+    def load_path(self, path: Path) -> Stack:
+        return replace(sample_stack(path.name), home=path.resolve())
+
+
+class _RecordingSetup:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        built = wiring.get_wiring()
+        self.workflow = MockStackWorkflow()
+        self.tester = MockStackTester()
+        monkeypatch.setattr(built, "registry", _HomeRegistry())
+        monkeypatch.setattr(built, "tester", self.tester)
+        monkeypatch.setattr(built, "workflow", self.workflow)
+
+    @property
+    def recorded(self) -> list[Path]:
+        return [
+            call[1][0]  # type: ignore[misc]
+            for call in self.workflow.calls
+            if call[0] == "record_test"
+        ]
+
+
+@pytest.mark.parametrize(
+    "extra", [["--static"], []], ids=["static-run", "whole-suite-run"]
+)
+def test_stack_test_on_the_stack_repo_root_records_the_result(
+    extra: list[str], isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    monkeypatch.chdir(repo)
+    setup = _RecordingSetup(monkeypatch)
+
+    code = main(["stack", "test", ".", *extra])
+
+    assert code == 0
+    assert setup.recorded == [repo.resolve()]
+
+
+def test_stack_test_with_a_case_does_not_record(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    monkeypatch.chdir(repo)
+    setup = _RecordingSetup(monkeypatch)
+
+    code = main(["stack", "test", ".", "--case", "clean"])
+
+    assert code == 0
+    assert setup.recorded == []
+
+
+def test_stack_test_on_a_folder_inside_the_stack_repo_does_not_record(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    inner = repo / "stacks" / "inner"
+    inner.mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    setup = _RecordingSetup(monkeypatch)
+
+    code = main(["stack", "test", "stacks/inner", "--static"])
+
+    assert code == 0
+    assert setup.recorded == []
+
+
+def test_stack_test_on_a_folder_outside_any_stack_repo_does_not_record(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _folder(isolated / "repo", _STACK_STATUS)
+    elsewhere = isolated / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(repo)
+    setup = _RecordingSetup(monkeypatch)
+
+    code = main(["stack", "test", str(elsewhere), "--static"])
+
+    assert code == 0
+    assert setup.recorded == []
+
+
+def test_stack_test_in_an_app_does_not_record(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = _folder(isolated / "app", _APP_STATUS)
+    monkeypatch.chdir(app)
+    setup = _RecordingSetup(monkeypatch)
+
+    main(["stack", "test", ".", "--static"])
+
+    assert setup.recorded == []
+
+
+# --- settings load lazily ----------------------------------------------------------------
+
+
+@pytest.fixture
+def loads(monkeypatch: pytest.MonkeyPatch) -> list[AppLayout | None]:
+    """Every call to the real settings loader, recorded."""
+    seen: list[AppLayout | None] = []
+    original = LiveSettingsLoader.load
+
+    def counting(
+        self: LiveSettingsLoader, app: AppLayout | None, layer: object
+    ) -> object:
+        seen.append(app)
+        return original(self, app, layer)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(LiveSettingsLoader, "load", counting)
+    return seen
+
+
+def test_building_the_commands_in_an_app_reads_no_settings(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch, loads: list[AppLayout | None]
+) -> None:
+    app = _folder(isolated / "app", _APP_STATUS)
+    monkeypatch.chdir(app)
+
+    _table()
+
+    assert loads == []
+
+
+def test_a_command_loads_the_apps_settings_once(
+    isolated: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    loads: list[AppLayout | None],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    app = _folder(isolated / "app", _APP_STATUS)
+    monkeypatch.chdir(app)
+
+    code = main(["config", "show"])
+
+    assert code == 0
+    assert capsys.readouterr().out != ""
+    assert len(loads) == 1

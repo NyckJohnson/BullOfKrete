@@ -6,10 +6,9 @@ import io
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bull.Modules.cli.statusline import run_statusline
-
 from bull.Modules.claude_code.Contracts import StatusLineInput
 from bull.Modules.claude_code.mocks import MockProvider
+from bull.Modules.cli.statusline import run_statusline
 from bull.Modules.foundation.Contracts import AppLayout
 from bull.Modules.foundation.mocks import MockLayouts, sample_layout
 from bull.Modules.status.Contracts import Progress
@@ -284,3 +283,43 @@ def test_statusline_writes_nothing_else_to_stderr_on_success() -> None:
     run = _Run()
 
     assert run.err.getvalue() == ""
+
+
+def test_statusline_records_the_sample_even_when_the_status_cannot_be_read() -> None:
+    usage = MockUsage()
+    sample = _sample(92, 40)
+
+    run = _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), sample),
+        usage=usage,
+        progress=_BrokenProgress(),
+    )
+
+    assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
+    assert run.line == "bull\n"
+    assert run.code == 0
+    assert "status file unreadable" in run.err.getvalue()
+
+
+def test_statusline_records_the_sample_even_when_building_the_status_raises() -> None:
+    usage = MockUsage()
+    sample = _sample(10, 20)
+    out, err = io.StringIO(), io.StringIO()
+
+    def broken_progress(app: AppLayout) -> Progress:
+        raise RuntimeError("cannot build progress")
+
+    code = run_statusline(
+        "{}",
+        out,
+        err,
+        provider=_Provider(Path("/tmp/apps/tally"), sample),
+        layouts=MockLayouts(),
+        usage=lambda app: usage,
+        progress=broken_progress,
+    )
+
+    assert code == 0
+    assert out.getvalue() == "bull\n"
+    assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
+    assert "cannot build progress" in err.getvalue()

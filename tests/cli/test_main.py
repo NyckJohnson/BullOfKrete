@@ -389,3 +389,137 @@ def test_json_output_stays_clean_when_the_command_is_refused(
     assert code == 1
     assert captured.out == ""
     assert captured.err != ""
+
+
+# --- hook and statusline never fail the session ------------------------------------------
+
+_HOOK_NAMES = [
+    "session-start",
+    "before-agent",
+    "before-shell",
+    "before-edit",
+    "before-read",
+    "agent-end",
+]
+
+
+@dataclass
+class _BrokenTable(_Wiring):
+    """A composition root whose command table cannot be built."""
+
+    def register_commands(
+        self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+    ) -> None:
+        raise RuntimeError("table exploded")
+
+
+@dataclass
+class _RealisticTable(_Wiring):
+    """Registers `hook` (a fixed set of kinds) and `statusline`, like the real table."""
+
+    def register_commands(
+        self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+    ) -> None:
+        hook = commands.add_parser("hook")
+        hook.add_argument("kind", choices=_HOOK_NAMES)
+        hook.set_defaults(run=lambda args, out: 0)
+        line = commands.add_parser("statusline")
+        line.set_defaults(run=lambda args, out: 0)
+
+
+def _broken() -> _BrokenTable:
+    return _BrokenTable(
+        layouts=MockLayouts(),
+        formats=MockFormats(),
+        settings_loader=MockSettingsLoader(),
+        commands=_Registered(),
+    )
+
+
+def _realistic() -> _RealisticTable:
+    return _RealisticTable(
+        layouts=MockLayouts(),
+        formats=MockFormats(),
+        settings_loader=MockSettingsLoader(),
+        commands=_Registered(),
+    )
+
+
+@pytest.mark.parametrize("kind", _HOOK_NAMES)
+def test_a_hook_exits_zero_with_empty_stdout_when_the_command_table_cannot_be_built(
+    kind: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = main(["hook", kind], wiring=_broken())
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == ""
+    assert "table exploded" in captured.err
+
+
+def test_statusline_prints_a_plain_line_when_the_command_table_cannot_be_built(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(["statusline"], wiring=_broken())
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == "bull\n"
+    assert "table exploded" in captured.err
+
+
+def test_a_hook_exits_zero_with_empty_stdout_when_the_wiring_cannot_be_built(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def failing() -> object:
+        raise RuntimeError("wiring exploded")
+
+    monkeypatch.setattr("bull.Modules.cli.main.get_wiring", failing)
+
+    code = main(["hook", "before-shell"])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == ""
+    assert "wiring exploded" in captured.err
+
+
+def test_statusline_prints_a_plain_line_when_the_wiring_cannot_be_built(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def failing() -> object:
+        raise RuntimeError("wiring exploded")
+
+    monkeypatch.setattr("bull.Modules.cli.main.get_wiring", failing)
+
+    code = main(["statusline"])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == "bull\n"
+    assert "wiring exploded" in captured.err
+
+
+@pytest.mark.parametrize("argv", [["hook", "bad-kind"], ["hook"]])
+def test_a_hook_whose_arguments_do_not_parse_allows_instead_of_exiting_two(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = main(argv, wiring=_realistic())
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == ""
+    assert captured.err != ""
+
+
+def test_statusline_whose_arguments_do_not_parse_still_prints_a_plain_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(["statusline", "--bogus"], wiring=_realistic())
+
+    assert code == 0
+    assert capsys.readouterr().out == "bull\n"
+
+
+def test_other_commands_still_exit_two_when_their_arguments_do_not_parse() -> None:
+    assert main(["status", "--bogus"], wiring=_realistic()) == 2
