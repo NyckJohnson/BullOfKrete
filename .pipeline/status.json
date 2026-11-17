@@ -630,7 +630,7 @@
         "status",
         "gates"
       ],
-      "state": "coverage",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T20:47:55-08:00",
+  "updatedAt": "2026-11-16T20:57:01-08:00",
   "features": [],
   "activeFeature": null
 }
