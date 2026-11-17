@@ -125,6 +125,34 @@ def test_files_returns_plugin_file_values(tmp_path: Path) -> None:
     assert LivePluginText(tmp_path).files() == [PluginFile("orchestrator.md", "# o\n")]
 
 
+def test_files_missing_orchestrator_raises_bull_error_naming_it(tmp_path: Path) -> None:
+    make_plugin(
+        tmp_path, agents={"reviewer": agent_text("reviewer")}, orchestrator=None
+    )
+    with pytest.raises(BullError) as exc:
+        LivePluginText(tmp_path).files()
+    assert "orchestrator.md" in exc.value.message
+
+
+@pytest.mark.parametrize("folder", ["agents", "commands"])
+def test_files_non_utf8_file_raises_bull_error_naming_its_path(
+    tmp_path: Path, folder: str
+) -> None:
+    make_plugin(tmp_path)
+    (tmp_path / folder / "broken.md").write_bytes(b"\xff\xfe")
+    with pytest.raises(BullError) as exc:
+        LivePluginText(tmp_path).files()
+    assert f"{folder}/broken.md" in exc.value.message
+
+
+def test_files_returns_crlf_line_endings_unchanged(tmp_path: Path) -> None:
+    text = "---\r\ndescription: d\r\n---\r\nBody\r\n"
+    make_plugin(tmp_path, commands={"build": text}, orchestrator="# o\r\n\r\n")
+    by_path = {f.path: f.text for f in LivePluginText(tmp_path).files()}
+    assert by_path["commands/build.md"] == text
+    assert by_path["orchestrator.md"] == "# o\r\n\r\n"
+
+
 # --- orchestrator() ----------------------------------------------------------------------
 
 
@@ -242,6 +270,14 @@ def test_agents_is_empty_when_there_are_no_agent_files(tmp_path: Path) -> None:
 
 def test_agents_file_without_frontmatter_raises_naming_the_file(tmp_path: Path) -> None:
     make_plugin(tmp_path, agents={"reviewer": "Just a body, no frontmatter.\n"})
+    with pytest.raises(BullError) as exc:
+        LivePluginText(tmp_path).agents()
+    assert "agents/reviewer.md" in exc.value.message
+
+
+def test_agents_unclosed_frontmatter_counts_as_missing(tmp_path: Path) -> None:
+    text = "---\nname: reviewer\ndescription: d\ntools: Read\nBody never closed.\n"
+    make_plugin(tmp_path, agents={"reviewer": text})
     with pytest.raises(BullError) as exc:
         LivePluginText(tmp_path).agents()
     assert "agents/reviewer.md" in exc.value.message

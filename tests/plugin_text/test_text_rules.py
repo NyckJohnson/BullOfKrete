@@ -134,7 +134,7 @@ V1_NAMES = [
 
 # --- helpers (the text rules themselves) -------------------------------------------------
 
-_FENCE = re.compile(r"^```[^\n]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
+_FENCE_LINE = re.compile(r"^[ \t]*(`{3,}|~{3,})(.*)$")
 _SPAN = re.compile(r"`([^`\n]+)`")
 _BULL_CMD = re.compile(r"(?<![\w./:-])bull[ \t]+([^\s`]+)(?:[ \t]+([^\s`]+))?")
 _BARE_WORD = re.compile(r"^[a-z][a-z-]*$")
@@ -144,11 +144,44 @@ _BANNED = re.compile(
 
 
 def code_segments(text: str) -> list[str]:
-    """Fenced block bodies and inline code spans (spans taken outside the fences)."""
-    segments = [m.group(1) for m in _FENCE.finditer(text)]
-    outside = _FENCE.sub("", text)
-    segments.extend(m.group(1) for m in _SPAN.finditer(outside))
+    """Fenced block bodies and inline code spans (spans taken outside the fences).
+
+    A fence line may be indented; it closes only on a fence of the same character, at
+    least as long as the opening one, with nothing after it (as CommonMark).
+    """
+    segments: list[str] = []
+    outside: list[str] = []
+    body: list[str] = []
+    opener: str | None = None
+    for line in text.split("\n"):
+        m = _FENCE_LINE.match(line.rstrip("\r"))
+        if opener is None:
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                opener = m.group(1)
+                body = []
+            else:
+                outside.append(line)
+        elif (
+            m
+            and m.group(1)[0] == opener[0]
+            and len(m.group(1)) >= len(opener)
+            and not m.group(2).strip()
+        ):
+            segments.append("\n".join(body))
+            opener = None
+        else:
+            body.append(line)
+    if opener is not None:
+        segments.append("\n".join(body))
+    segments.extend(m.group(1) for m in _SPAN.finditer("\n".join(outside)))
     return segments
+
+
+def v1_names_in(text: str) -> list[str]:
+    """v1 names found as whole names (`config.show` is not `config.sh`)."""
+    return [
+        n for n in V1_NAMES if re.search(r"(?<!\w)" + re.escape(n) + r"(?!\w)", text)
+    ]
 
 
 def _clean(token: str) -> str:
@@ -244,6 +277,7 @@ def test_banned_word_as_a_whole_word_is_found_in_any_case(word: str) -> None:
         "Run `bull <command> <sub>`.",
         'Run `bull feature add "T: d"`.',
         "Run `bull status ref tag <x>`.",
+        "Run `git tag $(bull status ref tag <name>)`.",
         "```\nbull stack check\nbull part list\n```",
         "Use `bull config set models.reviewer sonnet`.",
     ],
@@ -263,6 +297,39 @@ def test_known_bull_commands_pass(text: str) -> None:
 )
 def test_unknown_bull_commands_fail(text: str) -> None:
     assert bad_bull_commands(text) != []
+
+
+def test_indented_fence_lines_count_as_a_fenced_block() -> None:
+    assert bad_bull_commands("- item\n\n  ```\n  bull frobnicate now\n  ```\n") != []
+
+
+def test_four_backtick_block_holding_a_three_backtick_example_is_one_block() -> None:
+    text = "````\nbull status next\n```\nbull frobnicate\n```\nbull part list\n````\n"
+    assert code_segments(text) == [
+        "bull status next\n```\nbull frobnicate\n```\nbull part list"
+    ]
+    assert bad_bull_commands(text) != []
+
+
+def test_prose_after_a_longer_fence_is_not_treated_as_code() -> None:
+    text = "````\nbull status next\n```\nstill code\n````\nThen bull frobnicate the thing.\n"
+    assert bad_bull_commands(text) == []
+    assert "Then bull frobnicate the thing." not in " ".join(code_segments(text))
+
+
+def test_fence_does_not_close_on_a_different_character_or_shorter_run() -> None:
+    text = "```\nbull status next\n~~~\n``\nbull frobnicate\n```\nafter\n"
+    assert code_segments(text) == ["bull status next\n~~~\n``\nbull frobnicate"]
+
+
+def test_tilde_fence_closes_on_tildes() -> None:
+    assert code_segments("~~~\nbull part list\n~~~\nprose\n") == ["bull part list"]
+
+
+def test_v1_file_name_matches_whole_names_only() -> None:
+    assert v1_names_in("see `config.show` for it") == []
+    assert v1_names_in("edit config.sh now") == ["config.sh"]
+    assert v1_names_in("edit config.sh.") == ["config.sh"]
 
 
 def test_bull_command_outside_backticks_is_not_checked() -> None:
@@ -349,7 +416,7 @@ def test_bull_commands_in_code_match_the_commands_table(path: str) -> None:
 @pytest.mark.parametrize("path", ALL_PATHS)
 def test_no_v1_names_appear(path: str) -> None:
     text = real_text(path)
-    assert [n for n in V1_NAMES if n in text] == []
+    assert v1_names_in(text) == []
 
 
 @pytest.mark.parametrize("path", ALL_PATHS)
