@@ -434,7 +434,7 @@ when `readers.py` defines `detect`.
 18. stackflow (depends on: foundation, gitrepo, stacks, stacktest)
 19. hooks (depends on: foundation, gitrepo, events, settings, memo, usage, stacks, parts, status, gates)
 20. plugin_text (depends on: foundation)
-21. claude_code (depends on: foundation, settings, usage, hooks, plugin_text)
+21. claude_code (depends on: foundation, settings, usage, stacks, hooks, plugin_text)
 22. appinit (depends on: foundation, gitrepo, settings, formats, stacks, status, adoption, stackflow, claude_code)
 23. cli (depends on: foundation, gitrepo, events, settings, formats, memo, usage, stacks, parts, status, features, coverage, api, interfaces, adoption, gates, stacktest, stackflow, hooks, plugin_text, claude_code, appinit)
 24. stack_fixture (depends on: stacks)
@@ -2082,7 +2082,7 @@ when `readers.py` defines `detect`.
 
 ### claude_code
 - Purpose: the provider seam's one implementation: everything specific to Claude Code.
-- Depends on: foundation, settings, usage, hooks, plugin_text
+- Depends on: foundation, settings, usage, stacks, hooks, plugin_text (stacks: contract only, for `CheckItem`)
 - Files: Contracts/__init__.py, mocks/__init__.py | plugin.py, hooks_json.py, launch.py | hook_io.py, statusline.py, app_files.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
