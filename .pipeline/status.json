@@ -1,7 +1,7 @@
 {
   "stage": 5,
-  "paused": true,
-  "pauseReason": "usage limit",
+  "paused": false,
+  "pauseReason": null,
   "checkpoints": {
     "outline-approved": "2026-11-07T23:20:19-08:00",
     "setup": "2026-11-07T23:31:13-08:00",
@@ -783,7 +783,7 @@
             "hooks_json.py",
             "launch.py"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 1
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T01:20:45-08:00",
+  "updatedAt": "2026-11-17T12:21:27-08:00",
   "features": [],
   "activeFeature": null
 }

@@ -59,8 +59,7 @@ def test_subagent_stop_runs_bull_hook_agent_end(tmp_path: Path) -> None:
 
 def test_pre_tool_use_on_agent_launch_tool_runs_before_agent(tmp_path: Path) -> None:
     tools = _tools_for(_entries(tmp_path), "bull hook before-agent")
-    assert len(tools) == 1
-    assert tools <= {"Task", "Agent"}
+    assert tools == {"Task", "Agent"}
 
 
 def test_pre_tool_use_on_bash_runs_before_shell(tmp_path: Path) -> None:
