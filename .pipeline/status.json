@@ -657,7 +657,7 @@
             "session.py",
             "dispatch.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         }
       ]
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T19:59:03-08:00",
+  "updatedAt": "2026-11-16T20:00:44-08:00",
   "features": [],
   "activeFeature": null
 }
