@@ -248,6 +248,20 @@ def test_open_with_a_path_does_not_pass_the_double_dash_on(
     assert h.app_init.calls == [("open_argv", (Path("app"), ("hi",)))]
 
 
+def test_open_without_a_path_reads_a_doubled_double_dash_as_one_separator(
+    h: Harness,
+) -> None:
+    h.run("open", "--print-command", "--", "--", "x")
+    assert h.app_init.calls == [("open_argv", (Path("."), ("x",)))]
+
+
+def test_open_with_a_path_reads_a_doubled_double_dash_as_one_separator(
+    h: Harness,
+) -> None:
+    h.run("open", "app", "--print-command", "--", "--", "x")
+    assert h.app_init.calls == [("open_argv", (Path("app"), ("x",)))]
+
+
 # --- init: relinked message ------------------------------------------------------------
 
 
