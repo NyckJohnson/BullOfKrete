@@ -262,3 +262,12 @@ def test_design_template_is_the_design_md_text() -> None:
     text = cli.design_template()
     assert "## Language and tools" in text
     assert "## Decisions log" in text
+
+
+def test_design_template_with_the_file_missing_says_to_reinstall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "_DESIGN_TEMPLATE", tmp_path / "missing" / "DESIGN.md")
+    with pytest.raises(BullError) as error:
+        cli.design_template()
+    assert "reinstall" in f"{error.value.message} {error.value.fix}"

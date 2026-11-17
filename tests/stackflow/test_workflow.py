@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from bull.Modules.foundation.files import LiveFiles
 from bull.Modules.foundation.layout import LiveLayouts
 from bull.Modules.foundation.runner import LiveRunner
 from bull.Modules.gitrepo.git import LiveGit
+from bull.Modules.stackflow import workflow as wf
 from bull.Modules.stackflow.Contracts import StackStage
 from bull.Modules.stackflow.workflow import LiveStackWorkflow
 from bull.Modules.stacks.mocks import MockStackRegistry
@@ -786,3 +788,126 @@ def test_ref_refuses_an_unknown_checkpoint_for_a_tag(name: str) -> None:
 def test_ref_refuses_an_unknown_stage_name_for_a_branch(name: str) -> None:
     with pytest.raises(BullError):
         make_workflow().ref("branch", name)
+
+
+# --- coverage triage: malformed status files, no-ops, broken templates
+
+
+def _status_path(path: Path) -> Path:
+    return path / ".bull" / "status.json"
+
+
+def test_load_refuses_a_status_file_that_is_not_a_json_object(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    _status_path(path).write_text("[]")
+    with pytest.raises(FileFormatError):
+        make_workflow().load(path)
+
+
+@pytest.mark.parametrize(
+    "text", ['{"format": 1, "kind": "app"}', '{"format": 1, "name": "x"}']
+)
+def test_load_of_a_json_object_that_is_not_a_stack_status_is_a_plain_bull_error(
+    tmp_path: Path, text: str
+) -> None:
+    path = new_repo(tmp_path)
+    _status_path(path).write_text(text)
+    with pytest.raises(BullError) as error:
+        make_workflow().load(path)
+    assert not isinstance(error.value, FileFormatError)
+    assert "not a stack repo" in fails(error)  # type: ignore[arg-type]
+
+
+def test_load_refuses_a_status_file_whose_name_is_not_a_string(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    data = json.loads(_status_path(path).read_text())
+    data["name"] = 5
+    _status_path(path).write_text(json.dumps(data))
+    with pytest.raises(FileFormatError) as error:
+        make_workflow().load(path)
+    assert "name" in fails(error)  # type: ignore[arg-type]
+
+
+def test_init_refuses_a_path_that_is_an_existing_file(tmp_path: Path) -> None:
+    target = tmp_path / "my_stack"
+    target.write_text("keep me")
+    with pytest.raises(BullError):
+        make_workflow().init(target)
+    assert target.is_file()
+    assert target.read_text() == "keep me"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["my_stack"]
+
+
+def test_set_stage_to_the_current_stage_writes_nothing(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    status_file = _status_path(path)
+    before = status_file.stat()
+    content = status_file.read_text()
+    status = make_workflow().set_stage(path, 1)
+    after = status_file.stat()
+    assert status.stage is StackStage.DISCUSS
+    assert status_file.read_text() == content
+    assert (after.st_ino, after.st_mtime_ns) == (before.st_ino, before.st_mtime_ns)
+
+
+def test_record_test_in_a_repo_with_no_commits_records_nothing(
+    tmp_path: Path,
+) -> None:
+    path = new_repo(tmp_path)
+    shutil.rmtree(path / ".git")
+    git(path, "init", "-q")
+    (path / ".git" / "info" / "exclude").write_text("*\n")
+    workflow = make_workflow()
+    before = workflow.load(path)
+    after = workflow.record_test(path, report())
+    assert after == before
+    assert after.test_pass is None
+    assert workflow.load(path).test_pass is None
+
+
+def _broken_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    template = tmp_path / "templates" / "template"
+    shutil.copytree(wf._TEMPLATE_DIR, template)
+    monkeypatch.setattr(wf, "_TEMPLATE_DIR", template)
+    return template
+
+
+def test_init_with_a_missing_design_template_says_to_reinstall(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (_broken_templates(tmp_path, monkeypatch) / "DESIGN.md").unlink()
+    target = tmp_path / "my_stack"
+    with pytest.raises(BullError) as error:
+        make_workflow().init(target)
+    assert "reinstall" in fails(error)
+    assert not target.exists()
+
+
+def test_init_with_a_stack_toml_template_without_a_name_line_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (_broken_templates(tmp_path, monkeypatch) / "stack.toml").write_text(
+        "[stack]\nversion = 1\n"
+    )
+    target = tmp_path / "my_stack"
+    with pytest.raises(BullError) as error:
+        make_workflow().init(target)
+    assert "name" in fails(error)
+    assert not target.exists()
+
+
+def test_init_with_a_design_template_without_a_title_line_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (_broken_templates(tmp_path, monkeypatch) / "DESIGN.md").write_text(
+        "no heading here\n"
+    )
+    target = tmp_path / "my_stack"
+    with pytest.raises(BullError) as error:
+        make_workflow().init(target)
+    assert "title" in fails(error)
+    assert not target.exists()
