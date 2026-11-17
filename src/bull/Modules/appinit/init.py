@@ -75,8 +75,11 @@ class LiveAppInit(AppInit):
                 return self._relink(found, root)
             raise BullError(
                 f"{root} is inside the bull app at {found.root}",
-                f"run `bull init` in {found.root} to relink it, or pick a folder outside it",
+                f"run `bull init .` in the app root {found.root} to relink it, "
+                "or pick a folder outside it",
             )
+        if self._is_empty_git_repo(root):
+            return self._create(root, git_init=False)
         if _has_content(root):
             if not adopt:
                 raise BullError(
@@ -95,14 +98,22 @@ class LiveAppInit(AppInit):
         self._git.commit_all(root, _STACK_COMMIT)
         return InitResult(root=root, created=True, relinked=False, adopting=False)
 
-    def _create(self, root: Path) -> InitResult:
+    def _is_empty_git_repo(self, root: Path) -> bool:
+        """True when `root` holds only `.git` and that repository has no commits yet."""
+        if not root.is_dir() or [p.name for p in root.iterdir()] != [".git"]:
+            return False
+        return self._git.is_repo(root) and self._git.head(root, "HEAD") is None
+
+    def _create(self, root: Path, *, git_init: bool = True) -> InitResult:
+        """Set up a new app; `git_init=False` reuses an existing, commit-less repo."""
         try:
             root.mkdir(parents=True, exist_ok=True)
         except OSError as error:
             raise BullError(
                 f"cannot create {root}: {error.strerror}", "pick a writable folder"
             ) from error
-        self._git.init(root, _TRUNK)
+        if git_init:
+            self._git.init(root, _TRUNK)
         self._write_app(self._layouts.at(root))
         self._git.commit_all(root, _INIT_COMMIT)
         return InitResult(root=root, created=True, relinked=False, adopting=False)
