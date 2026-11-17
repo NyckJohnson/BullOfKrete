@@ -733,3 +733,8 @@ contradicts n, not-in-spec n` line (the orchestrator records it with `bull statu
    `adoption` module (reopens a done module, a contract-free cli change); (c) leave the inventory
    out and let the surveyor's `module` passes discover files. This note is written for (a): §3
    adopt step 2.1 = `bull adopt legacy > docs/adopt/inventory.md`, commit.
+
+### Corrections after unit 5 review (2026-11-16, decisions log)
+- `/bull:stack`: commit the work before every `bull stack test .` / `--static` run (it records a pass only on a clean tree at HEAD); set the next stage only after its pass is recorded; stage 6 is set after checkpoint `accepted`. A stack repo has no `usage-check`, `pause`, `resume`, `plan` or `tick`: drop them there (stop at step boundaries if the human asks).
+- `/bull:resume` and `/bull:status`: handle the stack repo first (`bull status`, `bull status next`, then `/bull:stack`), skipping usage-check and resume.
+- `/bull:adopt` verify: remove `Legacy files:`, `Legacy tests:`, `Callers to repoint:`, `Legacy folders:` and `Renames:` before finishing, but keep `App shell:` and `App shell tests:` until `bull adopt finish` has succeeded; then remove the rest of `## Legacy code` in a follow-up commit. Run `bull adopt legacy` just before `finish`.
