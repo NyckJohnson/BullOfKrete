@@ -92,7 +92,7 @@ def test_unknown_usage_allows_with_a_warning(tmp_path: Path) -> None:
     rig.usage.result = UsageCheck(UsageVerdict.UNKNOWN, "no usage data yet", None)
     decision = rig.launch()
     assert decision.allow
-    assert decision.message != ""
+    assert decision.message.startswith("warning: usage unknown")
 
 
 @pytest.mark.parametrize("target", ["test-writer", "code-writer", "bull:code-writer"])
@@ -163,3 +163,81 @@ def test_blocked_launch_appends_no_agent_start(tmp_path: Path) -> None:
     rig.usage.result = UsageCheck(UsageVerdict.PAUSE, "too busy", NOW)
     rig.launch()
     assert [e for e in rig.events.events if e.kind is EventKind.AGENT_START] == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "reference/v1-tests",
+        "look in reference/ now",
+        'see "reference/x"',
+        "see (reference/x)",
+        "see `reference/x`",
+        "line one\nreference/x",
+    ],
+)
+def test_reference_needle_blocks_at_a_word_start(tmp_path: Path, prompt: str) -> None:
+    (tmp_path / "reference").mkdir()
+    assert not _Rig(tmp_path).launch("code-writer", prompt).allow
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    ["improve preference/x", "see docs/reference/x", "differences/reference/y"],
+)
+def test_reference_needle_inside_a_longer_path_does_not_block(
+    tmp_path: Path, prompt: str
+) -> None:
+    (tmp_path / "reference").mkdir()
+    assert _Rig(tmp_path).launch("code-writer", prompt).allow
+
+
+def test_usage_pause_wins_over_a_waiting_approval(tmp_path: Path) -> None:
+    rig = _Rig(tmp_path)
+    rig.usage.result = UsageCheck(UsageVerdict.PAUSE, "too busy now", NOW)
+    rig.store.status = replace(
+        rig.store.status, waiting=Waiting("Counter", "api changed", NOW)
+    )
+    decision = rig.launch()
+    assert not decision.allow
+    assert "too busy now" in decision.message
+    assert "waiting for the human" not in decision.message
+
+
+def test_waiting_approval_wins_over_a_reference_mention(tmp_path: Path) -> None:
+    (tmp_path / "reference").mkdir()
+    rig = _Rig(tmp_path)
+    rig.store.status = replace(
+        rig.store.status, waiting=Waiting("Counter", "api changed", NOW)
+    )
+    decision = rig.launch("code-writer", "read reference/x")
+    assert not decision.allow
+    assert "waiting for the human to approve" in decision.message
+    assert "never give the reference folder" not in decision.message
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        HookKind.SESSION_START,
+        HookKind.BEFORE_SHELL,
+        HookKind.BEFORE_EDIT,
+        HookKind.BEFORE_READ,
+        HookKind.AGENT_END,
+    ],
+)
+def test_other_hook_kinds_are_allowed_without_an_event(
+    tmp_path: Path, kind: HookKind
+) -> None:
+    rig = _Rig(tmp_path)
+    rig.usage.result = UsageCheck(UsageVerdict.PAUSE, "too busy", NOW)
+    event = HookEvent(kind, tmp_path, None, "code-writer", "p", None, ())
+    assert rig.guard.check(rig.app, event) == HookDecision(True, "")
+    assert rig.events.events == []
+
+
+def test_agent_start_records_the_stripped_target_agent(tmp_path: Path) -> None:
+    rig = _Rig(tmp_path)
+    assert rig.launch("bull:code-writer", "implement").allow
+    starts = [e for e in rig.events.events if e.kind is EventKind.AGENT_START]
+    assert [e.data["agent"] for e in starts] == ["code-writer"]

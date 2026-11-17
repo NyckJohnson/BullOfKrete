@@ -33,8 +33,10 @@ def _start(
 def test_message_names_stage_and_mode(tmp_path: Path) -> None:
     decision = _start(MockStatusStore(sample_status()), MockProgress(), tmp_path)
     assert decision.allow
-    assert "stage 5" in decision.message
-    assert "app" in decision.message
+    first = decision.message.splitlines()[0]
+    assert "stage 5" in first
+    assert "mode app" in first
+    assert "feature" not in first
 
 
 def test_message_names_a_feature_mode(tmp_path: Path) -> None:
@@ -45,8 +47,20 @@ def test_message_names_a_feature_mode(tmp_path: Path) -> None:
     progress = MockProgress()
     progress.step = NextStep("go", Mode.FEATURE)
     decision = _start(MockStatusStore(status), progress, tmp_path)
-    assert "feature" in decision.message
-    assert "stage 2" in decision.message
+    first = decision.message.splitlines()[0]
+    assert "stage 2" in first
+    assert "mode feature" in first
+    assert "dark-mode" in first
+
+
+def test_message_names_an_adopt_mode_and_the_adoption_stage(tmp_path: Path) -> None:
+    status = replace(sample_status(), adoption=Track(3, ()))
+    progress = MockProgress()
+    progress.step = NextStep("go", Mode.ADOPT)
+    decision = _start(MockStatusStore(status), progress, tmp_path)
+    first = decision.message.splitlines()[0]
+    assert "stage 3" in first
+    assert "mode adopt" in first
 
 
 def test_message_includes_the_next_step(tmp_path: Path) -> None:
