@@ -221,7 +221,9 @@ class LiveStackWorkflow(StackWorkflow):
                 f"{path} is not a stack repo (no {status_file.name})",
                 "run `bull init --stack <path>` to create one",
             )
-        if _status_kind(data) != _KIND:
+        # A non-object is a malformed file (`_parse` raises FileFormatError);
+        # an object of another kind is simply not a stack repo.
+        if isinstance(data, dict) and _status_kind(data) != _KIND:
             raise BullError(
                 f"{path} is not a stack repo (its status file is not a stack's)",
                 "run stack workflow commands inside a stack repo",
