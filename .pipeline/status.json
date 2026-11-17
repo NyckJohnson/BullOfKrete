@@ -830,7 +830,7 @@
             "doctor.py",
             "cli.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         }
       ]
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T13:10:25-08:00",
+  "updatedAt": "2026-11-17T13:14:12-08:00",
   "features": [],
   "activeFeature": null
 }
