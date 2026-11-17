@@ -41,15 +41,16 @@ A module never depends on a module in another part. Parts talk to each other onl
    anything under a module's `Contracts/` folder, or an interface file. It stops the pipeline:
    - Run `bull status wait <M> "<what>"`. From then on bull blocks agent launches.
    - Ask the human, following **Asking the human**.
-   - On approval, run `bull status approve <M> "<note>"`, then `bull api <M> --write` (or
-     `bull api --interface <Name> --write` for an interface file).
+   - On approval, run `bull status approve <M> "<note>"`, then `bull api <M> --write`.
+   - For an interface file's change (`bull status wait` and `approve` are per module), ask the
+     human, and on approval run `bull api --interface <Name> --write --approved "<note>"`.
 
    `bull api --write` refuses to write a changed snapshot without an approval. The one exception: a
    change listed as `Contract changes (<slug>)` in an approved feature memo is pre-approved, once.
    Any further change, even to the same contract, stops again.
 6. **Attempts cap at `max_attempts`** (default 3). The count covers code, gates and review together.
    `bull status attempt` blocks the unit when it reaches the cap. Then ask the human, and run
-   `bull status unblock` once they have decided.
+   `bull status unblock <M> <n>` once they have decided.
 7. **Commit after every completed step.** A pause must lose at most one step.
 8. **Stop at step boundaries.** Before every step, run `bull status usage-check`. If it reports
    `PAUSE`: commit, run `bull status pause "<reason>"`, tell the human when usage resets, and stop.
@@ -189,12 +190,16 @@ Branch and tag names come from `bull status ref`. `base` is the branch modules m
 adoption. `module <M>` gives a module's branch and `tag <label>` a tag. Below, `<base>`, `<branch>`
 and `<tag>` mean those values.
 
+`.bull/status.json` is committed, so every `bull status` change is committed with its step: run it
+before the step's commit, never after. That keeps the tree clean, and the full gates record a pass
+only on a clean tree.
+
 1. Run `git switch -c <branch> <base>`, then `bull status module <M> in_progress`.
 2. For each **work unit** of the module, in order (a module has one unit unless its memo `Files:`
    line is split with `|`):
     1. **test-writer** writes tests for every file in the unit, from the spec. If it returns
-       `partial`, start a fresh test-writer for the `REMAINING` files. Commit
-       `test(<M>): unit <n> tests`, then run `bull status unit <M> <n> tests`.
+       `partial`, start a fresh test-writer for the `REMAINING` files. Run
+       `bull status unit <M> <n> tests`, then commit `test(<M>): unit <n> tests`.
     2. **code-writer** implements every file in the unit so the tests pass. It cannot edit tests.
        Handle `partial` the same way as above.
     3. Run `bull gates <M> --fast` (only this module's tests; no coverage). On a failure, run
@@ -204,8 +209,9 @@ and `<tag>` mean those values.
        `bull status unit <M> <n> code`.
     4. **reviewer** with `SCOPE:` the unit's files. It makes one combined pass across the review
        categories (`review_mode = combined`, the default), or one pass per category
-       (`review_mode = split`). Blocker findings count an attempt: go back to step 2.2.
-    5. Commit `feat(<M>): unit <n>`, then run `bull status unit <M> <n> done`.
+       (`review_mode = split`). On blocker findings, run `bull status attempt <M> <n>`
+       and go back to step 2.2.
+    5. Run `bull status unit <M> <n> done`, then commit `feat(<M>): unit <n>`.
 3. **Reference-test scan.** Do this only when the module's memo block has a `Reference tests:` line;
    `bull status next` names the step. Start **legacy-test-scanner** with `MODE: reference`, the
    module's spec, its new test files, and the reference tests named on that line. Act on each case:
@@ -237,7 +243,7 @@ and `<tag>` mean those values.
 8. Run `bull api <M> --write`. Update the module's `Contract:` line in the memo to point at
    `docs/api/<M>.md`. Commit.
 9. Run `git tag <tag>`, with the tag from `bull status ref tag module/<M>`. Then run
-   `bull status module <M> done`.
+   `bull status module <M> done` and commit the status change.
 
 After the stage's last module, run `bull gates --all` on `<base>`: the complete run, every test,
 before stage 6. Failures go to the owning module, as in verify.
