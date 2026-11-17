@@ -741,7 +741,7 @@
             "agents/coverage-analyst.md",
             "agents/journey-test-writer.md"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:30:37-08:00",
+  "updatedAt": "2026-11-16T23:32:17-08:00",
   "features": [],
   "activeFeature": null
 }
