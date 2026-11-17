@@ -1,7 +1,7 @@
 {
   "stage": 5,
-  "paused": false,
-  "pauseReason": null,
+  "paused": true,
+  "pauseReason": "usage limit",
   "checkpoints": {
     "outline-approved": "2026-11-07T23:20:19-08:00",
     "setup": "2026-11-07T23:31:13-08:00",
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T01:20:35-08:00",
+  "updatedAt": "2026-11-17T01:20:45-08:00",
   "features": [],
   "activeFeature": null
 }
