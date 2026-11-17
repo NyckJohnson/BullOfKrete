@@ -11,7 +11,6 @@ from __future__ import annotations
 import io
 import json
 import tomllib
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -104,8 +103,12 @@ class Env:
         self.layouts.found = sample_layout(root)
 
     def make(self) -> LiveAppInit:
-        status: Callable[[AppLayout], StatusStore] = lambda _app: self.status
-        settings: Callable[[AppLayout], Settings] = lambda _app: self.settings
+        def status(_app: AppLayout) -> StatusStore:
+            return self.status
+
+        def settings(_app: AppLayout) -> Settings:
+            return self.settings
+
         return LiveAppInit(
             layouts=self.layouts,
             git=self.git,
