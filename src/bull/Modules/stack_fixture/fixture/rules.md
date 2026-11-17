@@ -50,10 +50,12 @@
 
 ## coverage-analyst
 - An uncovered line is a code line of a source file with no `covers` entry for it.
-- `missed`: a behavior the spec names but no test covers. `exempt`: add a `# coverage-exempt`
-  comment line directly above the line, with the reason. `not-in-spec`: code the spec never asks
-  for.
-- A file with only comments and blank lines has no coverage data.
+- `missed`: a behavior the spec names but no test covers. `exempt`: end the line itself with
+  `# coverage-exempt: <reason>` (a marker on a line of its own exempts nothing), or wrap several
+  lines in `# coverage-exempt-begin: <reason>` … `# coverage-exempt-end`. `not-in-spec`: code the
+  spec never asks for.
+- A file with only comments and blank lines has no coverage data; mark it with
+  `# coverage-exempt-file: <reason>` in its first 10 lines.
 
 ## journey-test-writer
 - Write `<test_dir>/journey/<journey>.test`, one `pass <step>` line per step of the journey as the

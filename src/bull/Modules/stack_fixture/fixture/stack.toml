@@ -33,6 +33,10 @@ type = "str"
 default = "tests"
 description = "Folder (relative to the part root) holding <module>/*.test files and journey/*.test"
 
+[settings."coverage.exclude"]
+default = []
+description = "Globs of sources left out of coverage (the fixture language has nothing to exclude)"
+
 [gates]
 preflight = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "preflight"]
 setup = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "setup"]

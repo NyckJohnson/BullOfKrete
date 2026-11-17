@@ -1,1 +1,264 @@
-{}
+{
+  "format": 1,
+  "layout": {
+    "app/": "."
+  },
+  "settings": {
+    "source_dir": "src",
+    "test_dir": "tests"
+  },
+  "cases": [
+    {
+      "id": "clean",
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "fast",
+      "run": [
+        "gates",
+        "counter",
+        "--fast"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "no-tests",
+      "change": {
+        "replace": {
+          "tests/counter/counter.test": "# no tests yet\n",
+          "tests/display/display.test": "# no tests yet\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "no tests ran",
+        "recorded": false
+      }
+    },
+    {
+      "id": "failing-test",
+      "change": {
+        "replace": {
+          "tests/counter/counter.test": "# counter behaviors\npass starts_at_zero\ncovers src/Modules/counter/counter.fx:2\nfail increments\ncovers src/Modules/counter/counter.fx:3\npass decrements\ncovers src/Modules/counter/counter.fx:4\ncovers src/Modules/counter/Contracts/counter.fx:2-5\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "counter/counter::increments"
+      },
+      "then": {
+        "run": [
+          "gates",
+          "--failed"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "tests",
+          "output": "counter/counter::increments",
+          "ran": 1
+        }
+      }
+    },
+    {
+      "id": "build-warning",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0 WARN\non increment: value = value + 1\non decrement: value = value - 1\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "build",
+        "output": "warning src/Modules/counter/counter.fx:2"
+      }
+    },
+    {
+      "id": "lint",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1 LINT\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "lint",
+        "output": "lint src/Modules/counter/counter.fx:4"
+      }
+    },
+    {
+      "id": "contract-change",
+      "change": {
+        "replace": {
+          "src/Modules/counter/Contracts/counter.fx": "# The counter's contract: a count that goes up and down by one.\npub Counter\npub increment\npub decrement_by\nfield value: integer\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "api",
+        "output": "contract differs from docs/api/counter.md"
+      }
+    },
+    {
+      "id": "uncovered",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1\non reset: value = 0\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "coverage",
+        "output": "coverage not clean for counter"
+      }
+    },
+    {
+      "id": "exemption",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1\non reset: value = 0  # coverage-exempt: reset is only reached by hand\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "setup-broken",
+      "change": {
+        "delete": [
+          "fixture.toml"
+        ]
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "setup",
+        "output": "fixture.toml missing"
+      }
+    },
+    {
+      "id": "journey",
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "journey-failing",
+      "change": {
+        "replace": {
+          "tests/journey/count.test": "# Journey 1: count up and down\npass starts_at_zero\nfail counts_up\npass counts_down\n"
+        }
+      },
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "journeys",
+        "output": "journey/count::counts_up"
+      }
+    },
+    {
+      "id": "interface-drift",
+      "change": {
+        "replace": {
+          "src/Modules/counter/Contracts/counter.fx": "# The counter's contract: a count that goes up and down by one.\npub Counter\npub increment\npub decrement\nfield total: integer\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "interface",
+        "output": "provider has field `total` not in the schema"
+      }
+    },
+    {
+      "id": "adopt-mode",
+      "change": {
+        "add": {
+          "src/legacy/old_counter.fx": "# The old counter, waiting to be adopted.\npub LegacyCounter\nstart WARN old count\n"
+        },
+        "replace": {
+          ".bull/status.json": "{\n  \"adoption\": {\n    \"checkpoints\": [\n      \"outline-approved\",\n      \"setup\",\n      \"baseline\",\n      \"scaffold\"\n    ],\n    \"stage\": 5\n  },\n  \"approvals\": [],\n  \"checkpoints\": [],\n  \"feature\": null,\n  \"format\": 1,\n  \"kind\": \"app\",\n  \"modules\": [\n    {\n      \"depends\": [],\n      \"name\": \"counter\",\n      \"part\": \"\",\n      \"reference_tests\": false,\n      \"scan\": null,\n      \"state\": \"pending\",\n      \"units\": [\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Contracts/counter.fx\",\n            \"counter.fx\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 1,\n          \"state\": \"pending\"\n        }\n      ]\n    },\n    {\n      \"depends\": [],\n      \"name\": \"display\",\n      \"part\": \"\",\n      \"reference_tests\": false,\n      \"scan\": null,\n      \"state\": \"pending\",\n      \"units\": [\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Contracts/display.fx\",\n            \"display.fx\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 1,\n          \"state\": \"pending\"\n        }\n      ]\n    }\n  ],\n  \"pause\": null,\n  \"plan\": null,\n  \"stage\": 0,\n  \"waiting\": null\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      },
+      "then": {
+        "change": {
+          "replace": {
+            ".bull/status.json": "{\n  \"adoption\": null,\n  \"approvals\": [],\n  \"checkpoints\": [],\n  \"feature\": null,\n  \"format\": 1,\n  \"kind\": \"app\",\n  \"modules\": [\n    {\n      \"depends\": [],\n      \"name\": \"counter\",\n      \"part\": \"\",\n      \"reference_tests\": false,\n      \"scan\": null,\n      \"state\": \"pending\",\n      \"units\": [\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Contracts/counter.fx\",\n            \"counter.fx\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 1,\n          \"state\": \"pending\"\n        }\n      ]\n    },\n    {\n      \"depends\": [],\n      \"name\": \"display\",\n      \"part\": \"\",\n      \"reference_tests\": false,\n      \"scan\": null,\n      \"state\": \"pending\",\n      \"units\": [\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Contracts/display.fx\",\n            \"display.fx\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 1,\n          \"state\": \"pending\"\n        }\n      ]\n    }\n  ],\n  \"pause\": null,\n  \"plan\": null,\n  \"stage\": 0,\n  \"waiting\": null\n}\n"
+          }
+        },
+        "run": [
+          "gates",
+          "counter"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "build",
+          "output": "warning src/legacy/old_counter.fx:3"
+        }
+      }
+    }
+  ]
+}
