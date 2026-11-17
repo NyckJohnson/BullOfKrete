@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from bull.Modules.events.Contracts import EventKind, EventLog
@@ -59,8 +60,10 @@ class UsageGuard:
     def _names_reference(self, app: AppLayout, prompt: str | None) -> bool:
         """Whether the prompt mentions the existing reference folder.
 
-        Matches the setting as written followed by `/` (e.g. `reference/`) and the folder's
-        absolute path, both as given and resolved (symlinked temp folders differ).
+        Matches the folder's absolute path, both as given and resolved (symlinked temp
+        folders differ), anywhere; and the setting as written followed by `/` (e.g.
+        `reference/`) only at the prompt start or after whitespace, a quote, `(` or a
+        backtick, so `preference/` or `docs/reference/` do not match.
         """
         if not prompt:
             return False
@@ -69,6 +72,10 @@ class UsageGuard:
             return False
         value = self._settings.get("reference_dir", None)
         needles = {str(folder), str(folder.resolve())}
+        if any(needle in prompt for needle in needles):
+            return True
         if isinstance(value, str) and not Path(value).is_absolute():
-            needles.add(value.rstrip("/") + "/")
-        return any(needle in prompt for needle in needles)
+            relative = re.escape(value.rstrip("/") + "/")
+            if re.search(rf"(?:^|[\s'\"(`]){relative}", prompt):
+                return True
+        return False
