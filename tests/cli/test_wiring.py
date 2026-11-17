@@ -11,17 +11,31 @@ from pathlib import Path
 import pytest
 
 import bull
+from bull.Modules.adoption.adopt import LiveAdoption
+from bull.Modules.api.snapshots import LiveApiSnapshots
+from bull.Modules.appinit.doctor import LiveDoctor
+from bull.Modules.appinit.init import LiveAppInit
 from bull.Modules.claude_code.mocks import MockProvider
 from bull.Modules.cli import wiring
 from bull.Modules.cli.main import main
+from bull.Modules.events.event_log import LiveEventLog
+from bull.Modules.features.backlog import LiveBacklog
+from bull.Modules.features.cycle import LiveFeatureCycle
 from bull.Modules.foundation.Contracts import AppLayout, BullError
+from bull.Modules.gates.driver import LiveGates
 from bull.Modules.hooks.Contracts import HookDecision, HookEvent, HookKind
+from bull.Modules.hooks.dispatch import LiveHooks
 from bull.Modules.hooks.mocks import MockHooks
+from bull.Modules.interfaces.interfaces import LiveInterfaces
 from bull.Modules.settings.loader import LiveSettingsLoader
 from bull.Modules.stackflow.mocks import MockStackWorkflow
 from bull.Modules.stacks.Contracts import Stack
 from bull.Modules.stacks.mocks import MockStackRegistry, sample_stack
 from bull.Modules.stacktest.mocks import MockStackTester
+from bull.Modules.status.refs import LiveRefs
+from bull.Modules.status.store import LiveStatusStore
+from bull.Modules.status.summary import LiveProgress
+from bull.Modules.usage.usage import LiveUsage
 
 _COMMANDS = [
     "init",
@@ -654,23 +668,23 @@ def real_app(isolated: Path, monkeypatch: pytest.MonkeyPatch) -> AppLayout:
 @pytest.mark.parametrize(
     ("builder", "kind"),
     [
-        ("_events", "LiveEventLog"),
-        ("_store", "LiveStatusStore"),
-        ("_refs", "LiveRefs"),
-        ("_progress", "LiveProgress"),
-        ("_usage", "LiveUsage"),
-        ("_interfaces", "LiveInterfaces"),
-        ("live_hooks", "LiveHooks"),
+        ("_events", LiveEventLog),
+        ("_store", LiveStatusStore),
+        ("_refs", LiveRefs),
+        ("_progress", LiveProgress),
+        ("_usage", LiveUsage),
+        ("_interfaces", LiveInterfaces),
+        ("live_hooks", LiveHooks),
     ],
 )
 def test_per_app_builders_return_the_real_implementation(
-    builder: str, kind: str, real_app: AppLayout
+    builder: str, kind: type, real_app: AppLayout
 ) -> None:
     built = wiring.get_wiring()
 
     made = getattr(built, builder)(real_app)
 
-    assert type(made).__name__ == kind
+    assert isinstance(made, kind)
 
 
 def test_memo_parses_the_apps_outline_and_is_empty_when_missing(
@@ -680,31 +694,36 @@ def test_memo_parses_the_apps_outline_and_is_empty_when_missing(
 
     empty = built._memo(real_app)
     real_app.memo_file.parent.mkdir(parents=True, exist_ok=True)
-    real_app.memo_file.write_text("# Demo outline\n\n## Purpose\nx\n", encoding="utf-8")
+    real_app.memo_file.write_text(
+        "# Demo outline\n\n## Purpose\nx\n\n## Purpose\ny\n", encoding="utf-8"
+    )
     parsed = built._memo(real_app)
 
-    assert empty != parsed or empty == built.memo_reader.parse("")
+    assert empty == built.memo_reader.parse("")
+    assert empty.parse_problems == ()
+    assert empty != parsed
+    assert parsed.parse_problems  # the duplicate `## Purpose` section was read
     assert parsed == built.memo_reader.parse(real_app.memo_file.read_text("utf-8"))
 
 
 @pytest.mark.parametrize(
     ("builder", "kind"),
     [
-        ("_app_init", "LiveAppInit"),
-        ("_doctor", "LiveDoctor"),
-        ("_adoption", "LiveAdoption"),
-        ("_backlog", "LiveBacklog"),
-        ("_cycle", "LiveFeatureCycle"),
-        ("_gates", "LiveGates"),
-        ("_snapshots", "LiveApiSnapshots"),
+        ("_app_init", LiveAppInit),
+        ("_doctor", LiveDoctor),
+        ("_adoption", LiveAdoption),
+        ("_backlog", LiveBacklog),
+        ("_cycle", LiveFeatureCycle),
+        ("_gates", LiveGates),
+        ("_snapshots", LiveApiSnapshots),
     ],
 )
 def test_command_providers_return_the_real_implementation(
-    builder: str, kind: str, real_app: AppLayout
+    builder: str, kind: type, real_app: AppLayout
 ) -> None:
     made = getattr(wiring.get_wiring(), builder)()
 
-    assert type(made).__name__ == kind
+    assert isinstance(made, kind)
 
 
 def test_the_stack_init_provider_is_the_app_inits_init_stack(
@@ -713,13 +732,14 @@ def test_the_stack_init_provider_is_the_app_inits_init_stack(
     init = wiring.get_wiring()._stack_init()
 
     assert callable(init)
+    assert isinstance(init.__self__, LiveAppInit)  # type: ignore[attr-defined]
     assert init.__name__ == "init_stack"
 
 
 def test_ops_builds_stack_operations(real_app: AppLayout) -> None:
     ops = wiring.get_wiring()._ops()
 
-    assert type(ops).__name__ == "_AppOps"
+    assert isinstance(ops, wiring._AppOps)
 
 
 # --- adapters ---------------------------------------------------------------------------
