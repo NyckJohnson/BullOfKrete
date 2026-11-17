@@ -12,8 +12,8 @@ before the skeleton is built.
    and stop.
 2. Run `bull status` and check that the `outline-approved` checkpoint is recorded. If it is not,
    the memo is not approved yet: tell the human to run `/bull:outline` first, and stop.
-3. Run `bull stack check`, for every part if the app has parts, and `bull part check` as well. If
-   every check is passing, go straight to step 5.
+3. Run `bull stack check`; in an app with parts, run `bull stack check --part <name>` for each
+   part. Run `bull part check` as well. If every check is passing, go straight to step 5.
 4. Walk the human through the stack's setup guide:
    1. Show the guide with `bull stack setup`. In an app with parts, go one part at a time with
       `bull stack setup --part <name>`.
@@ -23,7 +23,8 @@ before the skeleton is built.
    3. Skip any step that the check already shows as done.
    4. When the guide says a setting must be set, confirm the value with the human first, then run
       `bull config set <key> <value>` (with `--part <name>` for a part's setting).
-   5. When the steps are done, re-check with `bull stack check` (and `bull part check`). Repeat
+   5. When the steps are done, re-check with `bull stack check` (`--part <name>` for each part)
+      and `bull part check`. Repeat
       until every line is ✅. For each ❌, explain in plain words what it means and how to fix it,
       and walk the human through the fix.
    6. If a ❌ cannot be fixed, stop: tell the human what is failing and why, and don't continue to

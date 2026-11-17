@@ -10,9 +10,9 @@ get the human to approve it.
 1. Run `bull status usage-check`. If it reports `PAUSE`, follow the orchestrator's rule for a pause
    and stop.
 2. Run `bull status stage 2`.
-3. Run `bull config show` and look at the `stack` key. If no stack is selected and the app has no
-   parts, the discussion is not finished: tell the human to go back to the discuss step
-   (`/bull:discuss`) and stop.
+3. Run `bull config show` and look at the `stack` key, and run `bull part list`. Only when there is
+   neither a stack nor a part is the discussion not finished: then tell the human to go back to the
+   discuss step (`/bull:discuss`) and stop.
 4. Read `docs/discussion-notes.md`. Then write `docs/outline.md`:
    - Follow the template from `bull template outline` exactly: its sections, their order and
      their line formats.
@@ -36,21 +36,25 @@ get the human to approve it.
    - Place view files where the stack rules say.
    - Add an "Anticipated operations" list: operations the journeys do not need yet but will soon.
      Build only what the journeys need, plus cheap, obvious complements from that list.
-7. Copy the later features and out-of-scope items from the notes into the memo, in the same
+7. Copy the later features and the out of scope items from the notes into the memo, in the same
    `- <Title>: <description or reason>` format.
 8. **Rewrite of an existing tool.** When the app replaces an old tool whose tests are kept as
    reference (in the `reference_dir` folder), give each module a `Reference tests:` line naming the
    old tests that cover its behavior. List every old test that maps to no module under
    `## Unmapped reference tests`, each with a reason.
 9. Check the memo against this readiness list and report each item to the human as ✅ or ❌:
-   - Purpose and target user
-   - Journeys, each with steps, end state and failure paths
-   - Screens (or command surface) and navigation
-   - Data models
-   - Modules, each with files split into units, dependencies and a draft protocol
-   - Build order, with no module before its dependencies
-   - Constraints, with the stack (or parts and interfaces)
-   - Later features and out of scope, carried over from the notes
+   - Purpose and all core journeys written down
+   - Screens (or command surface) and navigation flow known
+   - Every module has a purpose, dependencies and a draft protocol (files split into units)
+   - Data models defined with fields and types
+   - Build order set
+   - Persistence, networking and third-party choices made (or none needed)
+   - Out of scope items listed
+   - Final test: could an agent build any one module from the memo alone? Answer it by checking
+     one module's block against its dependencies' protocols.
+
+   Also check that the later features from the notes were copied into the memo (step 7).
+
 10. Ask the human to read the memo and approve it. Say what approving commits them to: every later
     stage builds from it, and a later change to a contract stops the pipeline for their approval.
     Revise the memo for each correction and report the readiness list again, until the human
