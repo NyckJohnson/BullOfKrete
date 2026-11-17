@@ -89,7 +89,7 @@ when its step has nothing to do.
    Check with `bull stack check` (`--part <name>` for each part). A feature that adds a part runs
    `bull part add <name> <stack>` first, then that part's whole setup. Then run
    `bull status checkpoint setup` and commit `chore(<slug>): project setup`. If no setup is needed,
-   run `bull status checkpoint setup` and commit with a note that no setup was needed.
+   run `bull status checkpoint setup` and commit `chore(<slug>): no setup needed`.
 2. **Skeleton, only if `bull feature plan` said `Skeleton needed: yes`.**
    1. Run `bull status stage 3`.
    2. Brief the **skeleton-builder** with `MODE: feature <slug>`, the new modules and the contract
@@ -102,7 +102,7 @@ when its step has nothing to do.
    7. Tag with `git tag $(bull status ref tag skeleton)`.
 
    If no skeleton is needed, run `bull status stage 3`, then `bull status checkpoint skeleton`, and
-   commit with a note that no skeleton was needed.
+   commit `chore(<slug>): no skeleton needed`.
 
 ### 3.4 Prototype
 
@@ -123,12 +123,16 @@ scope".
 ### 3.6 Verify
 
 1. Run `bull status stage 6`.
-2. Verify as `/bull:verify` does, except:
+2. Run `/bull:verify`'s steps 3 to 8, from mocks-check through hands-on, ticking the gauge as it
+   does, with the feature's changes:
    - Brief the **journey-test-writer** with `MODE: feature <slug>`: it adds tests for new journeys
      and updates those of changed ones.
    - `bull gates --journeys` still runs every journey.
    - Brief the **reviewer** with `SCOPE: feature <slug>`: the feature's diff from the trunk, in the
      context of the whole app.
+
+   Do not run `/bull:verify`'s acceptance (the `app-accepted` checkpoint and tag) or its
+   first-release backlog step; the feature's own acceptance below replaces them.
 3. On acceptance:
    1. Run `bull status checkpoint accepted`.
    2. Run `bull feature accept`.
@@ -136,7 +140,8 @@ scope".
    4. Commit `docs: feature <slug> accepted`.
    5. Run `bull gates --all` on the feature branch. All must pass.
    6. Run `git switch <trunk>`, then `git merge --no-ff feature/<slug>/main`.
-   7. Run `git tag feature/<slug>/accepted`.
+   7. Run `git tag feature/<slug>/accepted`. The tag is written out because `bull feature accept`
+      has ended the feature, so `bull status ref` no longer gives the `feature/<slug>/` prefix.
 4. Name the next queued feature (from `bull feature list`) and ask whether to start it now.
 
 ## Stopping

@@ -8,8 +8,9 @@ Every module is built and merged. Now you check the app as a whole: no mocks lef
 journey test for every journey, a review across all modules, and the human's own hands-on try. It
 ends when the human accepts the app; then you help them queue what comes next.
 
-During an adoption, `/bull:adopt`'s stage 6 replaces this command; during a feature,
-`/bull:feature`'s stage 6 replaces it. Follow those instead.
+During an adoption, `/bull:adopt`'s stage 6 replaces this command; follow it instead. During a
+feature, run only the checks from mocks-check through hands-on (steps 3 to 8, with the feature's
+changes), and take the feature's acceptance and next step from `/bull:feature`, not steps 9 to 11.
 
 1. Run `bull status usage-check`. If it reports `PAUSE`, follow the orchestrator's rule for a pause
    and stop.

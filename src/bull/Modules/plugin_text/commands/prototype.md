@@ -42,7 +42,7 @@ run the gates, and walk the human through the result.
    1. Run `bull status checkpoint ui-approved`.
    2. Run `bull status plan prototype --clear`.
    3. Commit `chore: prototype approved`.
-   4. Run `git tag ui-approved`.
+   4. Tag with `git tag $(bull status ref tag ui-approved)`.
 8. Tell the human that the prototype is approved and that the next step is to run `/bull:build`.
    This is a good point to start a fresh session; they can run `/bull:resume` there.
 
@@ -54,5 +54,5 @@ If the memo has no screens (a command-line tool or a service), there is nothing 
 2. With their OK, add a line to the memo's decisions log recording the skip and the reason.
 3. Run `bull status checkpoint ui-approved`.
 4. Commit `docs: no screens, prototype skipped`.
-5. Run `git tag ui-approved`.
+5. Tag with `git tag $(bull status ref tag ui-approved)`.
 6. Tell the human that the next step is to run `/bull:build`.
