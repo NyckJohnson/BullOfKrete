@@ -862,7 +862,7 @@
         "claude_code",
         "appinit"
       ],
-      "state": "in_progress",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T14:11:32-08:00",
+  "updatedAt": "2026-11-17T14:20:19-08:00",
   "features": [],
   "activeFeature": null
 }
