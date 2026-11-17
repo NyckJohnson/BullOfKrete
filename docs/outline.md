@@ -433,7 +433,7 @@ when `readers.py` defines `detect`.
 17. stacktest (depends on: foundation, gitrepo, stacks)
 18. stackflow (depends on: foundation, gitrepo, stacks, stacktest)
 19. hooks (depends on: foundation, gitrepo, events, settings, memo, usage, stacks, parts, status, gates)
-20. plugin_text (depends on: none)
+20. plugin_text (depends on: foundation)
 21. claude_code (depends on: foundation, settings, usage, hooks, plugin_text)
 22. appinit (depends on: foundation, gitrepo, settings, formats, stacks, status, adoption, stackflow, claude_code)
 23. cli (depends on: foundation, gitrepo, events, settings, formats, memo, usage, stacks, parts, status, features, coverage, api, interfaces, adoption, gates, stacktest, stackflow, hooks, plugin_text, claude_code, appinit)
@@ -2017,7 +2017,7 @@ when `readers.py` defines `detect`.
 ### plugin_text
 - Purpose: the plugin's Markdown: orchestrator instructions, slash commands and agent definitions,
   stack-neutral and in `bull` terms.
-- Depends on: none
+- Depends on: foundation
 - Files: Contracts/__init__.py, mocks/__init__.py, plugin_files.py | orchestrator.md | commands/discuss.md, commands/outline.md, commands/setup.md, commands/skeleton.md | commands/prototype.md, commands/build.md, commands/verify.md, commands/feature.md | commands/adopt.md, commands/resume.md, commands/status.md, commands/stack.md | agents/skeleton-builder.md, agents/screen-builder.md, agents/test-writer.md, agents/code-writer.md | agents/reviewer.md, agents/coverage-analyst.md, agents/journey-test-writer.md | agents/surveyor.md, agents/legacy-test-scanner.md
 - Protocol (draft; lives in `Contracts/`):
   ```python
@@ -2054,6 +2054,29 @@ when `readers.py` defines `detect`.
   - test-writer: before it reports, it runs the stack's formatter and lint on the test files it
     wrote or changed and fixes what they find, so a formatting slip never costs a gate attempt
     (stack-neutral wording; the stack's rules name the tools).
+- Construction (internal; not contracts):
+  - plugin_files.py: `LivePluginText(root: Path | None = None)`; `root` defaults to the module's own
+    folder (`Path(__file__).parent`). files: `orchestrator.md`, `commands/*.md`, `agents/*.md` under
+    `root` (nothing else: no `.py`, no other folders), read as UTF-8, paths POSIX relative to `root`,
+    sorted by path. orchestrator: the text of `orchestrator.md`. Frontmatter = the lines between a
+    first line `---` and the next `---` line; each `key: value`, value trimmed and stripped of one
+    pair of surrounding `"` or `'`; `tools` split on `,`, entries trimmed, empty ones dropped.
+    agents: one `AgentDoc` per agent file in path order, `model_setting = "models.<name>"`. An agent
+    file without frontmatter or missing `name`, `description` or `tools`, or whose `name` differs
+    from its file name → `BullError` naming the file (`agents/<file>`) and the problem; a missing
+    `orchestrator.md` → `BullError` naming it, from `files()` as well as `orchestrator()`; a file that
+    can't be read or isn't UTF-8 → `BullError` naming it; text is returned exactly as written (no
+    newline translation); a frontmatter block never closed counts as no frontmatter. Fenced blocks
+    in the text-rule tests: a fence line may be indented, and it closes only on a fence of the same
+    character and at least the opening length (as CommonMark). v1 file names (`config.sh`, …) match
+    as whole names only (`config.show` is fine).
+  - Text-rule tests live in `tests/plugin_text/` and run over every real file (they pass on the
+    skeleton placeholders and keep holding as units fill the files). Only code spans and fenced
+    blocks are checked for commands: the first word after `bull ` is a top-level command of
+    **Commands** (`init open doctor status feature adopt stack stacks gates coverage api part config
+    migrate template hook statusline help`, or a flag such as `--version`); for `status`, `feature`,
+    `adopt`, `stack`, `part`, `config`, `template` and `hook` a following bare lowercase word is one
+    of that command's subcommands in the table (`status` may also be followed by a flag or nothing). A word starting with `<` (a placeholder such as `bull <command>` or `bull status <sub>`) is skipped, at either position.
 - Reference tests: v1-tests/test_cli_misc.py::test_every_agent_has_frontmatter_and_its_stack_rules_exist
 - Contract: see `docs/api/plugin_text.md` (generated; do not edit by hand)
 
@@ -2402,3 +2425,12 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: hooks unit 3 review — a failing safeguard fails closed (guarded kinds block with "bull safeguard could not run: <reason>"; session start and agent end allow with the message); in a stack repo every hook allows with an empty message, like outside an app (`LiveHooks` also takes foundation `Files` to read the status file's `kind`) — approved by Nicholas Johnson
 - 2026-11-16: hooks reference scan (covered 13, missed 4, contradicts 0, not-in-spec 2, obsolete 1) — human: merge_targets is hardened against env assignments, wrapper words, shell keywords and `sh -c` strings; "unknown ref <ref>" wording and no shell fragments in block messages are pinned; missed cases (env assignment, quoted `git merge` in an echo, `git log --merges`, `git mergetool`) get tests from the spec — approved by Nicholas Johnson
 - 2026-11-16: hooks coverage triage (missed 9, not-in-spec 1) — human kept and specified the one: in merge_targets, an unquoted `#` starting a word begins a comment (ignored, as the shell does). Missed cases are tested from the spec's quote-aware parsing (backslash escapes and line continuations, escapes inside double quotes), wrapper options and `--` (`sudo -u root`, `sudo -E`, `env --`), wrappers with no command after them, `sh`/`bash` without a `-c` string, a module branch absent from status, and Protection allowing other kinds — approved by Nicholas Johnson
+- 2026-11-16: source note `docs/process/plugin_text.md` approved, with its six choices (§5): `/bull:stack` uses test-writer, code-writer and reviewer in `MODE: stack` with a "Stack files" spec section in `commands/stack.md`; legacy-test-scanner has `MODE: adopt` and `MODE: reference` and ends with a `COUNTS:` line; `/bull:prototype` has a no-screens path; verify's device test becomes "hands-on"; feature stage 6 records checkpoint `accepted` before `bull feature accept`; agents carry explicit `tools:` lists. Adoption survey starts from `bull adopt legacy` (no inventory command in v2.0; the stacks' `inventory` reader stays unused) — approved by Nicholas Johnson
+- 2026-11-16: plugin_text construction (LivePluginText root and file set, frontmatter parsing, errors; text-rule tests over every real file, command check limited to code spans and fenced blocks) set in the plugin_text § Construction line; internal, no contract change.
+- 2026-11-16: plugin_text depends on foundation (its errors are `BullError`, per the Construction line); build order line and module block updated. Foundation is done, so nothing moves.
+- 2026-11-16: plugin_text unit 1 review — `files()` also refuses a missing `orchestrator.md` (a rendered plugin is never incomplete); unreadable/non-UTF-8 files, unclosed frontmatter and exact-text reads are specified; text-rule fence parsing follows CommonMark fence lengths and indentation; v1 file names match whole names only. Internal, no contract change.
+- 2026-11-16: plugin_text unit 2 review — clarifications to the source note's orchestrator text: every `bull status …` change in the Stage 5 loop runs before the step's commit (status.json is committed; full gates record only on a clean tree); review blockers run `bull status attempt <M> <n>`; `bull status unblock <M> <n>` with its arguments; an interface's contract change is approved with `bull api --interface <Name> --write --approved "<note>"` (status wait/approve are per module).
+- 2026-11-16: plugin_text unit 3 review — the source note's outline readiness list now names v1's eight items (it said "v1's eight items" without listing them); clarification, no change of intent.
+- 2026-11-16: plugin_text unit 5 review — corrections to the source note (§ 3), found against the stackflow, adoption and status specs: in `/bull:stack` every test run (`bull stack test .`, `--static`) happens on a clean, committed tree (it records a pass only then), and a stage is set only after the pass it needs; stage 6 is set after checkpoint `accepted`; a stack repo has no usage-check, pause, resume, plan or tick (`bull status` there has only `next|stage|checkpoint|ref`), so `/bull:stack`, `/bull:resume` and `/bull:status` skip them there (resume handles the stack repo first); `/bull:adopt` verify keeps `App shell:` and `App shell tests:` until `bull adopt finish` has succeeded (finish reads them), removing the rest of `## Legacy code` before and the section after.
+- 2026-11-16: the source note gains "v1 detail for the 'as v1' parts of § 4" (reviewer, coverage-analyst, journey-test-writer report, surveyor, legacy-test-scanner), since agents may not read v1; content unchanged from v1 apart from v2 terms.
+- 2026-11-16: plugin_text reference scan (covered 3, missed 0, contradicts 0, not-in-spec 1) — the not-in-spec case (each stack's rules.md has a section for every agent whose text runs `stack rules <agent>`) is already specified in stacktest's static check (`rules.md` has one section per manifest agent); plugin_text's half (each agent names `bull stack rules <name>`, legacy-test-scanner none) is tested. No spec change.

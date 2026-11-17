@@ -11,7 +11,7 @@
   "modules": [
     {
       "name": "foundation",
-      "path": "src/myapp/Modules/foundation",
+      "path": "src/bull/Modules/foundation",
       "dependsOn": [],
       "state": "done",
       "units": [
@@ -39,7 +39,7 @@
     },
     {
       "name": "gitrepo",
-      "path": "src/myapp/Modules/gitrepo",
+      "path": "src/bull/Modules/gitrepo",
       "dependsOn": [
         "foundation"
       ],
@@ -59,7 +59,7 @@
     },
     {
       "name": "events",
-      "path": "src/myapp/Modules/events",
+      "path": "src/bull/Modules/events",
       "dependsOn": [
         "foundation"
       ],
@@ -79,7 +79,7 @@
     },
     {
       "name": "settings",
-      "path": "src/myapp/Modules/settings",
+      "path": "src/bull/Modules/settings",
       "dependsOn": [
         "foundation"
       ],
@@ -117,7 +117,7 @@
     },
     {
       "name": "formats",
-      "path": "src/myapp/Modules/formats",
+      "path": "src/bull/Modules/formats",
       "dependsOn": [
         "foundation",
         "gitrepo"
@@ -139,7 +139,7 @@
     },
     {
       "name": "memo",
-      "path": "src/myapp/Modules/memo",
+      "path": "src/bull/Modules/memo",
       "dependsOn": [
         "foundation"
       ],
@@ -178,7 +178,7 @@
     },
     {
       "name": "usage",
-      "path": "src/myapp/Modules/usage",
+      "path": "src/bull/Modules/usage",
       "dependsOn": [
         "foundation",
         "settings"
@@ -199,7 +199,7 @@
     },
     {
       "name": "stacks",
-      "path": "src/myapp/Modules/stacks",
+      "path": "src/bull/Modules/stacks",
       "dependsOn": [
         "foundation",
         "settings"
@@ -239,7 +239,7 @@
     },
     {
       "name": "parts",
-      "path": "src/myapp/Modules/parts",
+      "path": "src/bull/Modules/parts",
       "dependsOn": [
         "foundation",
         "settings",
@@ -269,7 +269,7 @@
     },
     {
       "name": "status",
-      "path": "src/myapp/Modules/status",
+      "path": "src/bull/Modules/status",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -322,7 +322,7 @@
     },
     {
       "name": "features",
-      "path": "src/myapp/Modules/features",
+      "path": "src/bull/Modules/features",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -363,7 +363,7 @@
     },
     {
       "name": "coverage",
-      "path": "src/myapp/Modules/coverage",
+      "path": "src/bull/Modules/coverage",
       "dependsOn": [
         "foundation",
         "stacks"
@@ -385,7 +385,7 @@
     },
     {
       "name": "api",
-      "path": "src/myapp/Modules/api",
+      "path": "src/bull/Modules/api",
       "dependsOn": [
         "foundation",
         "memo",
@@ -418,9 +418,10 @@
     },
     {
       "name": "interfaces",
-      "path": "src/myapp/Modules/interfaces",
+      "path": "src/bull/Modules/interfaces",
       "dependsOn": [
         "foundation",
+        "settings",
         "memo",
         "stacks",
         "parts",
@@ -442,10 +443,11 @@
     },
     {
       "name": "adoption",
-      "path": "src/myapp/Modules/adoption",
+      "path": "src/bull/Modules/adoption",
       "dependsOn": [
         "foundation",
         "gitrepo",
+        "settings",
         "memo",
         "stacks",
         "parts",
@@ -478,7 +480,7 @@
     },
     {
       "name": "gates",
-      "path": "src/myapp/Modules/gates",
+      "path": "src/bull/Modules/gates",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -536,7 +538,7 @@
     },
     {
       "name": "stacktest",
-      "path": "src/myapp/Modules/stacktest",
+      "path": "src/bull/Modules/stacktest",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -575,7 +577,7 @@
     },
     {
       "name": "stackflow",
-      "path": "src/myapp/Modules/stackflow",
+      "path": "src/bull/Modules/stackflow",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -617,7 +619,7 @@
     },
     {
       "name": "hooks",
-      "path": "src/myapp/Modules/hooks",
+      "path": "src/bull/Modules/hooks",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -664,9 +666,11 @@
     },
     {
       "name": "plugin_text",
-      "path": "src/myapp/Modules/plugin_text",
-      "dependsOn": [],
-      "state": "pending",
+      "path": "src/bull/Modules/plugin_text",
+      "dependsOn": [
+        "foundation"
+      ],
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -675,7 +679,7 @@
             "mocks/__init__.py",
             "plugin_files.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -683,7 +687,7 @@
           "files": [
             "orchestrator.md"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -694,8 +698,8 @@
             "commands/setup.md",
             "commands/skeleton.md"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 4,
@@ -705,8 +709,8 @@
             "commands/verify.md",
             "commands/feature.md"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 5,
@@ -716,8 +720,8 @@
             "commands/status.md",
             "commands/stack.md"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 6,
@@ -727,8 +731,8 @@
             "agents/test-writer.md",
             "agents/code-writer.md"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 7,
@@ -737,7 +741,7 @@
             "agents/coverage-analyst.md",
             "agents/journey-test-writer.md"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -746,14 +750,14 @@
             "agents/surveyor.md",
             "agents/legacy-test-scanner.md"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         }
       ]
     },
     {
       "name": "claude_code",
-      "path": "src/myapp/Modules/claude_code",
+      "path": "src/bull/Modules/claude_code",
       "dependsOn": [
         "foundation",
         "settings",
@@ -796,7 +800,7 @@
     },
     {
       "name": "appinit",
-      "path": "src/myapp/Modules/appinit",
+      "path": "src/bull/Modules/appinit",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -833,7 +837,7 @@
     },
     {
       "name": "cli",
-      "path": "src/myapp/Modules/cli",
+      "path": "src/bull/Modules/cli",
       "dependsOn": [
         "foundation",
         "gitrepo",
@@ -882,7 +886,7 @@
     },
     {
       "name": "stack_fixture",
-      "path": "src/myapp/Modules/stack_fixture",
+      "path": "src/bull/Modules/stack_fixture",
       "dependsOn": [
         "stacks"
       ],
@@ -942,7 +946,7 @@
     },
     {
       "name": "stack_python_cli",
-      "path": "src/myapp/Modules/stack_python_cli",
+      "path": "src/bull/Modules/stack_python_cli",
       "dependsOn": [
         "stacks"
       ],
@@ -991,7 +995,7 @@
     },
     {
       "name": "stack_ios",
-      "path": "src/myapp/Modules/stack_ios",
+      "path": "src/bull/Modules/stack_ios",
       "dependsOn": [
         "stacks"
       ],
@@ -1058,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T20:57:01-08:00",
+  "updatedAt": "2026-11-16T23:38:12-08:00",
   "features": [],
   "activeFeature": null
 }
