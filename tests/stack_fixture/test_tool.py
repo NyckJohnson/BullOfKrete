@@ -350,3 +350,40 @@ def test_journeys_ignore_failing_module_tests(app: App) -> None:
     app.test_file("counter", "a.test", "fail one\n")
     app.write("tests/journey/j.test", "pass flow\n")
     assert app.run("journeys").returncode == 0
+
+
+# --- service steps (dispatch to fixture_service.serve) -----------------------------------
+
+
+def _free_port() -> int:
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port: int = s.getsockname()[1]
+        return port
+
+
+def test_start_ready_stop_dispatch_to_the_service(app: App) -> None:
+    import urllib.request
+
+    port = str(_free_port())
+    try:
+        assert app.run("start", port).returncode == 0
+        assert app.run("ready", port, "--timeout", "20").returncode == 0
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as r:
+            assert r.status == 200
+        assert list(app.results.glob("*.pid"))
+        assert app.run("stop", port).returncode == 0
+        assert not list(app.results.glob("*.pid"))
+    finally:
+        for pid_file in app.results.glob("*.pid"):
+            try:
+                os.kill(int(pid_file.read_text().strip()), 9)
+            except (ValueError, OSError):
+                pass
+
+
+def test_ready_through_the_tool_fails_when_nothing_listens(app: App) -> None:
+    port = str(_free_port())
+    assert app.run("ready", port, "--timeout", "1").returncode != 0
