@@ -812,7 +812,7 @@
         "stackflow",
         "claude_code"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T13:04:53-08:00",
+  "updatedAt": "2026-11-17T13:04:58-08:00",
   "features": [],
   "activeFeature": null
 }
