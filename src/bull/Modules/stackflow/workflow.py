@@ -103,7 +103,8 @@ class LiveStackWorkflow(StackWorkflow):
                 path.mkdir()
             self._git.init(path, _BRANCH)
             self._files.write_atomic(path / "stack.toml", self._stack_toml(name))
-            self._files.write_atomic(path / "DESIGN.md", self._template("DESIGN.md"))
+            self._files.write_atomic(path / "DESIGN.md", self._design_md(name))
+            self._files.write_atomic(path / "cases.json", self._template("cases.json"))
             ignores = "".join(
                 f"{line}\n" for line in self._layouts.machine_local_ignores()
             )
@@ -191,6 +192,21 @@ class LiveStackWorkflow(StackWorkflow):
         if count != 1:
             raise BullError(
                 "the stack.toml template has no `name` line", "reinstall bull"
+            )
+        return text
+
+    def _design_md(self, name: str) -> str:
+        """The DESIGN.md template with its first `# …` heading replaced by `# <name> stack: design`."""
+        text, count = re.subn(
+            r"^# .*$",
+            f"# {name} stack: design",
+            self._template("DESIGN.md"),
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if count != 1:
+            raise BullError(
+                "the DESIGN.md template has no title line", "reinstall bull"
             )
         return text
 
