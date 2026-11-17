@@ -710,7 +710,7 @@
             "commands/feature.md"
           ],
           "state": "code",
-          "attempts": 0
+          "attempts": 1
         },
         {
           "number": 5,
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:06:25-08:00",
+  "updatedAt": "2026-11-16T23:08:24-08:00",
   "features": [],
   "activeFeature": null
 }
