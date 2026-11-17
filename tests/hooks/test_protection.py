@@ -18,7 +18,7 @@ from bull.Modules.settings.mocks import MockSettings
 class _Settings(MockSettings):
     """Settings that serve `reference_dir` from a plain value."""
 
-    def __init__(self, reference_dir: str) -> None:
+    def __init__(self, reference_dir: SettingValue) -> None:
         super().__init__()
         self.reference_dir = reference_dir
 
@@ -244,3 +244,11 @@ def test_code_writer_reading_tests_is_allowed(tmp_path: Path) -> None:
         tmp_path, HookKind.BEFORE_READ, "code-writer", tmp_path / "tests" / "test_a.py"
     )
     assert decision.allow
+
+
+def test_non_string_reference_dir_setting_raises_type_error(tmp_path: Path) -> None:
+    app = _layout(tmp_path)
+    protection = Protection(MockParts(), _Settings(5))
+    event = _event(HookKind.BEFORE_READ, "test-writer", app, tmp_path / "a.py")
+    with pytest.raises(TypeError):
+        protection.check(app, event)
