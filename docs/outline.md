@@ -2107,13 +2107,19 @@ when `readers.py` defines `detect`.
 - Behavior spec:
   - render_plugin(dest): writes `.claude-plugin/plugin.json` (name `bull`, version), `commands/`,
     `agents/` (adding `model: <models.<agent>>` to each frontmatter unless `inherit`),
-    `hooks/hooks.json`, and `orchestrator.md`; replaces `dest` completely each time.
+    `hooks/hooks.json`, and `orchestrator.md`; replaces `dest` completely each time. It builds in a
+    temporary sibling folder and swaps it in: on any failure the temporary folder is removed and the
+    error re-raised, and a failed swap restores the old `dest`; an old `dest` that is a file or
+    symlink is unlinked, not followed. A plugin file path that is empty, absolute or contains `..`
+    → ValueError. An agent file without frontmatter (or whose frontmatter never closes) is written
+    unchanged.
   - hooks.json maps: SessionStart → `bull hook session-start`; PreToolUse on the agent-launch tool →
     `before-agent`; on Bash → `before-shell`; on Edit/Write/MultiEdit/NotebookEdit → `before-edit`;
     on Read/Grep/Glob → `before-read`; SubagentStop → `agent-end`.
   - launch_argv: `["claude", "--plugin-dir", <app>/.bull/plugin, *extra]`.
   - tool_check: `claude` on PATH → ok with `claude --version`; missing → fix "install Claude Code:
-    https://docs.claude.com/claude-code".
+    https://docs.claude.com/claude-code"; `claude --version` failing to run, timing out or exiting
+    non-zero → not ok, saying what failed (exit code and output when it exited), with the same fix.
   - parse_hook: Claude Code's hook JSON → HookEvent (cwd, `agent_type` of the calling subagent if
     present, the launched `subagent_type`, `prompt`, Bash `command`, file paths from `file_path`,
     `path`, `notebook_path`); malformed JSON → an allow-everything event of the kind with cwd `.`.
@@ -2129,7 +2135,10 @@ when `readers.py` defines `detect`.
     `Bash(bull:*)` and `Bash(git:*)`, env `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`) merged into an
     existing file without dropping the user's keys; `CLAUDE.md` with a marked block
     (`<!-- bull:begin -->…<!-- bull:end -->`) importing `@.bull/plugin/orchestrator.md`, replacing
-    only that block in an existing file. No absolute paths.
+    only that block in an existing file. No absolute paths. An existing `.claude/settings.json` that
+    is not valid JSON, not a JSON object, or whose `permissions`/`env` is not an object or
+    `permissions.allow` not a list → foundation `FileFormatError` naming the file (never
+    overwritten).
 - Construction (internal; not contracts):
   - plugin.py: `LiveProvider(plugin_text: PluginText, clock: Clock | None = None)` (foundation
     `Clock`, for the usage sample's time; system time when None); `name = "claude"`. render_plugin takes the
@@ -2454,3 +2463,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: plugin_text reference scan (covered 3, missed 0, contradicts 0, not-in-spec 1) — the not-in-spec case (each stack's rules.md has a section for every agent whose text runs `stack rules <agent>`) is already specified in stacktest's static check (`rules.md` has one section per manifest agent); plugin_text's half (each agent names `bull stack rules <name>`, legacy-test-scanner none) is tested. No spec change.
 - 2026-11-17: claude_code construction (`LiveProvider(plugin_text)`, `name = "claude"`, agent model lines, hooks.json shape, tool_check lookup) set in the claude_code § "Construction" line; claude_code's depends-on line now lists stacks (contract only, for `CheckItem`); internal wiring, no contract change.
 - 2026-11-17: building and printing the `bull statusline` line moves from claude_code to cli (cli/statusline.py; cli already depends on status, usage and claude_code). claude_code keeps `parse_statusline` only; its unit 3 is hook_io.py and app_files.py. parse_statusline reads `rate_limits.five_hour` / `rate_limits.seven_day` (`used_percentage`, `resets_at` as epoch seconds or ISO 8601), the sample's time from a foundation `Clock` (`LiveProvider(plugin_text, clock=None)`, system time when None). No contract change — approved by Nicholas Johnson
+- 2026-11-17: claude_code coverage triage (missed 4, not-in-spec 10) — human kept and specified the extras: a damaged existing `.claude/settings.json` raises `FileFormatError` instead of being overwritten; tool_check reports a failing `claude --version` (error, timeout, non-zero exit) as not ok with the install fix; render_plugin builds in a temporary folder and swaps it in with cleanup and rollback, unlinks a file/symlink `dest`, and refuses empty/absolute/`..` plugin paths. Missed cases (unreadable `resets_at` as a bool or out-of-range epoch; agent files without or with unclosed frontmatter) get tests from the spec — approved by Nicholas Johnson
