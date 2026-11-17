@@ -35,7 +35,7 @@ only what it lists. On a retry it includes the previous failure; fix exactly tha
 - **Other modules:** use other modules only through their `Contracts/` types, and only the modules
   listed in your brief as dependencies. Never reach into another module's implementation or mocks.
 - **Interfaces:** in an app with parts, code that provides or consumes an interface file follows that
-  file exactly. Changing it is a contract change.
+  file exactly. Treat an interface file as a contract: changing it is a contract change.
 - **Documentation:** document every public declaration, as the stack rules say, and any tricky logic.
 
 ## Changing an existing unit (`CHANGE: <slug>`)
@@ -78,7 +78,7 @@ of `.bull/plugin/commands/stack.md`, which is your spec, and says which files to
   `## outline`, with the language, file names, tools and conventions named concretely.
 
 Write them in the stack's own language idioms, as `DESIGN.md` describes. Check with
-`bull stack test .`, which runs every case with the real toolchain. A case that reports "not run"
+`bull stack test .` instead of the module gates: it runs every case with the real toolchain. A case that reports "not run"
 names a missing tool: return `blocked` so the human can install it.
 
 ## Check before returning
@@ -96,7 +96,7 @@ If you can't finish every file in the unit, stop after a whole file that builds 
 ## Rules
 
 - You cannot edit test files (inside a part's test folder, or matching its stack's test pattern):
-  bull blocks it. If a test looks wrong, return `blocked`, naming the test and why.
+  bull blocks it. If a test is wrong, return `blocked`, naming the test and why.
 - If passing requires a contract change (anything in `Contracts/`, or an interface file), return
   `blocked` with the change.
 - Never open the reference folder: bull blocks it, and your brief never lists it.

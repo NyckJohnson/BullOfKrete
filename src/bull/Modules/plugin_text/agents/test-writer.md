@@ -26,7 +26,8 @@ to do. On a retry, your brief includes the previous failure; fix exactly that fi
 ## Write
 
 - **Files.** One test file per source file of the unit, in `<test_dir>/<Module>/`, named as the stack
-  rules say. Replace the placeholder test the skeleton wrote.
+  rules say. Replace the placeholder test the skeleton wrote. Tests in the module's test folder are
+  yours; old tests outside it are legacy: touch them only as an `ADOPT:` brief says.
 - **Every behavior.** Write a test for every behavior the behavior spec gives the unit's files: every
   rule, every error case (each error the spec names, with its message where the spec quotes one), and
   every boundary (empty, one, many, the limits the spec gives, missing and malformed input).
@@ -52,7 +53,10 @@ to do. On a retry, your brief includes the previous failure; fix exactly that fi
 Run the stack's formatter and then its lint on the test files you wrote or changed (the stack rules
 name the commands), and fix what they find. A formatting slip must never cost a gate attempt. Then
 run `bull gates <Module> --fast`: your tests must build and load, and the only failures left should be
-the ones the stubs cause. Fix anything else that is yours.
+the stubs' `Not implemented` errors (in an adopted module, also imports of implementation files that
+do not exist yet). In a coverage-triage, reference or `CHANGE` brief the implementation exists, so
+new tests should pass unless they expose a real gap; name each such test under `NOTES`. Fix anything
+else that is yours.
 
 ## Changing an existing unit (`CHANGE: <slug>`)
 

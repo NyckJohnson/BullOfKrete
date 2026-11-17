@@ -83,6 +83,10 @@ The brief names the feature's new modules and its contract changes (the memo's
   arguments with plain values) and mark each edited call with a comment
   `signature updated (feature <slug>)`. The test-writer replaces these calls with real tests later.
   Change nothing else in the tests.
+- **Existing implementations** that use a changed signature: make the smallest edit that compiles
+  and keeps the old behavior. Add no new behavior; the code-writer does that later.
+- **New files** that a module's `Changes (<slug>):` line adds to an existing module: write their
+  stubs, mocks and placeholder tests as in build steps 4 to 6.
 - Check with `bull gates --all --skip-coverage`. Tests of the new stubs do not exist yet, so
   everything that existed before must still pass.
 
@@ -99,10 +103,13 @@ code and legacy tests. A rename changes names only, never behavior. Check with
 `bull gates --all --skip-coverage`.
 
 **`STEP: scaffold`.** Write each module's folder, its `Contracts/` exactly as drafted in the memo,
-its mocks (as in build step 5), and its test folder. Write no stubs and no implementation files: the
-legacy code keeps doing the work until each module's units replace it in Stage 5. The composition
-root is the app-shell file the memo's `## Legacy code` section names: the place where the app creates
-its objects. Note it in your report; Stage 5 units add the module instances there. Check with
+its mocks (as in build step 5), and its test folder with one test file per implementation file the
+memo names, each holding a placeholder test that passes (as in build step 6). Write no stubs and no
+implementation files: the legacy code keeps doing the work until each module's units replace it in
+Stage 5. The composition root is the app-shell file the memo's `## Legacy code` section names: the
+place where the app creates its objects. If that file does not exist yet, create it as an empty type
+that will create each module's live implementation, not wired into the entry point. If it exists,
+leave it alone. Note it in your report; Stage 5 units add the module instances there. Check with
 `bull gates --all --skip-coverage`.
 
 In both steps, never change legacy code beyond renames: no fixes, no cleanup, no moved code, even
@@ -113,7 +120,8 @@ where it looks wrong. Note what you see under `NOTES` instead.
 - Build only what the memo says. Do not invent modules, files, types, methods or dependencies. If the
   memo is missing something you need (a type it uses but never defines, a file with no module, a
   dependency cycle), return `blocked` with the question.
-- Never write real behavior. Stubs fail loudly; mocks only return what they are given.
+- Never write real behavior. Stubs fail loudly; mocks hold no logic beyond realistic sample data,
+  call recording, and what a test sets them to return or raise.
 - Never change a contract the memo drafts. If a draft cannot be built as written, return `blocked`.
 - Never edit `docs/outline.md`, `.bull/` files or anything outside the app folder.
 - Never open the reference folder.
