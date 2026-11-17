@@ -6,6 +6,7 @@ Choices where the spec is open: the service stack's gates and `[run]` steps all 
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -97,3 +98,27 @@ def test_manifest_defines_source_and_test_dir_settings(stack: Stack) -> None:
 def test_readers_define_every_required_function(stack: Stack) -> None:
     for fn in ("contract_declarations", "test_results", "uncovered", "check"):
         assert callable(getattr(stack.readers, fn))
+
+
+def test_rules_has_common_outline_and_one_section_per_agent(stack: Stack) -> None:
+    text = (_FOLDER / "rules.md").read_text()
+    headings = {
+        m.group(1).strip().lower()
+        for m in re.finditer(r"^## (.+)$", text, re.MULTILINE)
+    }
+    assert {"common", "outline"} <= headings
+    assert set(stack.manifest.agents) <= headings
+
+
+def test_setup_guide_has_feature_adoption_and_final_switch_sections() -> None:
+    text = (_FOLDER / "setup.md").read_text()
+    for heading in ("## For a feature", "## For an adoption", "## Final switch"):
+        assert heading in text
+
+
+@pytest.mark.parametrize("name", ["rules.md", "setup.md"])
+def test_guide_files_are_non_empty_and_finished(name: str) -> None:
+    text = (_FOLDER / name).read_text()
+    assert text.strip()
+    assert "placeholder" not in text.lower()
+    assert "TODO" not in text
