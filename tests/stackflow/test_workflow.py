@@ -90,6 +90,58 @@ def test_init_writes_design_md_with_the_template_sections(tmp_path: Path) -> Non
     assert "## Decisions log" in text
 
 
+def test_init_titles_design_md_with_the_stack_name(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    first = (path / "DESIGN.md").read_text().splitlines()[0]
+    assert first == "# my_stack stack: design"
+
+
+def test_init_design_md_title_uses_the_folder_name(tmp_path: Path) -> None:
+    path = new_repo(tmp_path, "other_stack")
+    first = (path / "DESIGN.md").read_text().splitlines()[0]
+    assert first == "# other_stack stack: design"
+
+
+def test_init_design_md_keeps_every_template_section(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    text = (path / "DESIGN.md").read_text()
+    for section in [
+        "Language and tools",
+        "Contracts",
+        "Modules",
+        "Kind",
+        "Human setup",
+        "Adoption support",
+        "Interfaces and running",
+        "Decisions log",
+    ]:
+        assert f"## {section}" in text
+
+
+def test_init_writes_cases_json_equal_to_the_template(tmp_path: Path) -> None:
+    import bull.Modules.stackflow as stackflow_package
+
+    template = Path(stackflow_package.__file__).parent / "template" / "cases.json"
+    path = new_repo(tmp_path)
+    written = json.loads((path / "cases.json").read_text())
+    assert written == json.loads(template.read_text())
+
+
+def test_init_commits_cases_json_in_the_init_commit(tmp_path: Path) -> None:
+    path = new_repo(tmp_path)
+    files = git(path, "show", "--name-only", "--format=", "HEAD").split()
+    assert "cases.json" in files
+    assert git(path, "ls-files", "cases.json").strip() == "cases.json"
+
+
+def test_init_keeps_the_experimental_maturity_in_stack_toml(tmp_path: Path) -> None:
+    import tomllib
+
+    path = new_repo(tmp_path)
+    data = tomllib.loads((path / "stack.toml").read_text())
+    assert data["stack"]["maturity"] == "experimental"
+
+
 def test_init_writes_a_gitignore(tmp_path: Path) -> None:
     path = new_repo(tmp_path)
     assert (path / ".gitignore").is_file()

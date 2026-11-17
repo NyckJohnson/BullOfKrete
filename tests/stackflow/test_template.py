@@ -150,6 +150,10 @@ def test_stack_toml_has_a_setting_with_type_default_and_description() -> None:
     )
 
 
+def test_stack_toml_maturity_is_experimental() -> None:
+    assert manifest()["stack"]["maturity"] == "experimental"
+
+
 @pytest.mark.parametrize("key", ["title", "description", "language", "source_glob"])
 def test_stack_toml_text_values_are_todo_placeholders(key: str) -> None:
     assert "TODO" in manifest()["stack"][key]
