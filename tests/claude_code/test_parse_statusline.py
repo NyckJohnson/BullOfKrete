@@ -155,3 +155,22 @@ def test_malformed_json_gives_dot_cwd_and_no_usage(raw: str) -> None:
     result = _provider().parse_statusline(raw)
     assert result.cwd == Path(".")
     assert result.usage is None
+
+
+@pytest.mark.parametrize("bad", [True, False, 1e20, -1e20, 10**30])
+def test_boolean_or_out_of_range_resets_at_gives_none_but_sample_is_made(
+    bad: object,
+) -> None:
+    raw = _raw(
+        cwd="/w",
+        rate_limits={
+            "five_hour": {"used_percentage": 10, "resets_at": bad},
+            "seven_day": {"used_percentage": 20, "resets_at": bad},
+        },
+    )
+    usage = _provider().parse_statusline(raw).usage
+    assert usage is not None
+    assert usage.five_hour == 10
+    assert usage.weekly == 20
+    assert usage.five_hour_resets is None
+    assert usage.weekly_resets is None

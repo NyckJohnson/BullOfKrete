@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from bull.Modules.claude_code.plugin import LiveProvider
-from bull.Modules.foundation.Contracts import AppLayout
+from bull.Modules.foundation.Contracts import AppLayout, FileFormatError
 from bull.Modules.foundation.mocks import sample_layout
 from bull.Modules.plugin_text.mocks import MockPluginText
 
@@ -170,3 +172,35 @@ def test_generated_files_contain_no_absolute_paths(tmp_path: Path) -> None:
     for text in _files(app).values():
         assert str(app.root) not in text
         assert str(tmp_path) not in text
+
+
+def _write_settings(app: AppLayout, text: str) -> Path:
+    path = app.root / ".claude" / "settings.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "{not json",
+        "[1, 2]",
+        '"a string"',
+        '{"permissions": []}',
+        '{"permissions": "all"}',
+        '{"permissions": {"allow": "Bash(ls:*)"}}',
+        '{"permissions": {"allow": {"a": 1}}}',
+        '{"env": ["A=1"]}',
+        '{"env": "A=1"}',
+    ],
+)
+def test_damaged_existing_settings_raise_file_format_error_and_stay_unchanged(
+    tmp_path: Path, text: str
+) -> None:
+    app = _app(tmp_path)
+    path = _write_settings(app, text)
+    with pytest.raises(FileFormatError) as caught:
+        _files(app)
+    assert "settings.json" in str(caught.value)
+    assert path.read_text(encoding="utf-8") == text
