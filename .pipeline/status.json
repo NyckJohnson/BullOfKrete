@@ -812,7 +812,7 @@
         "stackflow",
         "claude_code"
       ],
-      "state": "coverage",
+      "state": "done",
       "units": [
         {
           "number": 1,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T13:24:28-08:00",
+  "updatedAt": "2026-11-17T13:40:12-08:00",
   "features": [],
   "activeFeature": null
 }
