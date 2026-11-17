@@ -765,7 +765,7 @@
         "hooks",
         "plugin_text"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:41:46-08:00",
+  "updatedAt": "2026-11-17T01:16:00-08:00",
   "features": [],
   "activeFeature": null
 }
