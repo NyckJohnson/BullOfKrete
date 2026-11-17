@@ -158,10 +158,12 @@ def _start(args: list[str]) -> int:
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
+    # Write the pid file before the start check: `ready` can succeed and `stop` run within the
+    # check's window, and a `stop` that found no pid file would leave the server running.
+    pid_file.write_text(f"{proc.pid}\n")
     try:
         code = proc.wait(timeout=_START_CHECK)
     except subprocess.TimeoutExpired:
-        pid_file.write_text(f"{proc.pid}\n")
         return 0  # still running: launched
     print(
         f"start: the server for port {port} exited at once (code {code}); see {log}",
