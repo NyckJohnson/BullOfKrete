@@ -87,6 +87,16 @@ def in_order(name: str, *terms: str) -> None:
         pos = found + len(t)
 
 
+def after(name: str, marker: str, *terms: str) -> None:
+    """Every term appears in the text following the first `marker`."""
+    norm = _norm(_body(name))
+    idx = norm.find(marker.lower())
+    assert idx >= 0, f"{name}: no {marker!r}"
+    tail = norm[idx + len(marker) :]
+    missing = [t for t in terms if t.lower() not in tail]
+    assert not missing, f"{name}: after {marker!r} missing {missing}"
+
+
 def _fences(name: str) -> list[str]:
     blocks: list[str] = []
     current: list[str] | None = None
@@ -278,7 +288,85 @@ def test_skeleton_builder_rules_forbid_inventing_modules() -> None:
 
 
 def test_skeleton_builder_blocked_when_the_memo_is_missing_something() -> None:
-    has_all("skeleton-builder", "blocked", "memo")
+    has_any(
+        "skeleton-builder",
+        "memo is missing",
+        "memo is ambiguous",
+        "memo is unclear",
+        "memo does not say",
+        "memo doesn't say",
+        "memo leaves",
+    )
+    after("skeleton-builder", "blocked", "memo")
+
+
+def test_skeleton_builder_scaffold_creates_the_composition_root_when_shell_has_none() -> (
+    None
+):
+    after(
+        "skeleton-builder",
+        "step: scaffold",
+        "composition root",
+        "create",
+        "entry point",
+    )
+    in_order("skeleton-builder", "step: scaffold", "composition root", "create")
+
+
+def test_skeleton_builder_scaffold_composition_root_is_empty_and_not_wired_in() -> None:
+    after("skeleton-builder", "step: scaffold", "empty", "not wired")
+
+
+def test_skeleton_builder_scaffold_writes_one_placeholder_test_per_file_and_no_stubs() -> (
+    None
+):
+    after(
+        "skeleton-builder",
+        "step: scaffold",
+        "placeholder test",
+        "one test file per implementation file",
+    )
+    after("skeleton-builder", "step: scaffold", "no stubs")
+
+
+def test_skeleton_builder_feature_mode_gives_existing_implementations_smallest_edit() -> (
+    None
+):
+    after(
+        "skeleton-builder",
+        "mode: feature <slug>",
+        "smallest edit",
+        "old behavior",
+    )
+
+
+def test_skeleton_builder_feature_mode_stubs_and_tests_new_files_in_existing_modules() -> (
+    None
+):
+    after(
+        "skeleton-builder",
+        "mode: feature <slug>",
+        "Changes (<slug>)",
+        "new files",
+        "stubs",
+        "placeholder test",
+    )
+
+
+def test_skeleton_builder_rules_say_mocks_hold_realistic_data_and_record_calls() -> (
+    None
+):
+    rules = _norm(_section("skeleton-builder", "Rules"))
+    for term in ("mock", "realistic", "record"):
+        assert term in rules, f"Rules section lacks {term!r}"
+
+
+def test_skeleton_builder_rules_do_not_say_mocks_only_return_what_they_are_given() -> (
+    None
+):
+    assert "only return what they are given" not in _norm(
+        _section("skeleton-builder", "Rules")
+    )
 
 
 # --- screen-builder ----------------------------------------------------------------------
@@ -425,6 +513,26 @@ def test_test_writer_adopt_switch_over_deletes_and_repoints_then_runs_fast_gates
     in_order("test-writer", "ADOPT: switch-over", "bull gates <Module> --fast")
 
 
+def test_test_writer_tests_in_the_module_test_folder_are_its_own() -> None:
+    has_all("test-writer", "test folder", "are yours")
+
+
+def test_test_writer_old_tests_outside_the_module_folder_are_legacy() -> None:
+    has_all("test-writer", "legacy")
+    in_order("test-writer", "outside", "legacy", "only as an ADOPT:")
+
+
+def test_test_writer_pre_report_check_runs_fast_gates_for_the_module() -> None:
+    has_any("test-writer", "bull gates <Module> --fast", "bull gates <M> --fast")
+    in_order("test-writer", "before you report", "--fast")
+
+
+def test_test_writer_triage_or_reference_brief_new_tests_should_pass() -> None:
+    has_any("test-writer", "coverage-triage", "triage")
+    in_order("test-writer", "--fast", "triage", "should pass")
+    has_all("test-writer", "reference")
+
+
 def test_test_writer_adopt_baseline_fixes_or_disables_named_tests_only() -> None:
     has_all("test-writer", "ADOPT: baseline", "disable")
 
@@ -483,7 +591,17 @@ def test_code_writer_reaches_other_modules_only_through_their_contracts() -> Non
 
 
 def test_code_writer_uses_only_the_dependencies_the_brief_lists() -> None:
-    has_all("code-writer", "listed")
+    has_any(
+        "code-writer",
+        "only the dependencies the brief lists",
+        "only the ones the brief lists",
+        "only ones the brief lists",
+        "only those the brief lists",
+        "brief lists",
+        "listed in your brief",
+        "your brief lists",
+    )
+    in_order("code-writer", "other modules", "only through", "listed")
 
 
 def test_code_writer_documents_contract_declarations_and_tricky_logic() -> None:
@@ -528,7 +646,8 @@ def test_code_writer_cannot_edit_test_files_because_bull_blocks_it() -> None:
 
 
 def test_code_writer_a_wrong_test_means_blocked() -> None:
-    has_all("code-writer", "wrong", "blocked")
+    in_order("code-writer", "cannot edit", "bull blocks", "wrong", "blocked")
+    has_any("code-writer", "a test is wrong", "test is wrong", "wrong test")
 
 
 def test_code_writer_a_needed_contract_change_means_blocked() -> None:
@@ -552,6 +671,18 @@ def test_code_writer_stack_mode_names_the_gate_program() -> None:
 
 def test_code_writer_stack_mode_checks_with_stack_test() -> None:
     has_all("code-writer", "bull stack test .")
+
+
+def test_code_writer_stack_mode_checks_with_stack_test_instead_of_module_gates() -> (
+    None
+):
+    in_order("code-writer", "mode: stack", "bull stack test .", "instead of")
+    has_all("code-writer", "module gates")
+
+
+def test_code_writer_treats_an_interface_file_as_a_contract() -> None:
+    has_all("code-writer", "interface file", "contract")
+    in_order("code-writer", "interface file", "as a contract")
 
 
 def test_code_writer_stack_mode_uses_the_stack_files_section() -> None:
