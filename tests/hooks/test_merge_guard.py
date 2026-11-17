@@ -286,3 +286,45 @@ def test_block_message_never_contains_shell_redirection_fragments(
     assert not decision.allow
     assert "module/Counter" in decision.message
     assert "2>&1" not in decision.message
+
+
+# --- coverage triage: quoting, comments, wrappers
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("echo ok # git merge x", []),
+        ("git merge \\\nfeature/x", ["feature/x"]),
+        ("git merge feat\\ x", ["feat x"]),
+        ("git merge x\\", ["x"]),
+        ('git merge "a\\"b"', ['a"b']),
+        ('echo "x\\"; git merge y"', []),
+        ("sudo -- git merge x", ["x"]),
+        ("env -- git merge x", ["x"]),
+        ("sudo -u root git merge x", ["x"]),
+        ("sudo -E git merge x", ["x"]),
+        ("sudo", []),
+        ("env FOO=1", []),
+        ("sudo -u root", []),
+        ("bash -x script.sh", []),
+        ("bash -c", []),
+    ],
+)
+def test_merge_targets_handles_escapes_comments_and_wrapper_options(
+    command: str, expected: list[str]
+) -> None:
+    assert merge_targets(command) == expected
+
+
+def test_trailing_lone_backslash_does_not_crash() -> None:
+    assert isinstance(merge_targets("git merge x \\"), list)
+
+
+def test_module_branch_absent_from_status_with_a_pass_is_allowed(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.heads["module/Ghost"] = SHA_A
+    _record(rig, SHA_A, "module/Ghost")
+    assert rig.guard.check(rig.app, "git merge --no-ff module/Ghost").allow

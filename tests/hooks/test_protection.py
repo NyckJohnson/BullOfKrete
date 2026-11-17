@@ -252,3 +252,12 @@ def test_non_string_reference_dir_setting_raises_type_error(tmp_path: Path) -> N
     event = _event(HookKind.BEFORE_READ, "test-writer", app, tmp_path / "a.py")
     with pytest.raises(TypeError):
         protection.check(app, event)
+
+
+@pytest.mark.parametrize("kind", [HookKind.BEFORE_SHELL, HookKind.AGENT_END])
+def test_other_event_kinds_are_allowed_with_no_message(
+    tmp_path: Path, kind: HookKind
+) -> None:
+    decision = _check(tmp_path, kind, "code-writer", tmp_path / "tests" / "a.py")
+    assert decision.allow
+    assert decision.message == ""
