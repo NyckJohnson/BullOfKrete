@@ -94,6 +94,10 @@ def test_discuss_has_an_argument_hint_for_the_app_idea() -> None:
 # --- discuss -----------------------------------------------------------------------------
 
 
+def test_discuss_checks_usage_before_setting_stage_one() -> None:
+    in_order("discuss", "bull status usage-check", "bull status stage 1")
+
+
 def test_discuss_sets_stage_one_first() -> None:
     in_order("discuss", "bull status stage 1")
 
@@ -127,7 +131,7 @@ def test_discuss_commit_message_names_the_stack() -> None:
 
 
 def test_discuss_adds_parts_when_stacks_differ() -> None:
-    has_all("discuss", "bull part add", "--dir", "parts")
+    has_all("discuss", "bull part add", "--dir", "interface")
 
 
 def test_discuss_parts_talk_through_interfaces() -> None:
@@ -171,6 +175,10 @@ def test_discuss_hands_off_to_outline() -> None:
 # --- outline -----------------------------------------------------------------------------
 
 
+def test_outline_checks_usage_before_setting_stage_two() -> None:
+    in_order("outline", "bull status usage-check", "bull status stage 2")
+
+
 def test_outline_sets_stage_two_before_writing_the_memo() -> None:
     in_order("outline", "bull status stage 2", "docs/outline.md")
 
@@ -180,7 +188,7 @@ def test_outline_follows_the_template_and_the_stack_outline_rules() -> None:
 
 
 def test_outline_without_a_stack_goes_back_to_discuss() -> None:
-    has_all("outline", "bull config show", "discuss")
+    has_all("outline", "bull config show", "bull part list", "discuss")
 
 
 def test_outline_with_parts_uses_part_rules_and_part_lines() -> None:
@@ -228,6 +236,38 @@ def test_outline_reports_a_readiness_list_with_check_and_cross_marks() -> None:
 
 def test_outline_readiness_reads_screens_or_command_surface() -> None:
     has_all("outline", "screens (or command surface) and navigation")
+
+
+@pytest.mark.parametrize(
+    "terms",
+    [
+        ("purpose", "journeys"),
+        ("screens", "navigation"),
+        ("module", "purpose", "dependencies", "draft protocol"),
+        ("data models", "fields", "types"),
+        ("build order",),
+        ("persistence", "networking", "third-party"),
+        ("out of scope",),
+        ("build any one module from the memo alone",),
+    ],
+    ids=[
+        "purpose-journeys",
+        "screens-navigation",
+        "modules",
+        "data-models",
+        "build-order",
+        "persistence-networking-third-party",
+        "out-of-scope",
+        "buildable-from-memo",
+    ],
+)
+def test_outline_readiness_list_names_each_item(terms: tuple[str, ...]) -> None:
+    norm = _norm(_body("outline"))
+    start = norm.find("readiness")
+    assert start >= 0, "outline: no readiness list"
+    tail = norm[start:]
+    missing = [t for t in terms if t.lower() not in tail]
+    assert not missing, f"outline readiness list: missing {missing}"
 
 
 def test_outline_revises_until_approved() -> None:
@@ -278,8 +318,18 @@ def test_setup_checks_every_part() -> None:
     has_all("setup", "bull stack check", "bull part check")
 
 
+def test_setup_names_stack_check_with_part_for_apps_with_parts() -> None:
+    has_all("setup", "bull stack check", "--part")
+
+
 def test_setup_passing_check_skips_to_the_commit_step() -> None:
-    has_all("setup", "passing", "step 5")
+    norm = _norm(_body("setup"))
+    checkpoint = norm.find("bull status checkpoint setup")
+    assert checkpoint >= 0, "setup: no checkpoint command"
+    before = norm[:checkpoint]
+    assert "passing" in before or "passes" in before, (
+        "setup: no passing check before checkpoint"
+    )
 
 
 def test_setup_walks_the_stack_setup_guide_one_part_at_a_time() -> None:
@@ -331,7 +381,14 @@ def test_skeleton_checks_usage_then_sets_stage_three() -> None:
 
 
 def test_skeleton_refused_without_setup_sends_the_human_to_setup() -> None:
-    has_all("skeleton", "refused", "setup", "/bull:setup")
+    has_all(
+        "skeleton",
+        "refused",
+        "outline-approved",
+        "setup",
+        "/bull:outline",
+        "/bull:setup",
+    )
 
 
 def test_skeleton_with_parts_runs_once_per_part_in_build_order() -> None:
