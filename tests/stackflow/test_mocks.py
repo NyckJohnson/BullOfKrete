@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,17 @@ def test_record_test_with_full_report_sets_test_pass() -> None:
     status = mock.record_test(PATH, report)
     assert status.test_pass == SAMPLE_SHA
     assert status.static_pass is None
+    assert mock.calls == [("record_test", (PATH, report))]
+
+
+@pytest.mark.parametrize("static", [True, False])
+def test_record_test_with_failing_report_leaves_status_unchanged(static: bool) -> None:
+    mock = MockStackWorkflow()
+    report = replace(_report(static=static), problems=("boom",))
+    assert not report.ok
+    status = mock.record_test(PATH, report)
+    assert status.static_pass is None
+    assert status.test_pass is None
     assert mock.calls == [("record_test", (PATH, report))]
 
 

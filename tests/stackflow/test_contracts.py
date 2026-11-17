@@ -24,7 +24,7 @@ def _status(**overrides: object) -> StackRepoStatus:
         "test_pass": None,
     }
     fields.update(overrides)
-    return StackRepoStatus(**fields)  # type: ignore[arg-type]
+    return StackRepoStatus(**fields)  # type: ignore[arg-type]  # overrides are dynamic test kwargs
 
 
 def test_stack_stage_values_follow_the_workflow_order() -> None:
@@ -80,7 +80,7 @@ def test_repo_status_holds_its_fields() -> None:
 def test_repo_status_is_frozen() -> None:
     status = _status()
     with pytest.raises(dataclasses.FrozenInstanceError):
-        status.stage = StackStage.ACCEPTED  # type: ignore[misc]
+        status.stage = StackStage.ACCEPTED  # type: ignore[misc]  # frozen dataclass; assignment must raise
 
 
 def test_repo_status_equal_when_fields_equal() -> None:
