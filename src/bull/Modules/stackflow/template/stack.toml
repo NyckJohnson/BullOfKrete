@@ -1,1 +1,45 @@
-# skeleton placeholder: the stack.toml template is written in Stage 5.
+# Stack manifest. Replace every TODO; `bull stack test . --static` reports any left.
+format = 1
+
+[stack]
+name = "TODO"
+title = "TODO: short human title"
+description = "TODO: one sentence on what this stack builds"
+language = "TODO"
+kind = "TODO"                   # app | service | tool
+maturity = "experimental"       # experimental | verified | test
+source_glob = "TODO: e.g. *.ext"
+test_glob = ["TODO"]
+comment = "TODO"                # line-comment prefix for coverage-exempt markers
+scaffold = ["TODO"]             # folders `stack select` creates, relative to the part folder
+gitignore = ["TODO"]
+agents = ["skeleton-builder", "test-writer", "code-writer", "reviewer", "coverage-analyst", "journey-test-writer"]
+
+[[stack.requires]]              # tools `doctor`, `stack check` and `stack test` look for
+tool = "TODO"
+hint = "TODO: where to get it"
+
+[settings.source_dir]           # the stack's settings: type, default, description
+type = "str"
+default = "TODO"
+description = "TODO"
+
+[gates]                         # argv lists; journeys optional
+preflight = ["{python}", "{stack_dir}/TODO", "preflight"]
+setup = ["{python}", "{stack_dir}/TODO", "setup"]
+build_test = ["{python}", "{stack_dir}/TODO", "build-test"]
+build_test_fast = ["{python}", "{stack_dir}/TODO", "build-test-fast", "{module}"]
+lint = ["{python}", "{stack_dir}/TODO", "lint", "{module}"]
+rerun_failed = ["{python}", "{stack_dir}/TODO", "rerun", "{failed_ids}"]
+journeys = ["{python}", "{stack_dir}/TODO", "journeys"]
+
+[run]                           # optional (service stacks); delete otherwise
+start = ["TODO", "{port}"]
+ready = ["TODO", "{port}"]
+stop = ["TODO", "{port}"]
+ready_timeout = 30
+
+[interfaces]                    # optional; delete if the stack reads no interface files
+formats = ["TODO"]
+
+[commands]                      # optional extra commands for `bull stack run <name>`
