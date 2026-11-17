@@ -891,7 +891,7 @@
       "dependsOn": [
         "stacks"
       ],
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T14:20:19-08:00",
+  "updatedAt": "2026-11-17T14:20:28-08:00",
   "features": [],
   "activeFeature": null
 }
