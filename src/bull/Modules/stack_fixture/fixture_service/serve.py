@@ -4,12 +4,17 @@
 `tool.py start|ready|stop <port>`):
 
 - `start <port>`: launches the server as a detached background process and returns 0 without
-  waiting for it; its pid goes to `<results>/serve-<port>.pid` and its output to
-  `<results>/serve-<port>.log`. Refuses (exit 1) while a live server already owns that pid file.
+  waiting for readiness (it does check briefly that the process did not exit at once, e.g. on a
+  taken port: exit 1); its pid goes to `<results>/serve-<port>.pid` and its output to
+  `<results>/serve-<port>.log`. Refuses (exit 1) while our server for that port owns the pid file.
 - `ready <port> [--timeout <seconds>]`: polls `GET /health` until it answers 200 (exit 0) or the
   timeout (default 30 s) passes (exit 1).
 - `stop <port>`: terminates the server named by the pid file and removes the file; a missing pid
   file is not an error.
+
+A pid file counts only when it holds a pid above 1 that belongs, by its command line, to this
+module's server for the same port; otherwise (corrupt, or stale after pid reuse) it means "no
+server": `stop` removes it without signalling anything and `start` replaces it.
 
 The results folder is `BULL_RESULTS` (else `<BULL_PART_ROOT or cwd>/results`). Usage errors exit 64.
 """
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
 import sys
 import time
 import urllib.error
@@ -33,6 +39,7 @@ _SERVE_STEP = (
 _DEFAULT_READY_TIMEOUT = 30.0
 _POLL_INTERVAL = 0.1
 _STOP_GRACE = 10.0
+_START_CHECK = 0.3  # seconds start waits to catch a server that dies at once
 _USAGE = 64
 
 
@@ -81,21 +88,21 @@ def _pid_file(port: int) -> Path:
     return _results() / f"serve-{port}.pid"
 
 
-def _read_pid(path: Path) -> int:
-    """The pid stored in `path`; raises _UsageError when the file does not hold one."""
-    text = path.read_text().strip()
+def _read_pid(path: Path) -> int | None:
+    """The server pid stored in `path`, or None when the file holds no usable pid.
+
+    Only pids above 1 are accepted: 0, -1 and 1 would make `kill` signal the caller's process
+    group, every process, or init. A non-numeric file is treated the same way (no server).
+    """
     try:
-        return int(text)
-    except ValueError as exc:
-        raise _UsageError(f"{path.name} does not hold a pid: {text!r}") from exc
+        pid = int(path.read_text().strip())
+    except ValueError:
+        return None
+    return pid if pid > 1 else None
 
 
 def _alive(pid: int) -> bool:
-    """Whether `pid` runs; reaps it first when it is our own exited child (a zombie)."""
-    try:
-        os.waitpid(pid, os.WNOHANG)
-    except ChildProcessError:
-        pass  # not our child: whoever started it reaps it
+    """Whether a process with this pid exists (signal 0 probe; delivers nothing)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -105,42 +112,63 @@ def _alive(pid: int) -> bool:
     return True
 
 
+def _is_our_server(pid: int, port: int) -> bool:
+    """Whether `pid` is a live fixture server for `port`, judged by its command line.
+
+    Guards against a stale pid file whose pid the system has since given to an unrelated
+    process: such a process is never signalled nor taken as a running server.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"cannot inspect process {pid}: {exc}", file=sys.stderr)
+        return False  # unverifiable: never signal a process we cannot identify
+    if result.returncode != 0:
+        return False  # no such process
+    words = result.stdout.split()
+    return _MODULE in words and _SERVE_STEP in words and str(port) in words
+
+
 def _start(args: list[str]) -> int:
     port = _port(args)
     pid_file = _pid_file(port)
     if pid_file.is_file():
-        try:
-            running = _alive(_read_pid(pid_file))
-        except _UsageError:
-            running = False  # a corrupt pid file is replaced below
-        if running:
+        pid = _read_pid(pid_file)
+        if pid is not None and _is_our_server(pid, port):
             print(
                 f"start: a server for port {port} is already running", file=sys.stderr
             )
             return 1
+        # a corrupt or stale pid file is replaced below
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     log = pid_file.with_suffix(".log")
-    # posix_spawn gives a detached child (own session, stdio away from the caller's pipes)
-    # without a Popen object that would expect to be waited on.
-    pid = os.posix_spawn(
-        sys.executable,
-        [sys.executable, "-m", _MODULE, _SERVE_STEP, str(port)],
-        dict(os.environ),
-        file_actions=[
-            (os.POSIX_SPAWN_OPEN, 0, os.devnull, os.O_RDONLY, 0),
-            (
-                os.POSIX_SPAWN_OPEN,
-                1,
-                str(log),
-                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                0o644,
-            ),
-            (os.POSIX_SPAWN_DUP2, 1, 2),
-        ],
-        setsid=True,
+    with log.open("wb") as log_out:
+        # Own session and stdio away from the caller's pipes: the server outlives this call.
+        proc = subprocess.Popen(
+            [sys.executable, "-m", _MODULE, _SERVE_STEP, str(port)],
+            stdin=subprocess.DEVNULL,
+            stdout=log_out,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    try:
+        code = proc.wait(timeout=_START_CHECK)
+    except subprocess.TimeoutExpired:
+        pid_file.write_text(f"{proc.pid}\n")
+        return 0  # still running: launched
+    print(
+        f"start: the server for port {port} exited at once (code {code}); see {log}",
+        file=sys.stderr,
     )
-    pid_file.write_text(f"{pid}\n")
-    return 0
+    pid_file.unlink(missing_ok=True)
+    return 1
 
 
 def _ready(args: list[str]) -> int:
@@ -178,11 +206,17 @@ def _stop(args: list[str]) -> int:
     if not pid_file.is_file():
         return 0
     pid = _read_pid(pid_file)
+    if pid is None or not _is_our_server(pid, port):
+        pid_file.unlink(missing_ok=True)  # corrupt or stale: no server of ours to stop
+        return 0
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         pid_file.unlink(missing_ok=True)
         return 0
+    except PermissionError:
+        print(f"stop: not permitted to signal process {pid}", file=sys.stderr)
+        return 1
     deadline = time.monotonic() + _STOP_GRACE
     while _alive(pid) and time.monotonic() < deadline:
         time.sleep(_POLL_INTERVAL)
@@ -191,6 +225,9 @@ def _stop(args: list[str]) -> int:
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass  # exited between the check and the kill
+        except PermissionError:
+            print(f"stop: not permitted to kill process {pid}", file=sys.stderr)
+            return 1
     pid_file.unlink(missing_ok=True)
     return 0
 
