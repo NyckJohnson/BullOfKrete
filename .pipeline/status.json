@@ -630,7 +630,7 @@
         "status",
         "gates"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -638,7 +638,7 @@
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -647,8 +647,8 @@
             "merge_guard.py",
             "protection.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 3,
@@ -657,8 +657,8 @@
             "session.py",
             "dispatch.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     },
@@ -1058,7 +1058,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T19:52:05-08:00",
+  "updatedAt": "2026-11-16T20:47:55-08:00",
   "features": [],
   "activeFeature": null
 }

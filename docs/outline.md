@@ -1981,7 +1981,12 @@ when `readers.py` defines `detect`.
       def merge_targets(self, command: str) -> list[str]: ...
   ```
 - Behavior spec:
-  - Outside a bull app (no layout found from `cwd`) every hook allows with an empty message.
+  - Outside a bull app (no layout found from `cwd`), and in a stack repo (its `status.json` has kind
+    `"stack"`), every hook allows with an empty message.
+  - A safeguard that fails (any exception, e.g. a corrupt `status.json` or a mistyped setting) fails
+    closed: BEFORE_AGENT, BEFORE_SHELL, BEFORE_EDIT and BEFORE_READ block with "bull safeguard could
+    not run: <reason>" (plus the fix when the error has one); SESSION_START and AGENT_END allow with
+    that message.
   - Agent names compare by the part after the last `:` (`bull:code-writer` → `code-writer`).
   - SESSION_START: message = stage and mode, the paused unit and reason if paused ("run
     `/bull:resume`"), the waiting approval if any, and the next step.
@@ -1993,11 +1998,14 @@ when `readers.py` defines `detect`.
   - AGENT_END: append `agent_end`; allow.
   - BEFORE_SHELL: merge_targets(command) finds every `git merge` in the command (split on `&&`,
     `||`, `;`, `|`, newlines; redirections and `git -C <dir>` handled; `--abort`, `--continue`,
-    `--quit` ignored; option values such as `-m <msg>` skipped) and returns the target refs. For
-    each target: unknown ref → block; no pass record for its head sha → block "no recorded full
+    `--quit` ignored; option values such as `-m <msg>` skipped; leading `VAR=value` assignments,
+    wrapper words `env`, `command`, `exec`, `time`, `nohup`, `sudo` and shell keywords `{`, `!`,
+    `then`, `do`, `else` skipped before `git`; `sh -c`/`bash -c` strings parsed in turn; `git merge`
+    only inside a quoted argument, `git log --merges` and `git mergetool` are not merges) and returns
+    the target refs. For each target: unknown ref → block "unknown ref <ref>"; no pass record for its head sha → block "no recorded full
     gate pass for <ref> at <sha>: run `bull gates …`"; a module branch whose module has reference
-    tests and no scan → block "record the reference-test scan for <M> first". Blocks append
-    `hook_block`.
+    tests and no scan → block "record the reference-test scan for <M> first". Block messages name
+    only the ref, never fragments of the shell command (e.g. `2>&1`). Blocks append `hook_block`.
   - BEFORE_EDIT: agent `code-writer` editing a path that `parts.is_test_path` says is a test → block
     "code-writer may not edit tests".
   - BEFORE_READ: agent `test-writer` or `code-writer` reading a path inside the reference folder →
@@ -2389,3 +2397,8 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: stackflow unit 3 construction — install.py: `check_static(tester: StackTester, registry: StackRegistry, path: Path) -> None` loads the folder (`registry.load_path`), runs `tester.static`; not ok → `StackError` listing every problem; `LiveStackInstaller(tester, registry).install(path)` = `check_static` then `registry.install(path)` (nothing installed on refusal). cli.py: `register_status(commands, workflow: Callable[[], StackWorkflow], root: Callable[[], Path])` adds the stack repo's `status [--json]` (name, stage number and name, checkpoints, static/test pass), `status next`, `status stage <n>`, `status checkpoint <name>`, `status ref branch|tag <name>` (all printing one result; refusals raised as `BullError`); `before_install(tester, registry)` (zero-argument providers) returns the `Callable[[Path], None]` that stacks.cli's `register(before_install=…)` takes, wrapping `check_static`; `design_template() -> str` returns `template/DESIGN.md` for `bull template design` (cli.wiring adds it to memo's templates). Choosing app vs stack-repo `status`, and calling `record_test` after `bull stack test .`, are `cli.wiring`'s job. Internal wiring, no contract change.
 - 2026-11-16: stackflow reference scan (covered 6, missed 0, contradicts 1, not-in-spec 2, obsolete 2) — human: `bull init --stack` also writes `cases.json` from the template (v1 did); the template's `stack.toml` has `maturity = "experimental"` (pinned); init titles `DESIGN.md` `# <name> stack: design` — approved by Nicholas Johnson
 - 2026-11-16: stackflow coverage triage (missed 2, not-in-spec 7) — human kept and specified all seven: a missing or malformed built-in template (DESIGN.md or other template file missing, no `name` line in the stack.toml template, no title line in the DESIGN.md template) → `BullError` with fix "reinstall bull" (init and `design_template`); `init` on a path that is an existing file → refused, nothing created; `set_stage` to the current stage is a no-op (nothing written); `record_test` with no commit at HEAD records nothing and returns the status unchanged. Missed: `load` refuses a status file that is not a JSON object or whose `name` is not a string (`FileFormatError`). Internal behavior, no contract change — approved by Nicholas Johnson
+- 2026-11-16: hooks unit 2 construction — merge_guard.py: pure `merge_targets(command) -> list[str]` (quote-aware split; `-m`/`--message=`/`-s` values skipped; octopus merges return every ref); `MergeGuard(git, passes: PassRecords, refs: Refs, status: StatusStore, events: EventLog).check(app, command) -> HookDecision` (target resolved by `git.head`; the first blocking target blocks; one `hook_block` event per block; allow has an empty message). protection.py: `Protection(parts, settings).check(app, event) -> HookDecision` for BEFORE_EDIT/BEFORE_READ (others allowed); "inside the reference folder" is a path-component match; `reference_dir` relative to the app root or absolute. Internal wiring, no contract change.
+- 2026-11-16: hooks unit 3 construction — `UsageGuard(usage, status: StatusStore, settings, events).check(app, event)` handles BEFORE_AGENT (order: usage PAUSE, waiting approval, reference mention; UNKNOWN allows with a warning; appends `agent_start` on allow); `SessionStart(status: StatusStore, progress: Progress).check(app, event)` always allows (stage of the active track, mode, pause line, waiting line, next step); `LiveHooks(layouts, session, usage_guard, merge_guard, protection, events)` finds the app with `layouts.find(event.cwd)`, routes each kind, appends `agent_end` itself, allows BEFORE_SHELL without a command. App-bound collaborators (Usage, StatusStore, Progress, EventLog) are built by `cli.wiring` for the app found from the hook's cwd. Internal wiring, no contract change.
+- 2026-11-16: hooks unit 3 review — a failing safeguard fails closed (guarded kinds block with "bull safeguard could not run: <reason>"; session start and agent end allow with the message); in a stack repo every hook allows with an empty message, like outside an app (`LiveHooks` also takes foundation `Files` to read the status file's `kind`) — approved by Nicholas Johnson
+- 2026-11-16: hooks reference scan (covered 13, missed 4, contradicts 0, not-in-spec 2, obsolete 1) — human: merge_targets is hardened against env assignments, wrapper words, shell keywords and `sh -c` strings; "unknown ref <ref>" wording and no shell fragments in block messages are pinned; missed cases (env assignment, quoted `git merge` in an echo, `git log --merges`, `git mergetool`) get tests from the spec — approved by Nicholas Johnson
+- 2026-11-16: hooks coverage triage (missed 9, not-in-spec 1) — human kept and specified the one: in merge_targets, an unquoted `#` starting a word begins a comment (ignored, as the shell does). Missed cases are tested from the spec's quote-aware parsing (backslash escapes and line continuations, escapes inside double quotes), wrapper options and `--` (`sudo -u root`, `sudo -E`, `env --`), wrappers with no command after them, `sh`/`bash` without a `-c` string, a module branch absent from status, and Protection allowing other kinds — approved by Nicholas Johnson
