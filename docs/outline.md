@@ -174,7 +174,7 @@ checks file formats (module `formats`) and settings (module `settings`).
 | `bull migrate` | Upgrade the app's files to the current format | formats |
 | `bull template outline\|backlog\|design` | Print a template | memo (design: stackflow) |
 | `bull hook <session-start\|before-agent\|before-shell\|before-edit\|before-read\|agent-end>` | Hook entry points (stdin JSON from the provider) | hooks (I/O: claude_code) |
-| `bull statusline` | Status line: record usage, print the line | claude_code |
+| `bull statusline` | Status line: record usage, print the line | cli (input: claude_code) |
 | `bull help`, `bull --version` | | cli |
 
 In a stack repo (`bull init --stack`), `bull status` and `status stage|checkpoint|next|ref` act on
@@ -2083,7 +2083,7 @@ when `readers.py` defines `detect`.
 ### claude_code
 - Purpose: the provider seam's one implementation: everything specific to Claude Code.
 - Depends on: foundation, settings, usage, stacks, hooks, plugin_text (stacks: contract only, for `CheckItem`)
-- Files: Contracts/__init__.py, mocks/__init__.py | plugin.py, hooks_json.py, launch.py | hook_io.py, statusline.py, app_files.py
+- Files: Contracts/__init__.py, mocks/__init__.py | plugin.py, hooks_json.py, launch.py | hook_io.py, app_files.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   @dataclass(frozen=True)
@@ -2120,17 +2120,19 @@ when `readers.py` defines `detect`.
   - hook_output: block → exit 2 with the message on stderr; allow → exit 0; session start → the
     message on stdout.
   - parse_statusline: reads `cwd` (or `workspace.current_dir`) and the rate-limit fields (5-hour and
-    7-day used percentage and reset time) when present → UsageSample; absent → usage None.
-  - statusline (the `bull statusline` command): records the sample in the app found from `cwd`
-    (none outside an app), prints one line: `bull · stage N[ · feature <slug>] · units d/t[ · <plan
-    label> i/n] · 5h x% · wk y%` (missing parts omitted).
+    7-day used percentage and reset time) when present → UsageSample; absent → usage None. The
+    fields are `rate_limits.five_hour` and `rate_limits.seven_day`, each with `used_percentage` and
+    `resets_at` (epoch seconds, or an ISO 8601 time); a sample exists when either window has a
+    `used_percentage`; an unreadable `resets_at` → that reset None; `time` is the clock's now.
+    Malformed JSON → cwd `.`, usage None. (Building and printing the line is cli's job.)
   - app_files: `.claude/settings.json` (statusLine command `bull statusline`, permissions allowing
     `Bash(bull:*)` and `Bash(git:*)`, env `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`) merged into an
     existing file without dropping the user's keys; `CLAUDE.md` with a marked block
     (`<!-- bull:begin -->…<!-- bull:end -->`) importing `@.bull/plugin/orchestrator.md`, replacing
     only that block in an existing file. No absolute paths.
 - Construction (internal; not contracts):
-  - plugin.py: `LiveProvider(plugin_text: PluginText)`; `name = "claude"`. render_plugin takes the
+  - plugin.py: `LiveProvider(plugin_text: PluginText, clock: Clock | None = None)` (foundation
+    `Clock`, for the usage sample's time; system time when None); `name = "claude"`. render_plugin takes the
     plugin's files from `plugin_text.files()`; for each `agents/*.md` it reads `models.<name>` with
     `Settings.get` and inserts `model: <value>` inside the frontmatter (nothing when `inherit`),
     leaving the rest unchanged. launch.py and hooks_json.py hold helpers used by `LiveProvider`.
@@ -2192,7 +2194,7 @@ when `readers.py` defines `detect`.
 ### cli
 - Purpose: the composition root, the argument parser and `main`.
 - Depends on: foundation, gitrepo, events, settings, formats, memo, usage, stacks, parts, status, features, coverage, api, interfaces, adoption, gates, stacktest, stackflow, hooks, plugin_text, claude_code, appinit
-- Files: Contracts/__init__.py | wiring.py, main.py, help.py
+- Files: Contracts/__init__.py | wiring.py, main.py, help.py, statusline.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   # Contracts/__init__.py declares nothing: no module depends on cli.
@@ -2207,6 +2209,12 @@ when `readers.py` defines `detect`.
   - A `BullError` prints `bull: <message>` and `  fix: <fix>` on stderr, exit 1; any other exception
     prints a one-line summary and "please report this", exit 70.
   - `bull help` / no arguments: the command list grouped as in **Commands**; `--version`: version.
+  - statusline (the `bull statusline` command): reads stdin through `Provider.parse_statusline`; in
+    the app found from its `cwd` (`Layouts.find`; none outside an app) records the sample with
+    `Usage.record` when there is one, and prints one line: `bull · stage N[ · feature <slug>] ·
+    units d/t[ · <plan label> i/n] · 5h x% · wk y%` from the status module's progress (missing
+    parts omitted; outside an app just `bull`). statusline.py holds it; wiring builds its
+    collaborators.
   - `--json` output goes to stdout only; nothing else is printed to stdout with it.
   - Neutrality test: no file under `src/bull/` outside `Modules/stack_*/` contains the banned words
     (case-insensitive, whole words): Xcode, Swift, SwiftUI, UIKit, iOS, iPhone, simulator, XCUITest,
@@ -2445,3 +2453,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-16: the source note gains "v1 detail for the 'as v1' parts of § 4" (reviewer, coverage-analyst, journey-test-writer report, surveyor, legacy-test-scanner), since agents may not read v1; content unchanged from v1 apart from v2 terms.
 - 2026-11-16: plugin_text reference scan (covered 3, missed 0, contradicts 0, not-in-spec 1) — the not-in-spec case (each stack's rules.md has a section for every agent whose text runs `stack rules <agent>`) is already specified in stacktest's static check (`rules.md` has one section per manifest agent); plugin_text's half (each agent names `bull stack rules <name>`, legacy-test-scanner none) is tested. No spec change.
 - 2026-11-17: claude_code construction (`LiveProvider(plugin_text)`, `name = "claude"`, agent model lines, hooks.json shape, tool_check lookup) set in the claude_code § "Construction" line; claude_code's depends-on line now lists stacks (contract only, for `CheckItem`); internal wiring, no contract change.
+- 2026-11-17: building and printing the `bull statusline` line moves from claude_code to cli (cli/statusline.py; cli already depends on status, usage and claude_code). claude_code keeps `parse_statusline` only; its unit 3 is hook_io.py and app_files.py. parse_statusline reads `rate_limits.five_hour` / `rate_limits.seven_day` (`used_percentage`, `resets_at` as epoch seconds or ISO 8601), the sample's time from a foundation `Clock` (`LiveProvider(plugin_text, clock=None)`, system time when None). No contract change — approved by Nicholas Johnson
