@@ -1,7 +1,391 @@
-"""Tests for `bull.Modules.cli.main` (placeholder until its unit is built)."""
+"""Tests for `bull.Modules.cli.main`: dispatch, the preamble, error output and exit codes."""
 
 from __future__ import annotations
 
+import argparse
+import json
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TextIO
 
-def test_placeholder() -> None:
-    pass
+import pytest
+
+import bull
+from bull.Modules.cli.help import render_help
+from bull.Modules.cli.main import main
+from bull.Modules.formats.mocks import MockFormats
+from bull.Modules.foundation.Contracts import BullError, Layouts
+from bull.Modules.foundation.mocks import MockLayouts, sample_layout
+from bull.Modules.settings.Contracts import (
+    ConfigError,
+    ConfigProblem,
+    Settings,
+    SettingsLoader,
+    StackLayer,
+)
+from bull.Modules.settings.mocks import MockSettingsLoader
+
+_Run = Callable[[argparse.Namespace, TextIO], int]
+
+
+class _Registered:
+    """The commands a fake composition root adds, and what ran."""
+
+    def __init__(self) -> None:
+        self.ran: list[tuple[str, argparse.Namespace]] = []
+        self.runs: dict[str, _Run] = {}
+
+    def add(self, name: str, run: _Run | None = None) -> None:
+        def default(args: argparse.Namespace, out: TextIO) -> int:
+            return 0
+
+        self.runs[name] = run or default
+
+
+@dataclass
+class _Wiring:
+    """What `main` needs of the composition root (the seam `main(argv, wiring=…)`)."""
+
+    layouts: Layouts
+    formats: MockFormats
+    settings_loader: SettingsLoader
+    commands: _Registered
+    stack_layer: Callable[[str], StackLayer] = field(
+        default=lambda name: StackLayer((), {})
+    )
+
+    def register_commands(
+        self, commands: argparse._SubParsersAction[argparse.ArgumentParser]
+    ) -> None:
+        for name, run in self.commands.runs.items():
+            parser = commands.add_parser(name)
+            parser.add_argument("rest", nargs="*")
+            parser.add_argument("--json", action="store_true")
+            parser.set_defaults(run=self._recording(name, run))
+
+    def _recording(self, name: str, run: _Run) -> _Run:
+        def wrapped(args: argparse.Namespace, out: TextIO) -> int:
+            self.commands.ran.append((name, args))
+            return run(args, out)
+
+        return wrapped
+
+
+class _FailingSettings(SettingsLoader):
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def load(self, app: object, stack_layer: Callable[[str], StackLayer]) -> Settings:
+        raise self.error
+
+
+def _make(
+    names: tuple[str, ...] = ("status",),
+    *,
+    in_app: bool = True,
+    loader: SettingsLoader | None = None,
+) -> _Wiring:
+    layouts = MockLayouts()
+    if not in_app:
+        layouts.found = None
+    registered = _Registered()
+    for name in names:
+        registered.add(name)
+    return _Wiring(
+        layouts=layouts,
+        formats=MockFormats(),
+        settings_loader=loader or MockSettingsLoader(),
+        commands=registered,
+    )
+
+
+def _calls(wiring: _Wiring, name: str) -> list[tuple[str, tuple[object, ...]]]:
+    return [c for c in wiring.formats.calls if c[0] == name]
+
+
+def test_main_dispatches_to_the_command_and_returns_its_exit_code(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        out.write("hello\n")
+        return 3
+
+    wiring.commands.runs["status"] = run
+
+    code = main(["status"], wiring=wiring)
+
+    assert code == 3
+    assert capsys.readouterr().out == "hello\n"
+
+
+def test_main_passes_the_command_arguments_to_the_command() -> None:
+    wiring = _make()
+
+    main(["status", "next", "--json"], wiring=wiring)
+
+    ((name, args),) = wiring.commands.ran
+    assert name == "status"
+    assert args.rest == ["next"]
+    assert args.json is True
+
+
+def test_main_dispatches_only_the_named_command() -> None:
+    wiring = _make(("status", "gates"))
+
+    main(["gates"], wiring=wiring)
+
+    assert [name for name, _ in wiring.commands.ran] == ["gates"]
+
+
+# --- help and version -------------------------------------------------------------------
+
+
+def test_main_without_arguments_prints_the_command_list(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main([], wiring=_make())
+
+    assert code == 0
+    assert capsys.readouterr().out.strip() == render_help().strip()
+
+
+def test_main_help_prints_the_command_list(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(["help"], wiring=_make())
+
+    assert code == 0
+    assert capsys.readouterr().out.strip() == render_help().strip()
+
+
+def test_main_version_prints_the_version(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(["--version"], wiring=_make())
+
+    assert code == 0
+    assert bull.__version__ in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv", [[], ["help"], ["--version"]])
+def test_help_and_version_do_not_check_formats_or_load_settings(
+    argv: list[str],
+) -> None:
+    wiring = _make()
+
+    main(argv, wiring=wiring)
+
+    assert _calls(wiring, "check") == []
+    assert wiring.settings_loader.calls == []  # type: ignore[attr-defined]
+
+
+# --- the preamble -----------------------------------------------------------------------
+
+
+def test_a_command_in_an_app_first_checks_formats_and_loads_settings() -> None:
+    wiring = _make()
+
+    main(["status"], wiring=wiring)
+
+    assert _calls(wiring, "check") == [("check", (sample_layout(),))]
+    loads = wiring.settings_loader.calls  # type: ignore[attr-defined]
+    assert len(loads) == 1
+    assert loads[0][1][0] == sample_layout()
+    assert [name for name, _ in wiring.commands.ran] == ["status"]
+
+
+@pytest.mark.parametrize("command", ["init", "doctor", "hook", "statusline", "migrate"])
+def test_exempt_commands_skip_the_formats_check_and_settings(command: str) -> None:
+    wiring = _make((command,))
+
+    code = main([command], wiring=wiring)
+
+    assert code == 0
+    assert _calls(wiring, "check") == []
+    assert wiring.settings_loader.calls == []  # type: ignore[attr-defined]
+    assert [name for name, _ in wiring.commands.ran] == [command]
+
+
+def test_a_command_outside_an_app_runs_without_the_formats_check() -> None:
+    wiring = _make(in_app=False)
+
+    code = main(["status"], wiring=wiring)
+
+    assert code == 0
+    assert _calls(wiring, "check") == []
+    assert [name for name, _ in wiring.commands.ran] == ["status"]
+
+
+def test_the_app_is_looked_up_from_the_current_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    wiring = _make()
+
+    main(["status"], wiring=wiring)
+
+    finds = [c for c in wiring.layouts.calls if c[0] == "find"]  # type: ignore[attr-defined]
+    assert finds
+    assert Path(str(finds[0][1][0])).resolve() == tmp_path.resolve()
+
+
+def test_a_formats_failure_stops_the_command_with_the_error_and_exit_1(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+    wiring.formats.found = 0
+
+    code = main(["status"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err.startswith("bull: ")
+    assert "  fix: bull migrate" in captured.err
+    assert captured.out == ""
+    assert wiring.commands.ran == []
+
+
+def test_a_config_error_prints_file_line_key_message_lines_and_exits_1(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    error = ConfigError("settings are invalid")
+    error.problems = [
+        ConfigProblem(
+            Path("/tmp/apps/tally/.bull/config.toml"),
+            3,
+            "pause_5h",
+            "must be an integer",
+        ),
+        ConfigProblem(
+            Path("/tmp/home/.config/bull/config.toml"), 7, "claude.model", "unknown key"
+        ),
+    ]
+    wiring = _make(loader=_FailingSettings(error))
+
+    code = main(["status"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    lines = captured.err.splitlines()
+    assert "/tmp/apps/tally/.bull/config.toml:3: pause_5h: must be an integer" in lines
+    assert "/tmp/home/.config/bull/config.toml:7: claude.model: unknown key" in lines
+    assert captured.out == ""
+    assert wiring.commands.ran == []
+
+
+# --- errors -----------------------------------------------------------------------------
+
+
+def test_a_bull_error_prints_message_and_fix_on_stderr_and_exits_1(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        raise BullError("the thing broke", "do the other thing")
+
+    wiring.commands.runs["status"] = run
+
+    code = main(["status"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == "bull: the thing broke\n  fix: do the other thing\n"
+    assert captured.out == ""
+
+
+def test_any_other_exception_prints_a_summary_and_please_report_this_and_exits_70(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        raise RuntimeError("kaboom")
+
+    wiring.commands.runs["status"] = run
+
+    code = main(["status"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 70
+    assert "kaboom" in captured.err
+    assert "please report this" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+# --- hooks and the status line never fail the session -----------------------------------
+
+
+@pytest.mark.parametrize("error", [BullError("denied", "fix it"), RuntimeError("boom")])
+def test_a_failing_hook_command_exits_0_with_details_on_stderr(
+    error: Exception, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wiring = _make(("hook",))
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        raise error
+
+    wiring.commands.runs["hook"] = run
+
+    code = main(["hook", "before-shell"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == ""
+    assert str(error) in captured.err
+
+
+@pytest.mark.parametrize("error", [BullError("denied", "fix it"), RuntimeError("boom")])
+def test_a_failing_statusline_command_prints_a_plain_line_and_exits_0(
+    error: Exception, capsys: pytest.CaptureFixture[str]
+) -> None:
+    wiring = _make(("statusline",))
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        raise error
+
+    wiring.commands.runs["statusline"] = run
+
+    code = main(["statusline"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == "bull\n"
+    assert str(error) in captured.err
+
+
+# --- --json -----------------------------------------------------------------------------
+
+
+def test_json_output_is_the_only_thing_on_stdout(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+
+    def run(args: argparse.Namespace, out: TextIO) -> int:
+        out.write(json.dumps({"ok": True}) + "\n")
+        return 0
+
+    wiring.commands.runs["status"] = run
+
+    code = main(["status", "--json"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert json.loads(captured.out) == {"ok": True}
+
+
+def test_json_output_stays_clean_when_the_command_is_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    wiring = _make()
+    wiring.formats.found = 0
+
+    code = main(["status", "--json"], wiring=wiring)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err != ""
