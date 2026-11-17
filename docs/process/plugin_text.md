@@ -309,8 +309,12 @@ Modules as folders, no-dependency first; `Files:` in build order split into unit
 journeys need plus cheap obvious complements; copy later features and out-of-scope into the memo.
 **Rewrite of an existing tool** (new): when the app replaces an old one whose tests are kept as
 reference (`reference_dir`), give each module a `Reference tests:` line and list unmapped old tests
-under `## Unmapped reference tests` with a reason. Readiness list reported ✅/❌ (v1's eight items, with
-"Screen list and navigation flow" reading "Screens (or command surface) and navigation"). Revise until
+under `## Unmapped reference tests` with a reason. Readiness list reported ✅/❌, v1's eight items: purpose and all core journeys written down;
+screens (or command surface) and navigation flow known; every module has a purpose, dependencies
+and a draft protocol; data models defined with fields and types; build order set; persistence,
+networking and third-party choices made; out-of-scope items listed; final test: could an agent
+build any one module from the memo alone? (answered by checking one module's block against its
+dependencies' protocols). Revise until
 approved. On approval: `bull status init-modules` (check output; it refuses memo problems with line
 numbers), commit `docs: outline approved`, `git tag outline-approved`, `bull status checkpoint
 outline-approved`; tell the human to run `/bull:setup`.
