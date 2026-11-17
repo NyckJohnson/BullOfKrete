@@ -24,6 +24,7 @@ class LivePluginText(PluginText):
         self._root = root if root is not None else Path(__file__).parent
 
     def files(self) -> list[PluginFile]:
+        self._require_orchestrator()
         return [PluginFile(rel, self._read(rel)) for rel in self._paths()]
 
     def agents(self) -> list[AgentDoc]:
@@ -34,12 +35,16 @@ class LivePluginText(PluginText):
         return docs
 
     def orchestrator(self) -> str:
+        self._require_orchestrator()
+        return self._read(_ORCHESTRATOR)
+
+    def _require_orchestrator(self) -> None:
+        """Raises `BullError` naming `orchestrator.md` when it is missing from the root."""
         if not (self._root / _ORCHESTRATOR).is_file():
             raise BullError(
                 f"{_ORCHESTRATOR} is missing from the plugin folder {self._root}",
                 "Reinstall bull so the plugin files are complete.",
             )
-        return self._read(_ORCHESTRATOR)
 
     def _paths(self) -> list[str]:
         """Plugin file paths, POSIX and relative to the root, sorted."""
