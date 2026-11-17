@@ -416,6 +416,27 @@ def test_adopt_stage_6_finish_comes_before_the_merge_into_the_trunk() -> None:
     )
 
 
+def test_adopt_stage_6_runs_adopt_legacy_just_before_finish() -> None:
+    in_order("adopt", "bull adopt legacy", "bull adopt finish")
+
+
+def test_adopt_stage_6_removes_legacy_lines_before_finish_keeping_app_shell() -> None:
+    in_order(
+        "adopt",
+        "legacy files:",
+        "legacy tests:",
+        "callers to repoint:",
+        "app shell:",
+        "app shell tests:",
+        "bull adopt finish",
+    )
+    has_all("adopt", "until bull adopt finish has succeeded")
+
+
+def test_adopt_stage_6_removes_the_rest_of_legacy_code_after_finish() -> None:
+    in_order("adopt", "bull adopt finish", "## legacy code", "follow-up commit")
+
+
 def test_adopt_stage_6_adopted_tag_is_unprefixed_and_after_the_merge() -> None:
     in_order("adopt", "git merge --no-ff adopt/main", "git tag adopted")
 
@@ -489,6 +510,20 @@ def test_resume_sends_a_stack_repo_to_the_stack_command() -> None:
     has_all("resume", "stack", "/bull:stack")
 
 
+def test_resume_handles_the_stack_repo_before_the_usage_check() -> None:
+    in_order(
+        "resume",
+        "stack repo",
+        "bull status next",
+        "/bull:stack",
+        "bull status usage-check",
+    )
+
+
+def test_resume_keeps_the_usage_check_for_apps() -> None:
+    has_all("resume", "bull status usage-check", "app")
+
+
 # --- status ------------------------------------------------------------------------------
 
 
@@ -516,6 +551,10 @@ def test_status_in_a_stack_repo_reports_stage_checkpoints_and_next_step() -> Non
     has_all("status", "stack repo", "checkpoints")
 
 
+def test_status_skips_the_usage_check_in_a_stack_repo() -> None:
+    has_all("status", "stack repo", "usage-check", "skip")
+
+
 # --- stack: refusal and rules ------------------------------------------------------------
 
 
@@ -527,8 +566,19 @@ def test_stack_refusal_is_the_first_step() -> None:
     in_order("stack", "bull status", "bull init --stack", "bull open")
 
 
-def test_stack_checks_usage_before_every_step_and_commits_after() -> None:
-    has_all("stack", "bull status usage-check", "commit after every step")
+def test_stack_commits_after_every_step() -> None:
+    has_all("stack", "commit after every step")
+
+
+def test_stack_says_usage_check_pause_and_resume_are_not_available_in_a_stack_repo() -> (
+    None
+):
+    has_all("stack", "usage-check", "pause", "resume", "not available", "stack repo")
+
+
+@pytest.mark.parametrize("word", ["usage-check", "pause", "resume", "plan", "tick"])
+def test_stack_never_runs_a_status_command_that_a_stack_repo_lacks(word: str) -> None:
+    assert f"bull status {word}" not in _norm(_body("stack"))
 
 
 def test_stack_stages_and_checkpoints_go_through_bull_status() -> None:
@@ -602,6 +652,30 @@ def test_stack_static_check_runs_before_the_real_test() -> None:
     in_order("stack", "bull stack test . --static", "bull stack test .")
 
 
+def test_stack_stage_3_commits_before_the_static_run_then_sets_stage_4() -> None:
+    in_order(
+        "stack",
+        "bull status stage 3",
+        "commit",
+        "bull stack test . --static",
+        "bull status stage 4",
+    )
+
+
+def test_stack_stage_4_commits_before_the_full_run_then_sets_stage_5() -> None:
+    in_order(
+        "stack",
+        "bull status stage 4",
+        "commit",
+        "bull stack test .",
+        "bull status stage 5",
+    )
+
+
+def test_stack_says_a_pass_is_recorded_only_on_a_clean_tree() -> None:
+    has_all("stack", "clean tree")
+
+
 def test_stack_stage_4_code_writer_writes_gate_program_and_readers() -> None:
     in_order(
         "stack",
@@ -644,11 +718,15 @@ def test_stack_stage_5_human_reviews_rules_then_rules_checkpoint_and_tag() -> No
 def test_stack_stage_6_runs_full_test_then_accepted_checkpoint_and_tag() -> None:
     in_order(
         "stack",
-        "bull status stage 6",
         "bull stack test .",
         "bull status checkpoint accepted",
+        "bull status stage 6",
         tag_of("accepted"),
     )
+
+
+def test_stack_stage_6_is_set_after_the_accepted_checkpoint() -> None:
+    in_order("stack", "bull status checkpoint accepted", "bull status stage 6")
 
 
 def test_stack_stage_6_tells_the_human_about_install_and_maturity() -> None:
