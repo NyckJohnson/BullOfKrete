@@ -131,9 +131,12 @@ _GIT_OPTIONS_WITH_VALUE = frozenset(
         "--config-env",
     }
 )
-# `git merge` options that take their value as the next word.
+# `git merge` options that take their value as the next word. Options whose value is optional
+# (`--gpg-sign`/`-S`, `--log`) take it attached only (`--gpg-sign=KEY`, `-SKEY`), so the
+# following word stays a ref.
 _MERGE_OPTIONS_WITH_VALUE = frozenset(
     {
+        "--cleanup",
         "-m",
         "-s",
         "-X",
