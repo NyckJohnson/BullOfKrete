@@ -18,8 +18,12 @@ Run `bull status`. It must show a stack repo (kind stack). In an app, or in a fo
 
 ## Rules of the workflow
 
-- Run `bull status usage-check` before every step. On `PAUSE`, follow the orchestrator's rule for a
-  pause and stop.
+- A stack repo's `bull status` has only `next`, `stage`, `checkpoint` and `ref`: usage-check,
+  pause and resume are not available in a stack repo, and there is no plan gauge. Stop at a step
+  boundary if the human asks you to.
+- `bull stack test .` (and `--static`) records a pass only on a clean tree at HEAD. Commit the work
+  before each run, commit each fix and run it again until it passes, and only then set the next
+  stage.
 - Commit after every step. Run each `bull status …` change before that step's commit, and tag after
   the commit.
 - Move through stages and checkpoints only with `bull status stage <n>` and
@@ -70,9 +74,9 @@ Run `bull status`. It must show a stack repo (kind stack). In an app, or in a fo
 2. Brief the **test-writer** with `MODE: stack`: it writes `fixture/` (a tiny one- or two-module app
    in this stack that passes every gate; only files bull can write, no hand-made project files unless
    the language needs them) and `cases.json` with every required case id.
-3. Run `bull stack test . --static` until it passes. It checks the shape only; the gates are not
-   written yet. Each failure goes back to the test-writer.
-4. Commit.
+3. Commit, then run `bull stack test . --static` on the clean tree. It checks the shape only; the
+   gates are not written yet. Each failure goes back to the test-writer; commit each fix and run it
+   again until it passes.
 
 ## 4. Gate code
 
@@ -81,19 +85,20 @@ Run `bull status`. It must show a stack repo (kind stack). In an app, or in a fo
    lists run, `readers.py` (`contract_declarations`, `test_results`, `uncovered`, `check`; and, as
    the design says, `detect`, `inventory`, `legacy_declarations`, `interface_check`), and
    `setup.md`, in this language's own idioms.
-3. Run `bull stack test .`, which uses the real toolchain, until every case gives its expected
-   verdict. A case that reports "not run" fails too: install what it names, with the human.
+3. Commit, then run `bull stack test .`, which uses the real toolchain, on the clean tree until
+   every case gives its expected verdict. A case that reports "not run" fails too: install what it
+   names, with the human.
 4. Failures go back to the code-writer, with attempts and blocked questions handled as in Stage 5.
-5. Commit.
+   Commit each fix and run the test again.
 
 ## 5. Review
 
-1. Run `bull status stage 5`. It needs a full test pass.
+1. Run `bull status stage 5`. It needs a full test pass at HEAD.
 2. Brief the **code-writer** with `MODE: stack` to write `rules.md` from the approved design:
    `## common`, then one `## <agent>` per entry in `agents`, then `## outline`.
 3. Brief the **reviewer** with `SCOPE: stack`: it reviews the whole stack folder against the
-   **Stack files** spec and `DESIGN.md`. Findings go back to the code-writer (attempts count). Run
-   `bull stack test .` again after any change.
+   **Stack files** spec and `DESIGN.md`. Findings go back to the code-writer (attempts count). After
+   any change, commit and run `bull stack test .` again on the clean tree.
 4. ✋ Ask the human to review `rules.md` themselves: these rules shape every line the agents write.
    Revise until they approve. Then:
    1. Run `bull status checkpoint rules-approved`.
@@ -102,12 +107,11 @@ Run `bull status`. It must show a stack repo (kind stack). In an app, or in a fo
 
 ## 6. Accept
 
-1. Run `bull status stage 6`.
-2. Run `bull stack test .` on a clean tree. Every case must pass.
-3. Run `bull status checkpoint accepted`.
-4. Commit.
-5. Tag with `git tag $(bull status ref tag accepted)`.
-6. Tell the human: `bull stack install <path>` makes the stack selectable, as `experimental`. It
+1. Commit, then run `bull stack test .` on the clean tree. Every case must pass.
+2. Run `bull status checkpoint accepted`, then `bull status stage 6`.
+3. Commit.
+4. Tag with `git tag $(bull status ref tag accepted)`.
+5. Tell the human: `bull stack install <path>` makes the stack selectable, as `experimental`. It
    becomes `verified` after one real app is accepted with it.
 
 ## Stack files
@@ -211,14 +215,14 @@ programs written as scripts it can run), `{stack_dir}` (this folder, installed),
 **Results:** a step passes on exit 0; any other exit fails it. Each stdout line
 `bull-fail: <label>` adds a failure label to the step. Exit 2 from `preflight` aborts the whole
 run. With `BULL_ADOPT_MODE=1`, legacy code only has to build and pass its tests, while module code
-keeps the full standard. Warnings in module code fail the build.
+keeps the full standard. The `build-warning` case checks that a warning in module code fails the
+build.
 
 ### readers.py
 
 Functions bull imports, loaded with its own interpreter as a package, so the file may import
 sibling files relatively and import bull's stacks contracts from `bull.Modules.stacks.Contracts`
-(`TestRun`, `CoverageData`, `CheckItem`, `Detection`, `Issue`, `IssueLevel`, `Role`). They read
-files; they never build or run tests.
+(`TestRun`, `CoverageData`, `CheckItem`, `Detection`, `Issue`, `IssueLevel`, `Role`).
 
 Required:
 

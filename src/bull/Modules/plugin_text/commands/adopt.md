@@ -17,6 +17,8 @@ Rules for every step:
   pause and stop.
 - Commit after every step. Run each `bull status …` change before that step's commit, and tag after
   the commit.
+- `bull status stage <n>` refuses when a checkpoint is missing. Tell the human which one: stage 3
+  needs `outline-approved` and `setup`, stage 4 `baseline`, stage 5 `scaffold`.
 - Take every branch and tag name from `bull status ref`: during an adoption they are prefixed
   `adopt/`. Tag a checkpoint with `git tag $(bull status ref tag <checkpoint>)`.
 - Keep everything in files: the discussion in `docs/discussion-notes.md`, the detection report and
@@ -190,16 +192,21 @@ From here the gates are the normal, strict ones.
 5. **Journey tests.** Run `bull gates --journeys`. Tick each journey as its test passes, and commit.
 6. **app-review**, **fixes** and **hands-on**: run them as `/bull:verify` steps 6 to 8 describe.
    Do not run its acceptance or backlog steps; steps 8 and 9 below replace them.
-7. **Clean the memo.** Remove the `Legacy files:`, `Legacy tests:` and `Callers to repoint:` lines
-   and the `## Legacy code` section. Keep `## Known issues` only for items still open. Add a
-   decisions-log line saying the adoption is complete. Commit.
+7. **Clean the memo.** Remove the `Legacy files:`, `Legacy tests:`, `Callers to repoint:`,
+   `Legacy folders:` and `Renames:` lines. Keep the `App shell:` and `App shell tests:` lines until
+   `bull adopt finish` has succeeded: finish reads them. Keep `## Known issues` only for items still
+   open. Add a decisions-log line saying the adoption is complete. Commit.
 8. On the human's acceptance:
    1. Tick `hands-on`.
-   2. Run `bull adopt finish`. It records the end of the adoption and commits
-      `chore: adoption finished` by itself.
-   3. Run `bull gates --all` on `adopt/main`. All must pass.
-   4. Run `git switch <trunk>`, then `git merge --no-ff adopt/main`.
-   5. Run `git tag adopted`. The tag is written out: the adoption has ended, so `bull status ref` no
+   2. Run `bull adopt legacy` just before finishing; it must still print "Nothing left to replace.".
+   3. Run `bull adopt finish`. It is refused while `bull adopt legacy` lists anything. It records the
+      end of the adoption and commits `chore: adoption finished` by itself.
+   4. Remove the rest of the memo's `## Legacy code` section, with the `App shell:` and
+      `App shell tests:` lines, in a follow-up commit.
+   5. Run `bull gates --all` on `adopt/main`. All must pass: the merge guard needs a recorded pass
+      for `adopt/main`'s head before the merge.
+   6. Run `git switch <trunk>`, then `git merge --no-ff adopt/main`.
+   7. Run `git tag adopted`. The tag is written out: the adoption has ended, so `bull status ref` no
       longer gives the `adopt/` prefix.
 9. **backlog.** Show the queue with `bull feature list`; the features queued during the adoption go
    first. Help the human order it with `bull feature move <slug> <pos>`. Tick `backlog`, run

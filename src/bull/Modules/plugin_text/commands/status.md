@@ -6,7 +6,8 @@ description: "Show pipeline progress and plan usage"
 
 Report where the pipeline stands, in a few lines. Change nothing.
 
-1. Run `bull status` and `bull status usage-check`.
+1. Run `bull status` and, in an app, `bull status usage-check` (skip it in a stack repo, which has
+   no usage check).
 2. Report in a few lines:
    - the stage, and the last checkpoint reached;
    - modules done/total (and units, from stage 5 on);
@@ -19,4 +20,4 @@ Report where the pipeline stands, in a few lines. Change nothing.
    - **a backlog**: how many features are queued and the first one, from `bull feature list`.
 
 In a stack repo, `bull status` reports the stack instead: give its stage, the checkpoints it has
-reached, and its next step.
+reached, and its next step. Skip the plan usage line there.
