@@ -86,9 +86,8 @@ def test_status_loads_the_repo_at_the_root_and_prints_name_and_stage(
     code, out = _run(workflow, tmp_path, ["status"])
     assert code == 0
     assert _calls(workflow, "load") == [(tmp_path,)]
-    assert "go_cli" in out
-    assert "1" in out
-    assert "discuss" in out.lower()
+    assert "stack: go_cli\n" in out
+    assert "stage: 1 (discuss)\n" in out
 
 
 def test_status_prints_checkpoints_and_passes(tmp_path: Path) -> None:
@@ -102,9 +101,36 @@ def test_status_prints_checkpoints_and_passes(tmp_path: Path) -> None:
         test_pass=None,
     )
     _, out = _run(workflow, tmp_path, ["status"])
-    assert "design-approved" in out
-    assert "abc1234" in out
-    assert "4" in out
+    assert out == (
+        "stack: go_cli\n"
+        "stage: 4 (gate-code)\n"
+        "checkpoints: design-approved\n"
+        "static pass: abc1234\n"
+        "test pass: none\n"
+    )
+
+
+def test_status_renders_unset_passes_and_empty_checkpoints_as_none(
+    tmp_path: Path,
+) -> None:
+    _, out = _run(MockStackWorkflow(), tmp_path, ["status"])
+    assert "checkpoints: none\n" in out
+    assert "static pass: none\n" in out
+    assert "test pass: none\n" in out
+
+
+def test_status_lists_several_checkpoints_comma_separated(tmp_path: Path) -> None:
+    workflow = MockStackWorkflow()
+    workflow.status = StackRepoStatus(
+        format=1,
+        name="go_cli",
+        stage=StackStage.FIXTURE,
+        checkpoints=("a", "b"),
+        static_pass=None,
+        test_pass=None,
+    )
+    _, out = _run(workflow, tmp_path, ["status"])
+    assert "checkpoints: a, b\n" in out
 
 
 def test_status_json_writes_json_only(tmp_path: Path) -> None:
@@ -121,8 +147,31 @@ def test_status_json_writes_json_only(tmp_path: Path) -> None:
     data = json.loads(out)
     assert code == 0
     assert isinstance(data, dict)
-    assert "go_cli" in json.dumps(data)
-    assert "design-approved" in json.dumps(data)
+    assert data["name"] == "go_cli"
+    assert data["stage"] == 3
+    assert data["stage_name"] == "fixture"
+    assert data["checkpoints"] == ["design-approved"]
+    assert data["static_pass"] is None
+    assert data["test_pass"] is None
+
+
+def test_status_json_carries_the_pass_values(tmp_path: Path) -> None:
+    workflow = MockStackWorkflow()
+    workflow.status = StackRepoStatus(
+        format=1,
+        name="go_cli",
+        stage=StackStage.GATE_CODE,
+        checkpoints=(),
+        static_pass="abc1234",
+        test_pass="def5678",
+    )
+    _, out = _run(workflow, tmp_path, ["status", "--json"])
+    data = json.loads(out)
+    assert data["stage"] == 4
+    assert data["stage_name"] == "gate-code"
+    assert data["checkpoints"] == []
+    assert data["static_pass"] == "abc1234"
+    assert data["test_pass"] == "def5678"
 
 
 def test_status_next_prints_the_next_step(tmp_path: Path) -> None:
@@ -139,7 +188,7 @@ def test_status_stage_sets_the_stage_and_prints_the_result(tmp_path: Path) -> No
     assert code == 0
     assert _calls(workflow, "set_stage") == [(tmp_path, 3)]
     assert workflow.status.stage is StackStage.FIXTURE
-    assert "3" in out
+    assert out == "stage: 3 (fixture)\n"
 
 
 def test_status_checkpoint_records_the_checkpoint_and_prints_the_result(
@@ -149,7 +198,7 @@ def test_status_checkpoint_records_the_checkpoint_and_prints_the_result(
     code, out = _run(workflow, tmp_path, ["status", "checkpoint", "design-approved"])
     assert code == 0
     assert _calls(workflow, "checkpoint") == [(tmp_path, "design-approved")]
-    assert "design-approved" in out
+    assert out == "checkpoints: design-approved\n"
 
 
 @pytest.mark.parametrize("kind", ["branch", "tag"])

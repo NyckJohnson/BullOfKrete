@@ -9,7 +9,7 @@ import pytest
 from bull.Modules.stackflow.install import LiveStackInstaller, check_static
 from bull.Modules.stacks.Contracts import Maturity, Stack, StackError
 from bull.Modules.stacks.mocks import MockStackRegistry
-from bull.Modules.stacktest.Contracts import StackTestReport
+from bull.Modules.stacktest.Contracts import CaseResult, CaseVerdict, StackTestReport
 from bull.Modules.stacktest.mocks import MockStackTester
 
 
@@ -74,5 +74,34 @@ def test_a_load_error_from_the_registry_propagates(tmp_path: Path) -> None:
 
     tester, registry = MockStackTester(), BrokenRegistry()
     with pytest.raises(StackError, match="not valid"):
+        LiveStackInstaller(tester, registry).install(tmp_path / "mystack")
+    assert "install" not in _names(registry.calls)
+
+
+def test_the_static_check_runs_before_registry_install(tmp_path: Path) -> None:
+    order: list[str] = []
+
+    class OrderTester(MockStackTester):
+        def static(self, stack: Stack) -> StackTestReport:
+            order.append("static")
+            return super().static(stack)
+
+    class OrderRegistry(MockStackRegistry):
+        def install(self, path: Path) -> Stack:
+            order.append("install")
+            return super().install(path)
+
+    LiveStackInstaller(OrderTester(), OrderRegistry()).install(tmp_path / "mystack")
+    assert order == ["static", "install"]
+
+
+def test_a_not_ok_report_without_problems_refuses_with_the_fallback_message(
+    tmp_path: Path,
+) -> None:
+    tester, registry = MockStackTester(), MockStackRegistry()
+    tester.report = StackTestReport(
+        "mystack", True, (), (CaseResult("c", CaseVerdict.FAIL, "pass", "fail"),)
+    )
+    with pytest.raises(StackError, match="the static self-test did not pass"):
         LiveStackInstaller(tester, registry).install(tmp_path / "mystack")
     assert "install" not in _names(registry.calls)
