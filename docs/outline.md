@@ -1929,7 +1929,8 @@ when `readers.py` defines `detect`.
     name is invalid, `_template`, or a built-in stack's name; creates the folder, `git init`,
     `stack.toml` from the template with `name` filled and `TODO` placeholders, `DESIGN.md`,
     `.bull/status.json` `{format: 1, kind: "stack", name, stage: 1, checkpoints: []}`,
-    `.gitignore`, `CLAUDE.md`/provider files as `appinit` does, commits `chore: bull init --stack`.
+    `.gitignore`, commits `chore: bull init --stack`. It writes no provider files (`CLAUDE.md`,
+    settings): `appinit` does that after calling it.
   - Stage rules: 2 needs `design-approved`; 4 needs a static pass at HEAD; 5 needs a full test pass
     recorded; checkpoint `rules-approved` needs stage 5; `accepted` needs `rules-approved` and a full
     test pass at HEAD on a clean tree; checkpoints: `design-approved`, `rules-approved`,
@@ -2135,7 +2136,8 @@ when `readers.py` defines `detect`.
     must be a git repo root on a clean tree; adds `.bull/` and the files above, commits, then
     `adoption.detect` (prints the report; blocked → stops there, exit 1), `apply`, commit,
     `adoption.start`.
-  - `--stack` → `stackflow.init`.
+  - `--stack` → `stackflow.init`, then writes the provider's app files and commits them
+    (`chore: bull init --stack provider files`).
   - open_argv(path): path must be a bull app or stack repo; checks formats; renders the plugin into
     `.bull/plugin/`; returns the provider's launch argv. CLI: prints it with `--print-command`,
     otherwise replaces the process with it (`os.execvp`).
@@ -2381,3 +2383,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-12: stacktest unit 3 review — the runner runs `git` itself in its throwaway folders (fixed identity, `--no-verify`, `--initial-branch=main`; `GIT_DIR`/`GIT_WORK_TREE` and other `GIT_*` repo-location variables removed from the child env), so stacktest uses nothing from gitrepo; bull's and git's output are decoded with `errors="replace"`; no timeout on bull; `--static` with `--case` → `StackError`. Internal behavior, no contract change.
 - 2026-11-12: stacktest reference scan (covered 9, missed 1, contradicts 2, not-in-spec 3, obsolete 2) — human: a report with NOT_RUN cases exits 1 like any not-ok report (spec; v1 exited 3); an empty `fixture/` is a static problem (v1); render ends with "N passed, N failed, N not run" (v1) and a missing tool's NOT_RUN reason carries the requirement's hint (v1); the failing run's raw output is not echoed (v1 did). Missed: an unknown `--case` id → `StackError` — approved by Nicholas Johnson
 - 2026-11-12: stacktest coverage triage (missed 10, exempt 3, not-in-spec 3) — human kept and specified all three: a malformed `layout`/`settings` in cases.json → `StackError`; an unknown `expect` key fails the case; a required reader bound by a top-level assignment counts as defined in the static check — approved by Nicholas Johnson
+- 2026-11-16: `bull init --stack`: stackflow.init creates the stack repo without provider files; appinit's `--stack` path writes them (stackflow can't depend on claude_code) — approved by Nicholas Johnson
