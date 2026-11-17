@@ -720,7 +720,7 @@
             "commands/status.md",
             "commands/stack.md"
           ],
-          "state": "tests",
+          "state": "code",
           "attempts": 0
         },
         {
@@ -1062,7 +1062,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-16T23:12:15-08:00",
+  "updatedAt": "2026-11-16T23:15:58-08:00",
   "features": [],
   "activeFeature": null
 }
