@@ -6,12 +6,14 @@ import json
 import shutil
 import tempfile
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
-from bull.Modules.claude_code import launch
+from bull.Modules.claude_code import app_files as _app_files
+from bull.Modules.claude_code import hook_io, launch
 from bull.Modules.claude_code.Contracts import HookOutput, Provider, StatusLineInput
 from bull.Modules.claude_code.hooks_json import hooks_json
-from bull.Modules.foundation.Contracts import AppLayout
+from bull.Modules.foundation.Contracts import AppLayout, Clock
 from bull.Modules.hooks.Contracts import HookDecision, HookEvent, HookKind
 from bull.Modules.plugin_text.Contracts import PluginText
 from bull.Modules.settings.Contracts import Settings
@@ -23,11 +25,15 @@ _FENCE = "---"
 
 
 class LiveProvider(Provider):
-    """Claude Code as bull's provider; plugin text comes from `plugin_text`."""
+    """Claude Code as bull's provider; plugin text comes from `plugin_text`.
 
-    def __init__(self, plugin_text: PluginText) -> None:
+    `clock` dates the status line's usage samples; system time when None.
+    """
+
+    def __init__(self, plugin_text: PluginText, clock: Clock | None = None) -> None:
         self.name = "claude"
         self._text = plugin_text
+        self._clock = clock
 
     def render_plugin(self, dest: Path, settings: Settings, version: str) -> Path:
         """Render the whole plugin into `dest`, replacing whatever was there.
@@ -77,16 +83,17 @@ class LiveProvider(Provider):
         return launch.tool_check()
 
     def parse_hook(self, kind: HookKind, raw: str) -> HookEvent:
-        raise NotImplementedError(f"{type(self).__name__}.parse_hook")
+        return hook_io.parse_hook(kind, raw)
 
     def hook_output(self, kind: HookKind, decision: HookDecision) -> HookOutput:
-        raise NotImplementedError(f"{type(self).__name__}.hook_output")
+        return hook_io.hook_output(kind, decision)
 
     def parse_statusline(self, raw: str) -> StatusLineInput:
-        raise NotImplementedError(f"{type(self).__name__}.parse_statusline")
+        now = self._clock.now() if self._clock is not None else datetime.now(UTC)
+        return hook_io.parse_statusline(raw, now)
 
     def app_files(self, app: AppLayout) -> dict[Path, str]:
-        raise NotImplementedError(f"{type(self).__name__}.app_files")
+        return _app_files.app_files(app)
 
 
 def _relative(path: str) -> PurePosixPath:
