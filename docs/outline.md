@@ -2346,7 +2346,7 @@ when `readers.py` defines `detect`.
     no warnings-as-errors; any warning in `Modules/` or a module test folder fails the build);
     build-test runs the unit test target only (`BULL_SCOPE_MODULE` → `-only-testing` that module's
     suites); build-test-fast `-only-testing` the module's suites (found by `struct|class <X>Tests` or
-    `@Suite`); a "simulator busy" failure retries the run, at most 3 attempts; xcodebuild output goes
+    `@Suite`, with attributes before the type on the same line or the lines above); a "simulator busy" failure retries the run, at most 3 attempts; xcodebuild output goes
     to a log, with known launch noise filtered from the shown tail (kept in the log); test
     diagnostics collected only when a run fails; journeys run the UI test target with screenshots
     kept only for failures; `prune` command deletes `.bull/build/` and old result bundles.
@@ -2356,8 +2356,10 @@ when `readers.py` defines `detect`.
     their public members, multi-line signatures joined); `legacy_declarations` = `Legacy…` types.
   - pbxproj.py, detect.py, inventory.py: parse `.pbxproj` (quotes, comments, target settings falling
     back to project settings, malformed input raises); detect the project, schemes, Swift version,
-    synchronized folders vs groups, test targets, unsupported dependencies (`Podfile`, `Cartfile`,
-    extra projects in a workspace → block); inventory of types and references.
+    synchronized folders vs groups, test targets, Default Actor Isolation = MainActor (fix),
+    unsupported dependencies (`Podfile`, `Cartfile`, extra projects in a workspace, Objective-C
+    sources `.m`/`.mm` → block); notes for UIKit files and a missing `-uiTesting` launch option; the
+    summary counts the Swift files; inventory of types and references.
   - readers.check: Xcode present, project and scheme exist, Swift 6 (Swift 5 allowed only while
     adopting), test targets include their folders, synchronized folders (groups fail), no nested git
     repos.
@@ -2504,3 +2506,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-18: stack_ios unit 5 review — clarifications to the source note's text: the code-writer rules also format and lint their source files before reporting (the lint gate checks source and tests); the adoption bullet says "complete strict concurrency checking" (what the adopt-mode build sets), not "Swift 6 rules"; fast-gate discovery names `enum` too; setup names the build-setting keys `SWIFT_VERSION` and `SWIFT_DEFAULT_ACTOR_ISOLATION` beside Xcode's labels. No change of intent.
 - 2026-11-18: stack_ios source note §5.4 correction — the `uncovered` case expects the coverage gate's own label "coverage not clean for Counter" (bull's coverage step names the module, not files; the other stacks' cases expect the same). Clarification, no change of intent.
 - 2026-11-18: stack_ios unit 6 real self-test (first run on Xcode 26.6) — four gate fixes in gates.py: before each xcodebuild run `.bull/build/.gitignore` (`*`) is written so build output never dirties the tree (a dirty tree blocks the pass record); preflight boots the chosen simulator (`xcrun simctl bootstatus <udid> -b`; a failed boot exits 2 naming `simulator`), since a shut-down simulator fails the test host's launch; setup also requires `xcshareddata/xcschemes/<scheme>.xcscheme` (`bull-fail: Shared scheme <scheme> exists`), since xcodebuild silently autocreates a missing scheme; XCTest assertion lines (`file:line: error: -[Suite test] …`) are not compile errors, so a failed journey is labelled `test <Suite>/<test>()`. Internal behavior, no contract change.
+- 2026-11-18: stack_ios reference scan (covered 20, missed 1, contradicts 0, not-in-spec 4, obsolete 0) — human: detect adds NOTE items for UIKit files and a missing `-uiTesting` launch option and counts the Swift files in its summary; detect gives a FIX for Default Actor Isolation = MainActor; Objective-C sources (`.m`/`.mm`) BLOCK an adoption; the inventory's v1 extras (extensions, skipping `Modules/`, "used by N", line counts, UIKit flag, test folder) are dropped (the inventory reader stays unused in v2.0). Missed: fast-gate suite discovery finds a suite whose attributes sit on the same line as the type (`@Suite(...) struct …`, `@MainActor final class …Tests`). Internal behavior, no contract change — approved by Nicholas Johnson
