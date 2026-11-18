@@ -1018,7 +1018,7 @@
             "ios/swift_scan.py",
             "ios/pbxproj.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 2
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T08:01:18-08:00",
+  "updatedAt": "2026-11-18T08:01:57-08:00",
   "features": [],
   "activeFeature": null
 }
