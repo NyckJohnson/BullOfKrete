@@ -82,6 +82,7 @@ order: `## common`, `## outline`, then one per agent in `stack.toml`'s `agents`:
   property with the matching type: `string` → `str`, `integer` → `int`, `number` → `float`,
   `boolean` → `bool`, `array` → `list[...]`; a property not in `required` is `X | None`. `bull
   gates` checks both sides against the schema file.
+  A mock for a consumed interface returns instances of that dataclass filled with sample values.
 
 ### 2.2 outline
 - Protocols in the memo are Python, fenced ```` ```python ````, `typing.Protocol` subclasses.

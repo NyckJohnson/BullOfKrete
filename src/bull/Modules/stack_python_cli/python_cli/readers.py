@@ -18,6 +18,7 @@ from pathlib import Path
 
 from bull.Modules.stacks.Contracts import CheckItem, CoverageData, Role, TestRun
 
+from . import schema_check
 from .gates import (
     DEFAULT_PACKAGE,
     IMPORT_BY_ARGUMENT,
@@ -333,4 +334,14 @@ def interface_check(
     role: Role,
     module: str,
 ) -> list[CheckItem]:
-    raise NotImplementedError("readers.interface_check")
+    """One side's interface check (json-schema), done by `schema_check.py`.
+
+    The contract read is `<part_root>/<source_dir>/Modules/<module>/Contracts/__init__.py`
+    (`source_dir` falls back to `src/<package>`). Failing items name the role in lowercase
+    (`provider`/`consumer`) and the field at fault; bad input gives failing items, never raises.
+    """
+    package = _setting(settings, "package") or DEFAULT_PACKAGE
+    source_dir = _setting(settings, "source_dir") or f"src/{package}"
+    contract = part_root / source_dir / "Modules" / module / "Contracts" / "__init__.py"
+    findings = schema_check.check(contract, interface, format, role.name.lower())
+    return [CheckItem(ok=f.ok, item=f.item, fix=f.fix) for f in findings]
