@@ -329,3 +329,16 @@ def test_every_failing_item_has_a_non_empty_fix(
     failing = [i for i in items if not i.ok]
     assert len(failing) >= 4
     assert all(i.fix.strip() for i in failing)
+
+
+def test_check_turns_a_deeply_nested_project_file_into_a_failing_item(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_xcodebuild(tmp_path / "bin", monkeypatch)
+    root = tmp_path / "part"
+    root.mkdir()
+    depth = 5000
+    _make_part(root, pbx="{ a = " * depth + "x; " + "}; " * (depth - 1) + "}")
+    items = _run(root)
+    assert all(isinstance(i, CheckItem) for i in items)
+    _assert_fails_with_fix(items, "project", "pbxproj", "parse")

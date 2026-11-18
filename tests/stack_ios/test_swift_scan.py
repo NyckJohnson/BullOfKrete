@@ -341,3 +341,142 @@ def test_readers_legacy_declarations_delegates_to_the_scanner(
 ) -> None:
     _write(tmp_path, "A.swift", f"{keyword} LegacyX {{}}\n")
     assert readers.legacy_declarations(tmp_path) == ["LegacyX"]
+
+
+# --- declarations wrapped after a trailing token -------------------------------------------
+
+_MEMBERS = "    public let x: Int\n    func go() -> Int { 1 }\n"
+
+
+def _same_when_wrapped(tmp_path: Path, single: str, wrapped: str) -> list[str]:
+    one = _decls(tmp_path, single, "One.swift")
+    many = _decls(tmp_path, wrapped, "Many.swift")
+    assert one, "single-line form produced nothing"
+    assert many == one
+    return many
+
+
+@pytest.mark.parametrize(
+    ("single", "wrapped", "name"),
+    [
+        (
+            "public struct Foo: Equatable, Sendable {\n",
+            "public struct Foo: Equatable,\n    Sendable {\n",
+            "Foo",
+        ),
+        (
+            "public struct Bar: Equatable {\n",
+            "public struct Bar:\n    Equatable {\n",
+            "Bar",
+        ),
+        (
+            "public struct Baz<T> where T: Hashable, T: Sendable {\n",
+            "public struct Baz<T> where T: Hashable,\n    T: Sendable {\n",
+            "Baz",
+        ),
+        (
+            "public struct Qux<T> where T: Hashable {\n",
+            "public struct Qux<T> where\n    T: Hashable {\n",
+            "Qux",
+        ),
+        (
+            "public struct Amp: Equatable & Sendable {\n",
+            "public struct Amp: Equatable &\n    Sendable {\n",
+            "Amp",
+        ),
+    ],
+)
+def test_type_header_wrapped_after_a_trailing_token_matches_single_line(
+    tmp_path: Path, single: str, wrapped: str, name: str
+) -> None:
+    out = _same_when_wrapped(
+        tmp_path, single + _MEMBERS + "}\n", wrapped + _MEMBERS + "}\n"
+    )
+    assert _has(out, rf"struct {name}\b")
+    assert _has(out, r"let x: Int")
+    assert _has(out, r"func go\(\) -> Int")
+
+
+def test_members_after_a_wrapped_type_header_are_still_listed(tmp_path: Path) -> None:
+    out = _decls(
+        tmp_path,
+        "public struct Foo: Equatable,\n    Sendable {\n    public let kept: Int\n}\n",
+    )
+    assert _has(out, r"struct Foo")
+    assert _has(out, r"let kept: Int")
+
+
+def test_protocol_member_wrapped_after_arrow_matches_single_line(
+    tmp_path: Path,
+) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        "public protocol P {\n    func f() -> Int\n    func g()\n}\n",
+        "public protocol P {\n    func f() ->\n        Int\n    func g()\n}\n",
+    )
+    assert _has(out, r"func f\(\) -> Int")
+    assert _has(out, r"func g\(\)")
+
+
+def test_protocol_member_wrapped_after_comma_matches_single_line(
+    tmp_path: Path,
+) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        "public protocol P {\n    func f(a: Int, b: Int) -> Int\n}\n",
+        "public protocol P {\n    func f(a: Int,\n        b: Int) -> Int\n}\n",
+    )
+    assert _has(out, r"func f\(a: Int, b: Int\) -> Int")
+
+
+@pytest.mark.parametrize("keyword", ["throws", "async", "rethrows"])
+def test_protocol_member_wrapped_after_effect_keyword_matches_single_line(
+    tmp_path: Path, keyword: str
+) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        f"public protocol P {{\n    func f() {keyword} -> Int\n}}\n",
+        f"public protocol P {{\n    func f() {keyword}\n        -> Int\n}}\n",
+    )
+    assert _has(out, rf"func f\(\) {keyword} -> Int")
+
+
+def test_protocol_member_wrapped_after_where_matches_single_line(
+    tmp_path: Path,
+) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        "public protocol P {\n    func f<T>(_ t: T) where T: Hashable, T: Sendable\n}\n",
+        "public protocol P {\n    func f<T>(_ t: T) where\n        T: Hashable,\n"
+        "        T: Sendable\n}\n",
+    )
+    assert _has(out, r"func f<T>")
+
+
+def test_enum_cases_wrapped_after_comma_match_single_line(tmp_path: Path) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        "public enum E {\n    case a, b\n    case c\n}\n",
+        "public enum E {\n    case a,\n        b\n    case c\n}\n",
+    )
+    for case in ("a", "b", "c"):
+        assert _has(out, rf"\b{case}\b")
+
+
+def test_enum_case_wrapped_after_equals_matches_single_line(tmp_path: Path) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        'public enum E: String {\n    case a = "x"\n    case b\n}\n',
+        'public enum E: String {\n    case a =\n        "x"\n    case b\n}\n',
+    )
+    assert _has(out, r"\ba\b")
+    assert _has(out, r"\bb\b")
+
+
+def test_property_type_wrapped_after_a_dot_matches_single_line(tmp_path: Path) -> None:
+    out = _same_when_wrapped(
+        tmp_path,
+        "public struct S {\n    public var v: Swift.Int\n    public var w: Int\n}\n",
+        "public struct S {\n    public var v: Swift.\n        Int\n    public var w: Int\n}\n",
+    )
+    assert _has(out, r"var w: Int")

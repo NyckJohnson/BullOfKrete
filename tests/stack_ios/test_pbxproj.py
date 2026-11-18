@@ -246,3 +246,23 @@ def test_project_fallback_uses_the_same_configuration() -> None:
         )
         is None
     )
+
+
+# --- pathological nesting ------------------------------------------------------------------
+
+_DEPTH = 5000
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "{ a = " * _DEPTH + "x; " + "}; " * (_DEPTH - 1) + "}",
+        "{ a = " + "( " * _DEPTH + "x" + " )" * _DEPTH + "; }",
+        "{ a = " * _DEPTH,
+        "{ a = " + "( " * _DEPTH,
+    ],
+    ids=["nested-dicts", "nested-lists", "unclosed-dicts", "unclosed-lists"],
+)
+def test_parse_raises_pbxproj_error_on_deeply_nested_input(text: str) -> None:
+    with pytest.raises(pbxproj.PbxprojError):
+        pbxproj.parse(text)
