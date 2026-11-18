@@ -231,7 +231,7 @@ def test_uncovered_case_adds_an_untested_method_and_fails_coverage(
     assert "coverage-exempt" not in _change(case, "replace")[_COUNTER]
     assert case.expect["verdict"] == "fail"
     assert case.expect["gate"] == "coverage"
-    assert "Counter.swift" in str(case.expect["output"])
+    assert "coverage not clean for Counter" in str(case.expect["output"])
 
 
 def test_exemption_case_marks_the_untested_method_exempt_with_a_reason(
