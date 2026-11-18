@@ -43,7 +43,8 @@ fine here (the banned-word list applies to bull's stack-neutral text, not to a s
 
 ### 1.3 Never in any file
 `ios-pipeline`, `.pipeline/`, `config.sh`, `stack.sh`, `gates.sh`, `ui-test-writer`, any v1 build
-checklist, any absolute path, `shellcheck` (dropped, §7.4), and iOS comparisons ("the same way a
+checklist, any absolute path, `shellcheck` (dropped, §7.4; only DESIGN.md's decisions log may record
+that it was dropped), and iOS comparisons ("the same way a
 Swift compiler error is", "the Python-native equivalent of xccov", "a world smaller than Xcode's"):
 each rule stands on its own.
 
