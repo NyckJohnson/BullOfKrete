@@ -690,3 +690,57 @@ def test_prune_leaves_other_results_alone(app: App) -> None:
 
 def test_prune_with_nothing_to_delete_succeeds(app: App) -> None:
     assert gates.main(["prune"]) == 0
+
+
+# --- review findings: coverage, stale bundles, exit-0 errors, empty modules -----------------
+
+
+def _run_step(app: App, step: str) -> None:
+    if step == "build-test":
+        gates.main(["build-test"])
+    elif step == "build-test-fast":
+        app.write(f"{_TESTS}/Counter/StoreTests.swift", "struct StoreTests {\n}\n")
+        gates.main(["build-test-fast", "Counter"])
+    else:
+        gates.main(["rerun", "StoreTests/a()"])
+
+
+_UNIT_STEPS = ["build-test", "build-test-fast", "rerun"]
+
+
+@pytest.mark.parametrize("step", _UNIT_STEPS)
+def test_unit_test_runs_enable_code_coverage(app: App, step: str) -> None:
+    _run_step(app, step)
+    argv = app.runner.xcodebuild()[0]
+    assert _after(argv, "-enableCodeCoverage") == "YES"
+
+
+@pytest.mark.parametrize("step", _UNIT_STEPS)
+def test_an_old_journeys_bundle_is_removed_before_a_unit_test_run(
+    app: App, step: str
+) -> None:
+    stale = app.results / "journeys.xcresult"
+    stale.mkdir()
+    (stale / "data").write_text("old")
+    _run_step(app, step)
+    assert not stale.exists()
+
+
+def test_a_compile_error_line_in_a_run_that_exits_zero_passes_with_no_labels(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = (
+        f"{app.root}/{_SRC}/Modules/Counter/Store.swift:14:9: error: cannot find 'x'\n"
+    )
+    app.runner.when("xcodebuild", rc=0, out=out)
+    assert gates.main(["build-test"]) == 0
+    assert _labels(_out(capsys)) == []
+
+
+def test_fast_for_a_module_without_suites_says_so_and_names_the_test_folder(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    gates.main(["build-test-fast", "Counter"])
+    shown = _out(capsys)
+    line = next(ln for ln in shown.splitlines() if "no test suites found" in ln)
+    assert f"{_TESTS}/Counter" in line
