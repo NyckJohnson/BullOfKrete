@@ -951,7 +951,7 @@
       "dependsOn": [
         "stacks"
       ],
-      "state": "in_progress",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
@@ -989,7 +989,7 @@
             "python_cli/cases.json",
             "python_cli/fixture/"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T20:27:37-08:00",
+  "updatedAt": "2026-11-17T20:28:26-08:00",
   "features": [],
   "activeFeature": null
 }
