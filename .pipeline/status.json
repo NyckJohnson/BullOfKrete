@@ -968,7 +968,7 @@
             "python_cli/readers.py",
             "python_cli/gates.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-17T19:47:23-08:00",
+  "updatedAt": "2026-11-17T19:51:24-08:00",
   "features": [],
   "activeFeature": null
 }
