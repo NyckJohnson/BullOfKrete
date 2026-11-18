@@ -131,3 +131,23 @@ def test_readers_inventory_returns_what_inventory_returns(tmp_path: Path) -> Non
     assert readers.inventory(tmp_path, _settings()) == inv.inventory(
         tmp_path, _settings()
     )
+
+
+def test_an_unset_source_dir_says_so_and_lists_no_files(tmp_path: Path) -> None:
+    out = inv.inventory(tmp_path, {})
+    assert "`source_dir` is not set" in out
+    assert "##" not in out
+
+
+def test_a_source_folder_without_swift_files_says_so(tmp_path: Path) -> None:
+    (tmp_path / SRC).mkdir(parents=True)
+    (tmp_path / SRC / "Notes.txt").write_text("hi", encoding="utf-8")
+    assert "No Swift files found." in inv.inventory(tmp_path, _settings())
+
+
+def test_a_source_dir_that_does_not_exist_gives_no_files_and_no_exception(
+    tmp_path: Path,
+) -> None:
+    out = inv.inventory(tmp_path, _settings())
+    assert "No Swift files found." in out
+    assert "##" not in out

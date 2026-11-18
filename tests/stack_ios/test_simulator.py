@@ -192,3 +192,77 @@ def test_choose_with_no_match_raises_naming_the_setting(
     with pytest.raises(simulator.SimulatorError, match="simulator"):
         simulator.choose("iPhone 99", results)
     assert not (results / "simulator.txt").exists()
+
+
+# --- coverage triage -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("listing", [{}, {"devices": []}, {"devices": "none"}])
+def test_pick_without_a_devices_mapping_is_none(listing: dict[str, Any]) -> None:
+    assert simulator.pick(listing, "iPhone 16") is None
+
+
+def test_pick_skips_devices_with_a_non_string_name_or_udid() -> None:
+    listing = _listing(
+        iOS_18_2=[
+            {"udid": "X", "name": 5, "isAvailable": True},
+            {"udid": None, "name": "iPhone 16", "isAvailable": True},
+            _dev("GOOD", "iPhone 16"),
+        ]
+    )
+    assert simulator.pick(listing, "iPhone 16") == "GOOD"
+    assert simulator.pick(listing, "") == "GOOD"
+
+
+def test_pick_skips_a_runtime_whose_version_cannot_be_read() -> None:
+    listing = _listing(
+        iOS_x=[_dev("BAD", "iPhone 16")], iOS_17_5=[_dev("OK", "iPhone 16")]
+    )
+    assert simulator.pick(listing, "iPhone 16") == "OK"
+
+
+def _simctl_result(
+    monkeypatch: pytest.MonkeyPatch, rc: int, out: str, err: str = ""
+) -> None:
+    def run(args: Any, *a: object, **kw: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([str(x) for x in args], rc, out, err)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_choose_reports_a_simctl_that_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*a: object, **kw: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    with pytest.raises(simulator.SimulatorError, match="could not run `xcrun simctl`"):
+        simulator.choose("iPhone 16", tmp_path)
+
+
+def test_choose_reports_a_simctl_that_exits_non_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _simctl_result(monkeypatch, 1, "", "simctl exploded")
+    with pytest.raises(simulator.SimulatorError, match="simctl exploded"):
+        simulator.choose("iPhone 16", tmp_path)
+
+
+def test_choose_reports_output_that_is_not_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _simctl_result(monkeypatch, 0, "this is not json")
+    with pytest.raises(simulator.SimulatorError):
+        simulator.choose("iPhone 16", tmp_path)
+    assert not (tmp_path / "simulator.txt").exists()
+
+
+def test_choose_with_an_empty_setting_and_no_iphones_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_simctl(monkeypatch, _listing(iOS_18_2=[_dev("PAD", "iPad Pro")]))
+    with pytest.raises(
+        simulator.SimulatorError, match="no available iPhone simulator was found"
+    ):
+        simulator.choose("", tmp_path)

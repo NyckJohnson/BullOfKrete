@@ -533,3 +533,118 @@ def test_variadic_and_range_operators_in_signatures_keep_their_text(
     assert _has(out, r"Int\.\.\.")
     assert not _has(out, r"Int \.\.\.|Int\.\. \.|\.\.\. ")
     assert _has(out, r"0\.\.<1")
+
+
+# --- coverage triage -----------------------------------------------------------------------
+
+
+def test_legacy_declarations_skip_dot_folders_and_directories_named_like_swift_files(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, ".build/Hidden.swift", "struct LegacyHidden {}\n")
+    (tmp_path / "Dir.swift").mkdir()
+    _write(tmp_path, "Real.swift", "struct LegacyReal {}\n")
+    assert swift_scan.legacy_declarations(tmp_path) == ["LegacyReal"]
+
+
+def test_a_semicolon_at_depth_zero_ends_a_statement(tmp_path: Path) -> None:
+    out = _decls(tmp_path, "public struct A {}; public struct B {}\n")
+    assert _has(out, r"struct A")
+    assert _has(out, r"struct B")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "@MainActor public struct A {}\n",
+        "@available(iOS 17, *) public struct A {}\n",
+        "@MainActor\n@available(iOS 17, *)\npublic struct A {}\n",
+    ],
+)
+def test_leading_attributes_do_not_hide_the_declaration(
+    tmp_path: Path, source: str
+) -> None:
+    assert _has(_decls(tmp_path, source), r"struct A")
+
+
+def test_a_statement_with_no_leading_word_is_not_a_declaration(tmp_path: Path) -> None:
+    out = _decls(tmp_path, "+ 1\npublic struct A {}\n")
+    assert len(out) == 1
+    assert _has(out, r"struct A")
+
+
+_TAIL = "    public let after: Int\n}\n"
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        '#"{ // " }"#',
+        '"a\\n\\"b {"',
+        '"a \\(f("x)")) b"',
+        '"unterminated {',
+        '"""\n  { // "\n  """',
+        '#"raw \\#(x) { "#',
+    ],
+    ids=[
+        "raw",
+        "escapes",
+        "interpolation",
+        "unterminated-line",
+        "multi-line",
+        "raw-interp",
+    ],
+)
+def test_string_literals_never_add_or_lose_declarations(
+    tmp_path: Path, literal: str
+) -> None:
+    out = _decls(tmp_path, f"public struct A {{\n    public let s = {literal}\n{_TAIL}")
+    assert _has(out, r"struct A")
+    assert _has(out, r"let after: Int")
+    assert not _has(out, r"struct B")
+
+
+def test_an_unterminated_block_comment_runs_to_the_end(tmp_path: Path) -> None:
+    out = _decls(tmp_path, "public struct A {}\n/* open\npublic struct B {}\n")
+    assert _has(out, r"struct A")
+    assert not _has(out, r"struct B")
+
+
+def test_an_unterminated_multi_line_string_runs_to_the_end(tmp_path: Path) -> None:
+    out = _decls(tmp_path, 'public struct A {}\nlet s = """\nabc\npublic struct B {}\n')
+    assert _has(out, r"struct A")
+    assert not _has(out, r"^public struct B")
+
+
+def test_clean_sets_a_raw_string_aside_whole() -> None:
+    cleaned, strings = swift_scan.clean('let s = #"{ // " }"#\nlet t = 1\n')
+    assert strings == ['#"{ // " }"#']
+    assert "//" not in cleaned
+    assert "let t = 1" in cleaned
+
+
+def test_clean_keeps_a_nested_interpolation_inside_its_string() -> None:
+    literal = '"a \\(f("x)")) b"'
+    cleaned, strings = swift_scan.clean(f"let s = {literal}\nlet t = 1\n")
+    assert strings == [literal]
+    assert "let t = 1" in cleaned
+
+
+def test_clean_ends_an_unterminated_single_line_string_at_its_line() -> None:
+    cleaned, strings = swift_scan.clean('let s = "abc\nlet t = 1\n')
+    assert strings == ['"abc']
+    assert "let t = 1" in cleaned
+
+
+def test_clean_runs_an_unterminated_multi_line_string_to_the_end() -> None:
+    cleaned, strings = swift_scan.clean('let s = """\nabc\nlet t = 1\n')
+    assert len(strings) == 1
+    assert "let t = 1" in strings[0]
+    assert "let t = 1" not in cleaned
+
+
+def test_clean_runs_an_unterminated_block_comment_to_the_end() -> None:
+    cleaned, strings = swift_scan.clean("let a = 1\n/* open\nlet b = 2\n")
+    assert "let a = 1" in cleaned
+    assert "let b = 2" not in cleaned
+    assert strings == []

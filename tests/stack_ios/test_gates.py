@@ -781,3 +781,227 @@ def test_fast_finds_every_same_line_attribute_suite_in_one_file(app: App) -> Non
         "-only-testing:DemoTests/StoreTests",
         "-only-testing:DemoTests/ViewModelTests",
     ]
+
+
+# --- coverage triage -----------------------------------------------------------------------
+
+
+def _listing_for(udid: str = "CHOSEN") -> str:
+    return _simctl_listing(("iOS-18-2", udid, "iPhone 16"))
+
+
+def test_settings_that_are_not_json_exit_2_with_a_usage_message(
+    app: App, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("BULL_SETTINGS", "this is not json")
+    assert gates.main(["build-test"]) == 2
+    shown = _out(capsys)
+    assert "BULL_SETTINGS" in shown
+    assert "usage" in shown.lower()
+
+
+def test_a_relative_path_in_a_diagnostic_is_labelled_as_given(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rel = f"{_SRC}/Modules/Counter/Store.swift"
+    app.runner.when("xcodebuild", rc=65, out=f"{rel}:3:5: error: nope\n")
+    assert gates.main(["build-test"]) == 1
+    assert f"{rel}:3" in _labels(_out(capsys))
+
+
+def test_a_path_outside_the_part_root_is_labelled_by_its_own_path(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("xcodebuild", rc=65, out="/elsewhere/Foo.swift:5:1: error: nope\n")
+    assert gates.main(["build-test"]) == 1
+    assert "/elsewhere/Foo.swift:5" in _labels(_out(capsys))
+
+
+def test_an_adopt_warning_outside_the_part_root_gets_no_label(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.env(adopt=True)
+    out = "/elsewhere/Modules/Foo.swift:5:1: warning: unused\n"
+    app.runner.when("xcodebuild", rc=0, out=out)
+    assert gates.main(["build-test"]) == 0
+    assert _labels(_out(capsys)) == []
+
+
+def test_a_path_through_a_symlink_is_labelled_part_relative(
+    app: App, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.env(adopt=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(app.root)
+    rel = f"{_SRC}/Modules/Counter/Store.swift"
+    app.runner.when("xcodebuild", rc=0, out=f"{alias}/{rel}:7:1: warning: unused\n")
+    assert gates.main(["build-test"]) == 1
+    assert f"warning {rel}:7" in _labels(_out(capsys))
+
+
+def test_an_adopt_warning_in_a_test_file_outside_a_module_folder_gets_no_label(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.env(adopt=True)
+    out = _warning(app, f"{_TESTS}/LegacyTests.swift", 4)
+    app.runner.when("xcodebuild", rc=0, out=out)
+    assert gates.main(["build-test"]) == 0
+    assert _labels(_out(capsys)) == []
+
+
+def test_a_tool_that_cannot_be_launched_says_to_install_xcode_and_exits_2(
+    app: App, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(*a: object, **kw: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    assert gates.main(["build-test"]) == 2
+    assert "Xcode 26" in _out(capsys)
+
+
+@pytest.mark.parametrize("content", [None, ""])
+def test_a_missing_or_empty_simulator_file_makes_the_step_choose_a_simulator(
+    app: App, content: str | None
+) -> None:
+    sim = app.results / "simulator.txt"
+    if content is None:
+        sim.unlink()
+    else:
+        sim.write_text(content)
+    app.runner.when("simctl", out=_listing_for("CHOSEN"))
+    assert gates.main(["build-test"]) == 0
+    assert _after(app.runner.xcodebuild()[0], "-destination") == "id=CHOSEN"
+
+
+def test_a_step_that_finds_no_simulator_prints_the_message_and_exits_2(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (app.results / "simulator.txt").unlink()
+    app.runner.when("simctl", out=json.dumps({"devices": {}}))
+    assert gates.main(["build-test"]) == 2
+    assert "simulator" in _out(capsys)
+    assert app.runner.xcodebuild() == []
+
+
+def test_fast_skips_a_test_file_it_cannot_read_and_says_so(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bad = app.root / _TESTS / "Counter" / "Bad.swift"
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"\xff\xfe\x00\x80 struct BadTests {}")
+    app.write(f"{_TESTS}/Counter/StoreTests.swift", "struct StoreTests {\n}\n")
+    assert gates.main(["build-test-fast", "Counter"]) == 0
+    shown = _out(capsys)
+    assert "could not read" in shown
+    assert "for its test suites" in shown
+    assert _only(app.runner.xcodebuild()[0]) == ["-only-testing:DemoTests/StoreTests"]
+
+
+def test_preflight_prints_the_tail_and_exits_2_when_the_simulator_will_not_boot(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("simctl", "bootstatus", rc=1, out="boot exploded")
+    app.runner.when("simctl", out=_listing_for("CHOSEN"))
+    assert gates.main(["preflight"]) == 2
+    shown = _out(capsys)
+    assert "boot exploded" in shown
+    assert "could not boot simulator" in shown
+
+
+def test_setup_fails_when_the_shared_scheme_file_is_missing(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (app.root / "App/Demo/Demo.xcodeproj").mkdir(parents=True)
+    assert gates.main(["setup"]) == 1
+    shown = _out(capsys)
+    assert "Shared scheme Demo exists" in _labels(shown)
+    assert "Manage Schemes" in shown
+
+
+def test_setup_passes_when_the_shared_scheme_file_exists(app: App) -> None:
+    app.write("App/Demo/Demo.xcodeproj/xcshareddata/xcschemes/Demo.xcscheme", "<S/>")
+    assert gates.main(["setup"]) == 0
+
+
+def test_rerun_without_test_ids_is_a_usage_error(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert gates.main(["rerun"]) == 2
+    assert "rerun needs at least one test id" in _out(capsys)
+    assert app.runner.xcodebuild() == []
+
+
+def test_a_failed_attachment_export_is_reported_and_the_run_result_unchanged(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("xcodebuild", rc=65, out="UI test failed")
+    app.runner.when("xcresulttool", rc=1, out="no such bundle")
+    assert gates.main(["journeys"]) == 1
+    assert "could not export the failures' attachments" in _out(capsys)
+
+
+def test_lint_without_source_or_test_folders_has_nothing_to_lint(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert gates.main(["lint", "Ghost"]) == 0
+    assert "nothing to lint" in _out(capsys)
+    assert app.runner.calls == []
+
+
+@pytest.mark.parametrize(
+    "step", ["preflight", "setup", "build-test", "journeys", "prune"]
+)
+def test_a_step_without_arguments_rejects_extra_ones(
+    app: App, capsys: pytest.CaptureFixture[str], step: str
+) -> None:
+    assert gates.main([step, "extra"]) == 2
+    assert "takes no arguments" in _out(capsys)
+
+
+def test_xctest_assertion_lines_are_not_compile_error_labels(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = (
+        f"{app.root}/{_TESTS}/Counter/StoreTests.swift:11: error: "
+        "-[DemoTests.StoreTests testA] : XCTAssertTrue failed\n"
+        "Test Case '-[DemoTests.StoreTests testA]' failed (0.1 seconds).\n"
+    )
+    app.runner.when("xcodebuild", rc=65, out=out)
+    assert gates.main(["build-test"]) == 1
+    labels = _labels(_out(capsys))
+    assert labels
+    assert not any("StoreTests.swift" in label for label in labels)
+    assert "test StoreTests/testA()" in labels
+
+
+def test_a_real_compile_error_is_still_labelled_beside_an_xctest_assertion(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = (
+        f"{app.root}/{_TESTS}/Counter/StoreTests.swift:11: error: "
+        "-[DemoTests.StoreTests testA] : XCTAssertTrue failed\n"
+        f"{app.root}/{_SRC}/Modules/Counter/Store.swift:5:3: error: cannot find 'x'\n"
+    )
+    app.runner.when("xcodebuild", rc=65, out=out)
+    assert gates.main(["build-test"]) == 1
+    labels = _labels(_out(capsys))
+    assert any("Store.swift:5" in label for label in labels)
+    assert not any("StoreTests.swift:11" in label for label in labels)
+
+
+def test_the_build_folder_gets_a_self_ignoring_gitignore_before_a_run(
+    app: App,
+) -> None:
+    assert gates.main(["build-test"]) == 0
+    marker = app.root / ".bull/build/.gitignore"
+    assert marker.is_file()
+    assert "*" in marker.read_text().splitlines()
+
+
+def test_an_existing_build_folder_gitignore_is_not_overwritten(app: App) -> None:
+    marker = app.root / ".bull/build/.gitignore"
+    marker.parent.mkdir(parents=True)
+    marker.write_text("custom\n")
+    assert gates.main(["build-test"]) == 0
+    assert marker.read_text() == "custom\n"

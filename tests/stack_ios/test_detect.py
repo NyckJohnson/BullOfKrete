@@ -11,7 +11,7 @@ from bull.Modules.stack_ios.ios import detect as detect_mod
 from bull.Modules.stack_ios.ios import readers
 from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel
 
-from ._pbx_sample import make_project
+from ._pbx_sample import APP, _render, make_project
 
 HIGH = 0.8
 LOW = 0.2
@@ -454,3 +454,225 @@ def test_new_issues_keep_confidence_high_and_have_fixes(tmp_path: Path) -> None:
     for issue in d.issues:
         assert issue.item.strip()
         assert issue.fix.strip()
+
+
+# --- coverage triage: project selection and unreadable structure --------------------------
+
+
+def _raw_project(root: Path, objects: dict[str, Any]) -> Path:
+    """Write `<root>/P.xcodeproj/project.pbxproj` holding exactly `objects` (rootObject ROOT)."""
+    proj = root / "P.xcodeproj"
+    proj.mkdir(parents=True)
+    top = {
+        "archiveVersion": "1",
+        "objectVersion": "77",
+        "objects": objects,
+        "rootObject": "ROOT",
+    }
+    (proj / "project.pbxproj").write_text(
+        "// !$*UTF8*$!\n" + _render(top) + "\n", encoding="utf-8"
+    )
+    return proj
+
+
+def _sync_objects(
+    groups: dict[str, dict[str, Any]], main_children: list[str]
+) -> dict[str, Any]:
+    objects: dict[str, Any] = {
+        "SYNC": {
+            "isa": "PBXFileSystemSynchronizedRootGroup",
+            "path": "Feature",
+            "sourceTree": "<group>",
+        },
+        "TARGET": {
+            "isa": "PBXNativeTarget",
+            "name": "P",
+            "productType": APP,
+            "fileSystemSynchronizedGroups": ["SYNC"],
+        },
+        "MAIN": {
+            "isa": "PBXGroup",
+            "children": main_children,
+            "sourceTree": "<group>",
+        },
+        "ROOT": {"isa": "PBXProject", "mainGroup": "MAIN", "targets": ["TARGET"]},
+    }
+    objects.update(groups)
+    return objects
+
+
+def _group(
+    path: str | None, children: list[str], tree: str = "<group>"
+) -> dict[str, Any]:
+    group: dict[str, Any] = {
+        "isa": "PBXGroup",
+        "children": children,
+        "sourceTree": tree,
+    }
+    if path is not None:
+        group["path"] = path
+    return group
+
+
+def test_several_projects_use_the_first_and_a_note_names_the_others(
+    tmp_path: Path,
+) -> None:
+    make_project(tmp_path)
+    make_project(tmp_path, where="Other", name="Zed")
+    d = detect_mod.detect(tmp_path)
+    assert d.settings["project"] == "Other/Zed.xcodeproj"
+    notes = _issues(d, IssueLevel.NOTE)
+    assert any(
+        "Several" in i.item and "App/MyApp/MyApp.xcodeproj" in i.item for i in notes
+    )
+
+
+def test_objects_that_is_not_a_dictionary_gives_the_cant_be_read_block(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    (proj / "project.pbxproj").write_text(
+        '{ "objects" = ( a, ); "rootObject" = "ROOT"; }', encoding="utf-8"
+    )
+    d = detect_mod.detect(tmp_path)
+    blocks = _issues(d, IssueLevel.BLOCK)
+    assert any("can't be read" in i.item for i in blocks)
+    assert d.settings == {"project": "App/MyApp/MyApp.xcodeproj"}
+
+
+def test_a_workspace_folder_without_contents_gives_no_issue(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    (tmp_path / "App" / "MyApp" / "MyApp.xcworkspace").mkdir()
+    d = detect_mod.detect(tmp_path)
+    assert not _issues(d, IssueLevel.BLOCK)
+    assert not _issues(d, IssueLevel.FIX)
+
+
+def test_an_unreadable_workspace_file_gives_a_fix_with_a_restore_from_git_hint(
+    tmp_path: Path,
+) -> None:
+    make_project(tmp_path)
+    ws = tmp_path / "App" / "MyApp" / "MyApp.xcworkspace"
+    ws.mkdir()
+    (ws / "contents.xcworkspacedata").write_bytes(b"\xff\xfe\x00\x80")
+    fixes = _issues(detect_mod.detect(tmp_path), IssueLevel.FIX)
+    hit = [i for i in fixes if "workspace" in i.item and "can't be read" in i.item]
+    assert hit
+    assert "git" in hit[0].fix
+
+
+def test_workspace_entries_that_are_not_projects_are_ignored(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    _workspace(tmp_path, ["MyApp.xcodeproj", "Scratch.playground", "Docs"])
+    assert not _issues(detect_mod.detect(tmp_path), IssueLevel.BLOCK)
+
+
+def test_an_absolute_workspace_location_of_another_project_blocks(
+    tmp_path: Path,
+) -> None:
+    make_project(tmp_path)
+    ws = tmp_path / "App" / "MyApp" / "MyApp.xcworkspace"
+    ws.mkdir()
+    extra = tmp_path / "Elsewhere" / "Extra.xcodeproj"
+    (ws / "contents.xcworkspacedata").write_text(
+        f'<Workspace><FileRef location = "absolute:{extra}"></FileRef></Workspace>',
+        encoding="utf-8",
+    )
+    blocks = _issues(detect_mod.detect(tmp_path), IssueLevel.BLOCK)
+    assert any("Extra.xcodeproj" in _text(i) for i in blocks)
+
+
+def test_an_absolute_workspace_location_of_the_app_project_does_not_block(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    ws = tmp_path / "App" / "MyApp" / "MyApp.xcworkspace"
+    ws.mkdir()
+    (ws / "contents.xcworkspacedata").write_text(
+        f'<Workspace><FileRef location = "absolute:{proj}"></FileRef></Workspace>',
+        encoding="utf-8",
+    )
+    assert not _issues(detect_mod.detect(tmp_path), IssueLevel.BLOCK)
+
+
+def test_nested_groups_are_joined_above_a_synchronized_group(tmp_path: Path) -> None:
+    objects = _sync_objects(
+        {"G1": _group("App", ["G2"]), "G2": _group("Sub", ["SYNC"])}, ["G1"]
+    )
+    _raw_project(tmp_path, objects)
+    assert detect_mod.detect(tmp_path).settings["source_dir"] == "App/Sub/Feature"
+
+
+def test_a_parent_group_without_a_path_is_skipped_when_joining(tmp_path: Path) -> None:
+    objects = _sync_objects(
+        {"G1": _group("App", ["G2"]), "G2": _group(None, ["SYNC"])}, ["G1"]
+    )
+    _raw_project(tmp_path, objects)
+    assert detect_mod.detect(tmp_path).settings["source_dir"] == "App/Feature"
+
+
+def test_a_parent_with_another_source_tree_stops_the_walk(tmp_path: Path) -> None:
+    objects = _sync_objects(
+        {
+            "G1": _group("App", ["G2"]),
+            "G2": _group("Sub", ["SYNC"], tree="SOURCE_ROOT"),
+        },
+        ["G1"],
+    )
+    _raw_project(tmp_path, objects)
+    assert detect_mod.detect(tmp_path).settings["source_dir"] == "Sub/Feature"
+
+
+def test_a_cycle_of_parent_groups_stops_without_hanging(tmp_path: Path) -> None:
+    objects = _sync_objects(
+        {"G1": _group("App", ["G2"]), "G2": _group("Sub", ["SYNC", "G1"])}, []
+    )
+    _raw_project(tmp_path, objects)
+    assert detect_mod.detect(tmp_path).settings["source_dir"].endswith("Feature")
+
+
+def test_a_main_group_without_children_does_not_crash(tmp_path: Path) -> None:
+    objects = _sync_objects({}, [])
+    del objects["MAIN"]["children"]
+    del objects["TARGET"]["fileSystemSynchronizedGroups"]
+    _raw_project(tmp_path, objects)
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert any("group" in i.item for i in _issues(d, IssueLevel.FIX))
+
+
+def test_a_project_without_any_target_has_no_swift_version_issue(
+    tmp_path: Path,
+) -> None:
+    objects = {
+        "MAIN": _group(None, []),
+        "ROOT": {"isa": "PBXProject", "mainGroup": "MAIN", "targets": []},
+    }
+    _raw_project(tmp_path, objects)
+    d = detect_mod.detect(tmp_path)
+    assert _issues(d, IssueLevel.BLOCK)
+    assert not any("Swift" in i.item and "ersion" in i.item for i in d.issues)
+    assert not any("Swift 5" in i.item for i in d.issues)
+
+
+@pytest.mark.parametrize(
+    ("swift", "words"),
+    [("4.2", "too old"), (None, "not set")],
+)
+def test_a_swift_version_below_5_or_unset_gives_a_fix(
+    tmp_path: Path, swift: str | None, words: str
+) -> None:
+    make_project(tmp_path, swift=swift)
+    fixes = _issues(detect_mod.detect(tmp_path), IssueLevel.FIX)
+    assert any(words in i.item for i in fixes)
+
+
+def test_an_unreadable_swift_path_counts_as_neither_uikit_nor_ui_testing(
+    tmp_path: Path,
+) -> None:
+    make_project(tmp_path)
+    (tmp_path / "App/MyApp/MyApp/Broken.swift").symlink_to(tmp_path / "nowhere.swift")
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert not any("UIKit" in i.item for i in d.issues)
+    assert any("-uiTesting" in i.item for i in _issues(d, IssueLevel.NOTE))

@@ -288,3 +288,134 @@ def test_readers_uncovered_passes_through_to_xcresults(
     data = readers.uncovered(part, [source], results)
     assert data == xcresults.uncovered(part, [source], results)
     assert data.uncovered[source] == (4,)
+
+
+# --- coverage triage -----------------------------------------------------------------------
+
+
+class _Answers:
+    """Fake `subprocess.run` returning fixed output per tool; `None` for a tool means OSError."""
+
+    def __init__(
+        self,
+        tests: tuple[int, str] | None = (0, "{}"),
+        report: tuple[int, str] | None = (0, "{}"),
+        archive: tuple[int, str] | None = (0, "{}"),
+    ) -> None:
+        self.answers = {"xcresulttool": tests, "report": report, "archive": archive}
+
+    def __call__(self, args: Any, *a: object, **kw: object) -> object:
+        argv = [str(x) for x in args]
+        key = (
+            "xcresulttool"
+            if "xcresulttool" in argv
+            else "report"
+            if "--report" in argv
+            else "archive"
+        )
+        answer = self.answers[key]
+        if answer is None:
+            raise FileNotFoundError(2, "No such file or directory")
+        return subprocess.CompletedProcess(argv, answer[0], answer[1], "")
+
+
+_BAD_TOOL_RESULTS = [
+    pytest.param((0, "[1, 2]"), id="json-not-a-dict"),
+    pytest.param(None, id="cannot-run"),
+    pytest.param((1, '{"testNodes": []}'), id="non-zero-exit"),
+    pytest.param((0, ""), id="empty-output"),
+    pytest.param((0, "not json"), id="not-json"),
+]
+
+
+@pytest.mark.parametrize("answer", _BAD_TOOL_RESULTS)
+def test_test_results_is_none_when_xcresulttool_gives_nothing_usable(
+    monkeypatch: pytest.MonkeyPatch, results: Path, answer: tuple[int, str] | None
+) -> None:
+    monkeypatch.setattr(subprocess, "run", _Answers(tests=answer))
+    assert xcresults.test_results(results) is None
+
+
+def test_non_dict_nodes_in_the_test_tree_are_skipped(
+    tools: Tools, results: Path
+) -> None:
+    tools.tests = {
+        "testNodes": [
+            "junk",
+            5,
+            {"nodeType": "Test Plan", "children": ["x", None, _case("S/a()")]},
+        ]
+    }
+    run = xcresults.test_results(results)
+    assert run == TestRun(count=1, failed=())
+
+
+_SOURCE_REL = "App/Demo/Modules/Counter/Store.swift"
+_RECORDED = "/ci/" + _SOURCE_REL
+
+
+@pytest.mark.parametrize("answer", _BAD_TOOL_RESULTS)
+def test_coverage_is_no_data_when_the_report_tool_gives_nothing_usable(
+    monkeypatch: pytest.MonkeyPatch,
+    results: Path,
+    part: Path,
+    answer: tuple[int, str] | None,
+) -> None:
+    monkeypatch.setattr(subprocess, "run", _Answers(report=answer))
+    source = part / _SOURCE_REL
+    data = xcresults.uncovered(part, [source], results)
+    assert data.no_data == (source,)
+    assert dict(data.uncovered) == {}
+
+
+@pytest.mark.parametrize("answer", _BAD_TOOL_RESULTS)
+def test_coverage_is_no_data_when_the_lines_tool_gives_nothing_usable(
+    monkeypatch: pytest.MonkeyPatch,
+    results: Path,
+    part: Path,
+    answer: tuple[int, str] | None,
+) -> None:
+    report = json.dumps({"targets": [{"files": [{"path": _RECORDED}]}]})
+    monkeypatch.setattr(subprocess, "run", _Answers(report=(0, report), archive=answer))
+    source = part / _SOURCE_REL
+    data = xcresults.uncovered(part, [source], results)
+    assert data.no_data == (source,)
+
+
+def test_a_source_outside_the_part_root_is_matched_by_its_absolute_path(
+    tools: Tools, results: Path, part: Path, tmp_path: Path
+) -> None:
+    source = tmp_path / "elsewhere" / "Outside.swift"
+    tools.report = {"targets": [{"files": [{"path": str(source)}]}]}
+    tools.lines[str(source)] = [_line(4, True, 0)]
+    data = xcresults.uncovered(part, [source], results)
+    assert data.uncovered[source] == (4,)
+    assert data.no_data == ()
+
+
+@pytest.mark.parametrize("lines", ["oops", None, 7], ids=["string", "null", "number"])
+def test_a_lines_value_that_is_not_a_list_means_no_data(
+    monkeypatch: pytest.MonkeyPatch, results: Path, part: Path, lines: object
+) -> None:
+    report = json.dumps({"targets": [{"files": [{"path": _RECORDED}]}]})
+    archive = json.dumps({_RECORDED: lines})
+    monkeypatch.setattr(
+        subprocess, "run", _Answers(report=(0, report), archive=(0, archive))
+    )
+    source = part / _SOURCE_REL
+    data = xcresults.uncovered(part, [source], results)
+    assert data.no_data == (source,)
+
+
+def test_a_single_entry_under_another_path_spelling_is_used(
+    monkeypatch: pytest.MonkeyPatch, results: Path, part: Path
+) -> None:
+    report = json.dumps({"targets": [{"files": [{"path": _RECORDED}]}]})
+    archive = json.dumps({"/private" + _RECORDED: [_line(3, True, 0)]})
+    monkeypatch.setattr(
+        subprocess, "run", _Answers(report=(0, report), archive=(0, archive))
+    )
+    source = part / _SOURCE_REL
+    data = xcresults.uncovered(part, [source], results)
+    assert data.uncovered[source] == (3,)
+    assert data.no_data == ()

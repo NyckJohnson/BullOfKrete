@@ -266,3 +266,81 @@ _DEPTH = 5000
 def test_parse_raises_pbxproj_error_on_deeply_nested_input(text: str) -> None:
     with pytest.raises(pbxproj.PbxprojError):
         pbxproj.parse(text)
+
+
+# --- coverage triage: build_setting with odd structures -------------------------------------
+
+
+def _mini(**values: str) -> dict[str, Any]:
+    """A parsed project whose target `T` and project `ROOT` each have one Debug config."""
+    return {
+        "rootObject": "ROOT",
+        "objects": {
+            "ROOT": {"isa": "PBXProject", "buildConfigurationList": "PL"},
+            "PL": {"isa": "XCConfigurationList", "buildConfigurations": ["PD"]},
+            "PD": {
+                "isa": "XCBuildConfiguration",
+                "name": "Debug",
+                "buildSettings": dict(values),
+            },
+            "T": {
+                "isa": "PBXNativeTarget",
+                "name": "T",
+                "buildConfigurationList": "TL",
+            },
+            "TL": {"isa": "XCConfigurationList", "buildConfigurations": ["TD"]},
+            "TD": {
+                "isa": "XCBuildConfiguration",
+                "name": "Debug",
+                "buildSettings": dict(values),
+            },
+        },
+    }
+
+
+def _no_objects(p: dict[str, Any]) -> None:
+    p["objects"] = "nope"
+
+
+def _no_root(p: dict[str, Any]) -> None:
+    del p["rootObject"]
+    p["objects"]["TD"]["buildSettings"] = {}
+
+
+def _no_config_list(p: dict[str, Any]) -> None:
+    del p["objects"]["T"]["buildConfigurationList"]
+    del p["objects"]["ROOT"]["buildConfigurationList"]
+
+
+def _configs_not_a_list(p: dict[str, Any]) -> None:
+    p["objects"]["TL"]["buildConfigurations"] = "TD"
+    p["objects"]["PL"]["buildConfigurations"] = "PD"
+
+
+def _settings_not_a_dict(p: dict[str, Any]) -> None:
+    p["objects"]["TD"]["buildSettings"] = "nope"
+    p["objects"]["PD"]["buildSettings"] = "nope"
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [_no_objects, _no_root, _no_config_list, _configs_not_a_list, _settings_not_a_dict],
+    ids=lambda f: f.__name__.lstrip("_"),
+)
+def test_build_setting_is_none_for_odd_project_structures(damage: Any) -> None:
+    project = _mini(KEY="value")
+    damage(project)
+    assert pbxproj.build_setting(project, "T", "KEY") is None
+
+
+def test_build_setting_is_none_when_neither_target_nor_project_sets_the_key() -> None:
+    assert pbxproj.build_setting(_mini(OTHER="x"), "T", "KEY") is None
+
+
+def test_build_setting_reads_the_target_value_in_the_plain_structure() -> None:
+    assert pbxproj.build_setting(_mini(KEY="value"), "T", "KEY") == "value"
+
+
+def test_parse_rejects_a_quoted_string_ending_in_a_lone_backslash() -> None:
+    with pytest.raises(pbxproj.PbxprojError):
+        pbxproj.parse('{ a = "abc\\')
