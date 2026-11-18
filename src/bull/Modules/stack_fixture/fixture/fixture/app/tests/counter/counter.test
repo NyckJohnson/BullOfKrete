@@ -1,0 +1,8 @@
+# counter behaviors
+pass starts_at_zero
+covers src/Modules/counter/counter.fx:2
+pass increments
+covers src/Modules/counter/counter.fx:3
+pass decrements
+covers src/Modules/counter/counter.fx:4
+covers src/Modules/counter/Contracts/counter.fx:2-5

@@ -1,0 +1,4 @@
+# display behaviors
+pass shows_the_value
+covers src/Modules/display/display.fx:2
+covers src/Modules/display/Contracts/display.fx:2-3

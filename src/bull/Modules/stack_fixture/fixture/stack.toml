@@ -1,0 +1,50 @@
+# The `fixture` stack: a tiny, toolchain-free language for bull's own tests and journeys.
+format = 1
+
+[stack]
+name = "fixture"
+title = "Fixture tool (test stack)"
+description = "A toolchain-free test language (*.fx sources, *.test tests) for exercising bull itself"
+language = "fixture"
+kind = "tool"
+maturity = "test"
+source_glob = "*.fx"
+test_glob = ["*.test"]
+comment = "#"
+scaffold = ["src", "tests"]
+gitignore = ["results/"]
+agents = [
+    "skeleton-builder",
+    "test-writer",
+    "code-writer",
+    "reviewer",
+    "coverage-analyst",
+    "journey-test-writer",
+    "surveyor",
+]
+
+[settings.source_dir]
+type = "str"
+default = "src"
+description = "Folder (relative to the part root) holding the *.fx sources; modules live in <source_dir>/Modules/<module>/"
+
+[settings.test_dir]
+type = "str"
+default = "tests"
+description = "Folder (relative to the part root) holding <module>/*.test files and journey/*.test"
+
+[settings."coverage.exclude"]
+default = []
+description = "Globs of sources left out of coverage (the fixture language has nothing to exclude)"
+
+[gates]
+preflight = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "preflight"]
+setup = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "setup"]
+build_test = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "build-test"]
+build_test_fast = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "build-test-fast", "{module}"]
+lint = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "lint", "{module}"]
+rerun_failed = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "rerun", "{failed_ids}"]
+journeys = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "journeys"]
+
+[interfaces]
+formats = ["json-schema"]

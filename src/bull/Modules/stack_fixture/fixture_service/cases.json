@@ -1,1 +1,226 @@
-{}
+{
+  "format": 1,
+  "layout": {
+    "app/": "."
+  },
+  "settings": {
+    "source_dir": "src",
+    "test_dir": "tests"
+  },
+  "cases": [
+    {
+      "id": "clean",
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "fast",
+      "run": [
+        "gates",
+        "counter",
+        "--fast"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "no-tests",
+      "change": {
+        "replace": {
+          "tests/counter/counter.test": "# no tests yet\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "no tests ran",
+        "recorded": false
+      }
+    },
+    {
+      "id": "failing-test",
+      "change": {
+        "replace": {
+          "tests/counter/counter.test": "# counter behaviors\npass starts_at_zero\ncovers src/Modules/counter/counter.fx:2\nfail increments\ncovers src/Modules/counter/counter.fx:3\npass decrements\ncovers src/Modules/counter/counter.fx:4\ncovers src/Modules/counter/Contracts/counter.fx:2-5\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "counter/counter::increments"
+      },
+      "then": {
+        "run": [
+          "gates",
+          "--failed"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "tests",
+          "output": "counter/counter::increments",
+          "ran": 1
+        }
+      }
+    },
+    {
+      "id": "build-warning",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0 WARN\non increment: value = value + 1\non decrement: value = value - 1\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "build",
+        "output": "warning src/Modules/counter/counter.fx:2"
+      }
+    },
+    {
+      "id": "lint",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1 LINT\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "lint",
+        "output": "lint src/Modules/counter/counter.fx:4"
+      }
+    },
+    {
+      "id": "contract-change",
+      "change": {
+        "replace": {
+          "src/Modules/counter/Contracts/counter.fx": "# The counter's contract: a count that goes up and down by one.\npub Counter\npub increment\npub decrement_by\nfield value: integer\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "api",
+        "output": "contract differs from docs/api/counter.md"
+      }
+    },
+    {
+      "id": "uncovered",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1\non reset: value = 0\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "coverage",
+        "output": "coverage not clean for counter"
+      }
+    },
+    {
+      "id": "exemption",
+      "change": {
+        "replace": {
+          "src/Modules/counter/counter.fx": "# counter: holds a count and changes it by one.\nstart value 0\non increment: value = value + 1\non decrement: value = value - 1\non reset: value = 0  # coverage-exempt: reset is only reached by hand\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "setup-broken",
+      "change": {
+        "delete": [
+          "fixture.toml"
+        ]
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "setup",
+        "output": "fixture.toml missing"
+      }
+    },
+    {
+      "id": "run-lifecycle",
+      "change": {
+        "replace": {
+          ".bull/config.toml": "format = 1\n",
+          "docs/outline.md": "# Counter service outline\n\n## Purpose\nA tiny counter service for the `fixture_service` stack's self-test: the `api` part holds a count and\nanswers `GET /health` while it runs; the `web` part shows the count.\n\n## User journeys\n1. **Check the service** \u2014 start the service, see it answer `GET /health`, stop it.\n\n## Build order\n1. counter (depends on: none)\n2. display (depends on: none)\n\n## Modules\n\n### counter\n- Part: api\n- Purpose: holds a count and changes it by one.\n- Depends on: none\n- Files: Contracts/counter.fx, counter.fx\n\n### display\n- Part: web\n- Purpose: shows the counter's value, read from the running service.\n- Depends on: none\n- Files: Contracts/display.fx, display.fx\n\n## Interfaces\n\n### Count\n- File: interfaces/count.json (json-schema)\n- Provider: api / counter\n- Consumers: web / display\n\n## Decisions log\n"
+        },
+        "add": {
+          ".bull/parts/api.toml": "format = 1\nstack = \"fixture_service\"\ndir = \".\"\nsource_dir = \"src\"\ntest_dir = \"tests\"\n",
+          ".bull/parts/web.toml": "format = 1\nstack = \"fixture\"\ndir = \"web\"\nsource_dir = \"src\"\ntest_dir = \"tests\"\n",
+          "interfaces/count.json": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"title\": \"Count\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"value\": {\"type\": \"integer\"}\n  },\n  \"required\": [\"value\"]\n}\n",
+          "web/fixture.toml": "",
+          "web/src/Modules/display/Contracts/display.fx": "# The display's contract: shows the counter's value.\npub Display\nfield value: integer\n",
+          "web/src/Modules/display/display.fx": "# display: prints the current count.\nshow value\n",
+          "web/tests/display/display.test": "# display behaviors\npass shows_the_value\ncovers src/Modules/display/display.fx:2\ncovers src/Modules/display/Contracts/display.fx:2-3\n",
+          "web/tests/journey/check.test": "# Journey 1: check the service (runs while the api part is started and ready)\npass service_answers_health\n"
+        }
+      },
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      },
+      "then": {
+        "change": {
+          "replace": {
+            "web/tests/journey/check.test": "# Journey 1: check the service (runs while the api part is started and ready)\nfail service_answers_health\n"
+          }
+        },
+        "run": [
+          "gates",
+          "--journeys"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "journeys",
+          "output": "journey/check::service_answers_health"
+        }
+      }
+    }
+  ]
+}

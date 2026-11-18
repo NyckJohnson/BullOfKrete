@@ -1,0 +1,52 @@
+# The `fixture_service` stack: the fixture language as a service part, for bull's own tests.
+# It shares `tool.py` and the fixture readers with the `fixture` stack, and adds `[run]`:
+# an HTTP server on 127.0.0.1:{port} answering `GET /health` (see serve.py).
+format = 1
+
+[stack]
+name = "fixture_service"
+title = "Fixture service (test stack)"
+description = "A toolchain-free test service (*.fx sources, *.test tests, GET /health) for exercising bull itself"
+language = "fixture"
+kind = "service"
+maturity = "test"
+source_glob = "*.fx"
+test_glob = ["*.test"]
+comment = "#"
+scaffold = ["src", "tests"]
+gitignore = ["results/"]
+agents = [
+    "skeleton-builder",
+    "test-writer",
+    "code-writer",
+    "reviewer",
+    "coverage-analyst",
+]
+
+[settings.source_dir]
+type = "str"
+default = "src"
+description = "Folder (relative to the part root) holding the *.fx sources; modules live in <source_dir>/Modules/<module>/"
+
+[settings.test_dir]
+type = "str"
+default = "tests"
+description = "Folder (relative to the part root) holding <module>/*.test files"
+
+[settings."coverage.exclude"]
+default = []
+description = "Globs of sources left out of coverage (the fixture language has nothing to exclude)"
+
+[gates]
+preflight = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "preflight"]
+setup = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "setup"]
+build_test = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "build-test"]
+build_test_fast = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "build-test-fast", "{module}"]
+lint = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "lint", "{module}"]
+rerun_failed = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "rerun", "{failed_ids}"]
+
+[run]
+start = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "start", "{port}"]
+ready = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "ready", "{port}"]
+stop = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "stop", "{port}"]
+ready_timeout = 30

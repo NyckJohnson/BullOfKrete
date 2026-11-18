@@ -1,26 +1,17 @@
-"""The stack's readers: the functions bull imports from this folder."""
+"""The `fixture_service` stack's readers: the functions bull imports from this folder.
+
+The service stack speaks the same fixture language as the `fixture` stack (`*.fx` sources,
+`pub` contract lines, `tests.json`/`coverage.json` results, a `fixture.toml` setup check), so
+its four required readers are the fixture stack's, re-exported unchanged.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from pathlib import Path
+from bull.Modules.stack_fixture.fixture.readers import (
+    check,
+    contract_declarations,
+    test_results,
+    uncovered,
+)
 
-from bull.Modules.stacks.Contracts import CheckItem, CoverageData, TestRun
-
-
-def contract_declarations(path: Path) -> list[str]:
-    raise NotImplementedError("readers.contract_declarations")
-
-
-def test_results(results: Path) -> TestRun | None:
-    raise NotImplementedError("readers.test_results")
-
-
-def uncovered(part_root: Path, sources: Sequence[Path], results: Path) -> CoverageData:
-    raise NotImplementedError("readers.uncovered")
-
-
-def check(
-    part_root: Path, settings: Mapping[str, object], adopting: bool
-) -> list[CheckItem]:
-    raise NotImplementedError("readers.check")
+__all__ = ["check", "contract_declarations", "test_results", "uncovered"]
