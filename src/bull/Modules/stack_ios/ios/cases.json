@@ -1,1 +1,238 @@
-{}
+{
+  "format": 1,
+  "layout": {
+    "project/": ".",
+    "app/": "App/Fixture/Fixture/",
+    "tests/": "App/Fixture/FixtureTests/",
+    "ui-tests/": "App/Fixture/FixtureUITests/"
+  },
+  "settings": {
+    "project": "App/Fixture/Fixture.xcodeproj",
+    "scheme": "Fixture",
+    "source_dir": "App/Fixture/Fixture",
+    "test_dir": "App/Fixture/FixtureTests",
+    "ui_test_dir": "App/Fixture/FixtureUITests",
+    "unit_test_target": "FixtureTests",
+    "ui_test_target": "FixtureUITests"
+  },
+  "cases": [
+    {
+      "id": "clean",
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "fast",
+      "run": [
+        "gates",
+        "Counter",
+        "--fast"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "no-tests",
+      "change": {
+        "replace": {
+          "App/Fixture/FixtureTests/Counter/CounterTests.swift": "import Testing\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "no tests ran",
+        "recorded": false
+      }
+    },
+    {
+      "id": "failing-test",
+      "change": {
+        "replace": {
+          "App/Fixture/FixtureTests/Counter/CounterTests.swift": "import Testing\n\n@testable import Fixture\n\n@Suite struct CounterTests {\n    @Test(\"A new counter's value is its start value, 0 by default\")\n    func startValue() async {\n        #expect(await Counter().value() == 0)\n        #expect(await Counter(start: 5).value() == 5)\n    }\n\n    @Test(\"Increment returns the count plus one, which value then returns\")\n    func increment() async {\n        let counter = Counter(start: 3)\n        #expect(await counter.increment() == 4)\n        #expect(await counter.value() == 5)\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "CounterTests/increment()"
+      },
+      "then": {
+        "run": [
+          "gates",
+          "--failed"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "tests",
+          "output": "CounterTests/increment()",
+          "ran": 1
+        }
+      }
+    },
+    {
+      "id": "build-warning",
+      "change": {
+        "replace": {
+          "App/Fixture/Fixture/Modules/Counter/Counter.swift": "/// A `CounterStore` that keeps its count in memory.\nactor Counter: CounterStore {\n    private var count: Int\n\n    /// Creates a counter whose value is `start` until the first increment.\n    init(start: Int = 0) {\n        count = start\n    }\n\n    func value() -> Int {\n        let unused = count\n        return count\n    }\n\n    func increment() -> Int {\n        count += 1\n        return count\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "build",
+        "output": "Modules/Counter/Counter.swift:11"
+      }
+    },
+    {
+      "id": "lint",
+      "change": {
+        "replace": {
+          "App/Fixture/Fixture/Modules/Counter/Counter.swift": "/// A `CounterStore` that keeps its count in memory.\nactor Counter: CounterStore {\n    private var count: Int\n\n    /// Creates a counter whose value is `start` until the first increment.\n    init(start: Int = 0) {\n        count = start\n    }\n\n    func value() -> Int {\n        let boxed: Any = count\n        return boxed as! Int\n    }\n\n    func increment() -> Int {\n        count += 1\n        return count\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "lint",
+        "output": "lint App/Fixture/Fixture/Modules/Counter/Counter.swift:12"
+      }
+    },
+    {
+      "id": "contract-change",
+      "change": {
+        "replace": {
+          "App/Fixture/Fixture/Modules/Counter/Contracts/CounterStore.swift": "// coverage-exempt-file: declarations only\n\n/// Holds a count that only goes up.\nprotocol CounterStore: Sendable {\n    /// The current count: the start value until the first increment.\n    func value() async -> Int\n\n    /// Adds one to the count and returns the new count.\n    func increment() async -> Int\n\n    /// The value the counter started from.\n    var start: Int { get }\n}\n",
+          "App/Fixture/Fixture/Modules/Counter/Counter.swift": "/// A `CounterStore` that keeps its count in memory.\nactor Counter: CounterStore {\n    let start: Int\n    private var count: Int\n\n    /// Creates a counter whose value is `start` until the first increment.\n    init(start: Int = 0) {\n        self.start = start\n        count = start\n    }\n\n    func value() -> Int {\n        count\n    }\n\n    func increment() -> Int {\n        count += 1\n        return count\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "api",
+        "output": "contract differs from docs/api/Counter.md"
+      }
+    },
+    {
+      "id": "uncovered",
+      "change": {
+        "replace": {
+          "App/Fixture/Fixture/Modules/Counter/Counter.swift": "/// A `CounterStore` that keeps its count in memory.\nactor Counter: CounterStore {\n    private var count: Int\n\n    /// Creates a counter whose value is `start` until the first increment.\n    init(start: Int = 0) {\n        count = start\n    }\n\n    func value() -> Int {\n        count\n    }\n\n    func increment() -> Int {\n        count += 1\n        return count\n    }\n\n    func reset() {\n        count = 0\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "coverage",
+        "output": "Counter.swift"
+      }
+    },
+    {
+      "id": "exemption",
+      "change": {
+        "replace": {
+          "App/Fixture/Fixture/Modules/Counter/Counter.swift": "/// A `CounterStore` that keeps its count in memory.\nactor Counter: CounterStore {\n    private var count: Int\n\n    /// Creates a counter whose value is `start` until the first increment.\n    init(start: Int = 0) {\n        count = start\n    }\n\n    func value() -> Int {\n        count\n    }\n\n    func increment() -> Int {\n        count += 1\n        return count\n    }\n\n    func reset() {  // coverage-exempt: reset is only reached by hand\n        count = 0  // coverage-exempt: reset is only reached by hand\n    }  // coverage-exempt: reset is only reached by hand\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "setup-broken",
+      "change": {
+        "delete": [
+          "App/Fixture/Fixture.xcodeproj/xcshareddata/xcschemes/Fixture.xcscheme"
+        ]
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "setup",
+        "output": "Shared scheme Fixture exists"
+      }
+    },
+    {
+      "id": "journey",
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "journey-failing",
+      "change": {
+        "replace": {
+          "App/Fixture/FixtureUITests/JourneyTests.swift": "import XCTest\n\nfinal class JourneyTests: XCTestCase {\n    /// Journey 1, App opens: the app launches into its first screen, in the foreground.\n    @MainActor\n    func testJourney1_AppOpens() {\n        let app = XCUIApplication()\n        app.launchArguments = [\"-uiTesting\"]\n        app.launch()\n        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))\n        XCTAssertTrue(app.buttons[\"content.missingButton\"].waitForExistence(timeout: 2))\n    }\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "journeys",
+        "output": "testJourney1_AppOpens"
+      }
+    },
+    {
+      "id": "adopt-mode",
+      "change": {
+        "add": {
+          "App/Fixture/Fixture/LegacyGreeting.swift": "/// Legacy code outside `Modules/`, as an app being adopted has: its warning must not fail the build.\nstruct LegacyGreeting {\n    func text() -> String {\n        let unused = \"unused\"\n        return \"Hello\"\n    }\n}\n"
+        },
+        "replace": {
+          ".bull/status.json": "{\n  \"adoption\": {\n    \"checkpoints\": [\n      \"outline-approved\",\n      \"setup\",\n      \"baseline\",\n      \"scaffold\"\n    ],\n    \"stage\": 5\n  },\n  \"approvals\": [],\n  \"checkpoints\": [\n    \"outline-approved\",\n    \"setup\",\n    \"skeleton\",\n    \"ui-approved\"\n  ],\n  \"feature\": null,\n  \"format\": 1,\n  \"kind\": \"app\",\n  \"modules\": [\n    {\n      \"depends\": [],\n      \"name\": \"Counter\",\n      \"part\": \"\",\n      \"reference_tests\": true,\n      \"scan\": null,\n      \"state\": \"pending\",\n      \"units\": [\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Contracts/CounterStore.swift\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 1,\n          \"state\": \"pending\"\n        },\n        {\n          \"attempts\": 1,\n          \"files\": [\n            \"Counter.swift\"\n          ],\n          \"kind\": \"code\",\n          \"number\": 2,\n          \"state\": \"pending\"\n        }\n      ]\n    }\n  ],\n  \"pause\": null,\n  \"plan\": null,\n  \"stage\": 5,\n  \"waiting\": null\n}\n"
+        }
+      },
+      "run": [
+        "gates",
+        "Counter"
+      ],
+      "expect": {
+        "verdict": "pass"
+      }
+    }
+  ]
+}
