@@ -112,7 +112,7 @@ def _type_alias_line(node: ast.stmt) -> str | None:
     name: object = getattr(node, "name", None)
     value: object = getattr(node, "value", None)
     if not isinstance(name, ast.Name) or not isinstance(value, ast.expr):
-        return None
+        return None  # coverage-exempt: unreachable; a TypeAlias node always has a Name target and expr value
     return f"type {name.id} = {ast.unparse(value)}" if _public(name.id) else None
 
 

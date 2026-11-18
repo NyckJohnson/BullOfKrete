@@ -404,4 +404,4 @@ def main(argv: Sequence[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(sys.argv[1:]))  # coverage-exempt: __main__ guard; main() is tested in-process

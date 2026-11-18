@@ -17,3 +17,7 @@ APP_PACKAGE="bull"
 # their tests in <APP_TEST_DIR>/<Module>/ (same convention as every other stack).
 APP_TEST_DIR="tests"
 APP_SOURCE_DIR="src/bull"
+
+# Built-in stacks' fixture/ and app/ folders are test data (omitted from bull's own coverage in
+# pyproject.toml too). Approved 2026-11-18.
+COVERAGE_EXCLUDE_EXTRA="/Modules/stack_[^/]+/[^/]+/(fixture|app)/"
