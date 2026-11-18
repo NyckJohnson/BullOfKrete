@@ -1037,7 +1037,7 @@
             "ios/detect.py",
             "ios/inventory.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T08:24:19-08:00",
+  "updatedAt": "2026-11-18T08:24:45-08:00",
   "features": [],
   "activeFeature": null
 }
