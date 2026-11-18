@@ -1,12 +1,405 @@
-"""Detects an existing Xcode project for adoption."""
+"""Detects an existing Xcode project for adoption.
+
+Reads files only (no Xcode, no subprocess): finds the app's `.xcodeproj`, parses its
+`project.pbxproj`, tells the app, unit test and UI test targets apart by product type, and
+proposes the stack's settings (paths POSIX and relative to `root`). What stands in the way of an
+adoption comes back as issues: BLOCK (the pipeline can't adopt the app as it is), FIX (a manual
+Xcode step, worded as in the setup guide's adoption steps) or NOTE.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
+import re
+from pathlib import Path, PurePosixPath
+from typing import Any
 
-from bull.Modules.stacks.Contracts import Detection
+from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel
+
+from . import pbxproj
+
+_APP_TYPE = "com.apple.product-type.application"
+_UNIT_TYPE = "com.apple.product-type.bundle.unit-test"
+_UI_TYPE = "com.apple.product-type.bundle.ui-testing"
+_NATIVE_TARGET = "PBXNativeTarget"
+_SYNC_GROUP = "PBXFileSystemSynchronizedRootGroup"
+_GROUP = "PBXGroup"
+# Folders never searched: hidden ones, build output and third-party dependency checkouts.
+_SKIP_DIRS = frozenset(
+    {"DerivedData", "build", "Pods", "Carthage", "node_modules", "SourcePackages"}
+)
+_LOCATION_RE = re.compile(r'location\s*=\s*"([^"]*)"')
+
+_NONE_CONFIDENCE = 0.0
+_BROKEN_CONFIDENCE = 0.6
+_NO_APP_CONFIDENCE = 0.5
+_FOUND_CONFIDENCE = 0.9
 
 
 def detect(root: Path) -> Detection:
-    """How well an existing Xcode project under `root` fits the stack (unit 4)."""
-    raise NotImplementedError("detect.detect")
+    """How well an existing Xcode project under `root` fits the stack; never raises for content.
+
+    No `.xcodeproj` gives a low confidence and no settings. A found project gives a high
+    confidence and the settings `project`, `scheme`, `source_dir`, `test_dir`, `ui_test_dir`,
+    `unit_test_target` and `ui_test_target` (each one only when it can be worked out).
+    """
+    projects, workspaces = _find(root)
+    if not projects:
+        return Detection(
+            confidence=_NONE_CONFIDENCE,
+            summary=f"No Xcode project (.xcodeproj) found under {root}.",
+            settings={},
+            issues=(),
+        )
+    project_dir = projects[0]
+    base = project_dir.parent
+    settings: dict[str, str] = {"project": _rel(root, project_dir)}
+    issues: list[Issue] = []
+    if len(projects) > 1:
+        others = ", ".join(_rel(root, p) for p in projects[1:])
+        issues.append(
+            Issue(
+                level=IssueLevel.NOTE,
+                item=f"Several Xcode projects found; using {settings['project']} (also: {others})",
+                fix="If the app is another project, set `project` to its path relative to the part folder.",
+            )
+        )
+    issues.extend(_dependency_issues(root, base, project_dir, workspaces))
+
+    pbx_path = project_dir / "project.pbxproj"
+    try:
+        project = pbxproj.parse(pbx_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, pbxproj.PbxprojError) as error:
+        issues.append(
+            Issue(
+                level=IssueLevel.BLOCK,
+                item=f"The project file {settings['project']}/project.pbxproj can't be read ({error})",
+                fix=(
+                    "Open the project in Xcode and save it, or restore project.pbxproj from git; "
+                    "then run the detection again."
+                ),
+            )
+        )
+        return Detection(
+            confidence=_BROKEN_CONFIDENCE,
+            summary=f"Found Xcode project {settings['project']}, but its project file can't be read.",
+            settings=settings,
+            issues=tuple(issues),
+        )
+
+    objects_value = project.get("objects")
+    objects: dict[str, Any] = objects_value if isinstance(objects_value, dict) else {}
+    targets = _native_targets(project, objects)
+    app = _first_of_type(targets, _APP_TYPE)
+    unit = _first_of_type(targets, _UNIT_TYPE)
+    ui = _first_of_type(targets, _UI_TYPE)
+
+    if app is None:
+        issues.append(
+            Issue(
+                level=IssueLevel.BLOCK,
+                item=f"No app target (product type application) in {settings['project']}",
+                fix=(
+                    "The stack adopts iOS apps only: point `project` at the app's .xcodeproj, "
+                    "or add the app target in Xcode, then run the detection again."
+                ),
+            )
+        )
+    roles = (
+        ("app", app, "source_dir", None),
+        ("unit test", unit, "test_dir", "unit_test_target"),
+        ("UI test", ui, "ui_test_dir", "ui_test_target"),
+    )
+    for role, target, dir_key, target_key in roles:
+        if target is None:
+            continue
+        name = _name(target)
+        if target_key is not None:
+            settings[target_key] = name
+        folder, issue = _folder(objects, project, target, role)
+        settings[dir_key] = _join(root, base, folder)
+        if issue is not None:
+            issues.append(issue)
+
+    if unit is None:
+        issues.append(
+            Issue(
+                level=IssueLevel.FIX,
+                item="No unit test target",
+                fix=(
+                    "In Xcode choose File > New > Target > Unit Testing Bundle (Testing System: "
+                    "Swift Testing, target to be tested: the app), then set `unit_test_target` "
+                    "and `test_dir`."
+                ),
+            )
+        )
+    if ui is None:
+        issues.append(
+            Issue(
+                level=IssueLevel.FIX,
+                item="No UI test target",
+                fix=(
+                    "In Xcode choose File > New > Target > UI Testing Bundle (target to be "
+                    "tested: the app), then set `ui_test_target` and `ui_test_dir`."
+                ),
+            )
+        )
+
+    app_name = _name(app) if app is not None else ""
+    scheme, scheme_issue = _scheme(project_dir, app_name)
+    if scheme:
+        settings["scheme"] = scheme
+    if scheme_issue is not None:
+        issues.append(scheme_issue)
+
+    swift_issue = _swift_issue(
+        project, [_name(t) for t in (app, unit, ui) if t is not None]
+    )
+    if swift_issue is not None:
+        issues.append(swift_issue)
+
+    return Detection(
+        confidence=_FOUND_CONFIDENCE if app is not None else _NO_APP_CONFIDENCE,
+        summary=_summary(settings, app_name),
+        settings=settings,
+        issues=tuple(issues),
+    )
+
+
+def _find(root: Path) -> tuple[list[Path], list[Path]]:
+    """The `.xcodeproj` and `.xcworkspace` folders under `root`, shallowest first.
+
+    Neither is searched inside; hidden folders and `_SKIP_DIRS` are left out.
+    """
+    projects: list[Path] = []
+    workspaces: list[Path] = []
+    for dirpath, dirnames, _ in os.walk(root):
+        here = Path(dirpath)
+        keep: list[str] = []
+        for name in sorted(dirnames):
+            if name.endswith(".xcodeproj"):
+                projects.append(here / name)
+            elif name.endswith(".xcworkspace"):
+                workspaces.append(here / name)
+            elif not name.startswith(".") and name not in _SKIP_DIRS:
+                keep.append(name)
+        dirnames[:] = keep
+
+    def order(path: Path) -> tuple[int, str]:
+        rel = path.relative_to(root)
+        return (len(rel.parts), rel.as_posix())
+
+    return sorted(projects, key=order), sorted(workspaces, key=order)
+
+
+def _rel(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def _join(root: Path, base: Path, folder: str) -> str:
+    """`folder` (relative to the project's parent `base`) as a POSIX path relative to `root`."""
+    prefix = PurePosixPath(base.relative_to(root).as_posix())
+    joined = prefix / folder if str(prefix) != "." else PurePosixPath(folder)
+    return joined.as_posix()
+
+
+def _dependency_issues(
+    root: Path, base: Path, project_dir: Path, workspaces: list[Path]
+) -> list[Issue]:
+    """BLOCKs for CocoaPods, Carthage, and workspaces listing projects besides the app's."""
+    issues: list[Issue] = []
+    folders = [root] if base == root else [root, base]
+    for folder in folders:
+        if (folder / "Podfile").is_file():
+            issues.append(
+                Issue(
+                    level=IssueLevel.BLOCK,
+                    item=f"CocoaPods in use ({_rel(root, folder / 'Podfile')})",
+                    fix=(
+                        "Move the pods to Swift Package Manager (File > Add Package Dependencies), "
+                        "remove the Podfile and the Pods workspace, then run the detection again."
+                    ),
+                )
+            )
+        if (folder / "Cartfile").is_file():
+            issues.append(
+                Issue(
+                    level=IssueLevel.BLOCK,
+                    item=f"Carthage in use ({_rel(root, folder / 'Cartfile')})",
+                    fix=(
+                        "Move the Carthage dependencies to Swift Package Manager (File > Add "
+                        "Package Dependencies), remove the Cartfile, then run the detection again."
+                    ),
+                )
+            )
+    for workspace in workspaces:
+        issues.extend(_workspace_issues(root, workspace, project_dir))
+    return issues
+
+
+def _workspace_issues(root: Path, workspace: Path, project_dir: Path) -> list[Issue]:
+    """A BLOCK when the workspace lists an `.xcodeproj` other than the app's."""
+    data = workspace / "contents.xcworkspacedata"
+    if not data.is_file():
+        return []
+    try:
+        text = data.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        return [
+            Issue(
+                level=IssueLevel.FIX,
+                item=f"The workspace {_rel(root, workspace)} can't be read ({error})",
+                fix="Restore contents.xcworkspacedata from git, or delete the workspace if the app doesn't need it.",
+            )
+        ]
+    own = os.path.normpath(project_dir)
+    extra: list[str] = []
+    for location in _LOCATION_RE.findall(text):
+        kind, _, ref = location.partition(":")
+        if not ref.endswith(".xcodeproj"):
+            continue
+        if kind == "absolute":
+            resolved = os.path.normpath(ref)
+        else:  # group:, container: and self: are relative to the workspace's folder
+            resolved = os.path.normpath(workspace.parent / ref)
+        if resolved != own:
+            extra.append(ref)
+    if not extra:
+        return []
+    return [
+        Issue(
+            level=IssueLevel.BLOCK,
+            item=f"The workspace {_rel(root, workspace)} lists other projects: {', '.join(extra)}",
+            fix=(
+                "The stack builds one project: move those projects' code into the app's project "
+                "or into Swift packages, remove them from the workspace, then run the detection again."
+            ),
+        )
+    ]
+
+
+def _native_targets(
+    project: dict[str, Any], objects: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """The project's native targets, in the root object's order (any others after)."""
+    root = objects.get(project.get("rootObject", ""))
+    order = root.get("targets") if isinstance(root, dict) else None
+    ids = [t for t in order if isinstance(t, str)] if isinstance(order, list) else []
+    ids += sorted(k for k in objects if k not in ids)
+    return [
+        objects[k]
+        for k in ids
+        if isinstance(objects.get(k), dict) and objects[k].get("isa") == _NATIVE_TARGET
+    ]
+
+
+def _first_of_type(
+    targets: list[dict[str, Any]], product_type: str
+) -> dict[str, Any] | None:
+    return next((t for t in targets if t.get("productType") == product_type), None)
+
+
+def _name(target: dict[str, Any]) -> str:
+    name = target.get("name")
+    return name if isinstance(name, str) else ""
+
+
+def _folder(
+    objects: dict[str, Any], project: dict[str, Any], target: dict[str, Any], role: str
+) -> tuple[str, Issue | None]:
+    """The target's folder (relative to the project's parent) and a FIX if it is a group."""
+    name = _name(target)
+    groups = target.get("fileSystemSynchronizedGroups")
+    if isinstance(groups, list):
+        for ref in groups:
+            group = objects.get(ref) if isinstance(ref, str) else None
+            if isinstance(group, dict) and group.get("isa") == _SYNC_GROUP:
+                path = group.get("path")
+                if isinstance(path, str) and path:
+                    return path, None
+    group_name = name
+    for child in _main_group_children(objects, project):
+        path = child.get("path")
+        label = child.get("name")
+        if child.get("isa") == _GROUP and name in (path, label):
+            group_name = path if isinstance(path, str) and path else name
+            break
+    return group_name, Issue(
+        level=IssueLevel.FIX,
+        item=f"The {role} group {group_name} is a group, not a synchronized folder",
+        fix=(
+            f"In Xcode's Project navigator, right-click the {group_name} group and choose "
+            "Convert to Folder; if Xcode says it can't, resolve what it names and retry, then "
+            "build once (Cmd-B)."
+        ),
+    )
+
+
+def _main_group_children(
+    objects: dict[str, Any], project: dict[str, Any]
+) -> list[dict[str, Any]]:
+    root = objects.get(project.get("rootObject", ""))
+    main = objects.get(root.get("mainGroup", "")) if isinstance(root, dict) else None
+    children = main.get("children") if isinstance(main, dict) else None
+    if not isinstance(children, list):
+        return []
+    found = (objects.get(c) if isinstance(c, str) else None for c in children)
+    return [c for c in found if isinstance(c, dict)]
+
+
+def _scheme(project_dir: Path, app_name: str) -> tuple[str, Issue | None]:
+    """A shared scheme's name (the app's if shared), or the app's name and a FIX."""
+    folder = project_dir / "xcshareddata" / "xcschemes"
+    shared = (
+        sorted(p.stem for p in folder.glob("*.xcscheme")) if folder.is_dir() else []
+    )
+    if shared:
+        return (app_name if app_name in shared else shared[0]), None
+    return app_name, Issue(
+        level=IssueLevel.FIX,
+        item=f"No shared scheme in {project_dir.name}",
+        fix=(
+            "In Xcode choose Product > Scheme > Manage Schemes, tick Shared for the app's "
+            "scheme (with both test targets in its Test action) and commit xcshareddata/; "
+            "then set `scheme` to its name."
+        ),
+    )
+
+
+def _swift_issue(project: dict[str, Any], targets: list[str]) -> Issue | None:
+    """A NOTE for Swift 5 targets (fine while adopting), a FIX for older or unset versions."""
+    versions = {t: pbxproj.build_setting(project, t, "SWIFT_VERSION") for t in targets}
+    if not versions:
+        return None
+    shown = ", ".join(f"{t}: {v or 'not set'}" for t, v in versions.items())
+    old = [t for t, v in versions.items() if v is None or not v.startswith(("5", "6"))]
+    if old:
+        return Issue(
+            level=IssueLevel.FIX,
+            item=f"Swift language version too old or not set ({shown})",
+            fix=(
+                f"Set Build Settings > Swift Language Version to Swift 5 or later for "
+                f"{', '.join(old)}."
+            ),
+        )
+    if any(v is not None and v.startswith("5") for v in versions.values()):
+        return Issue(
+            level=IssueLevel.NOTE,
+            item=f"Swift 5 language mode ({shown})",
+            fix=(
+                "Leave the Swift Language Version as it is during the adoption; it switches to "
+                "Swift 6 at the final switch."
+            ),
+        )
+    return None
+
+
+def _summary(settings: dict[str, str], app_name: str) -> str:
+    parts = [f"Found Xcode project {settings['project']}"]
+    if app_name:
+        parts.append(f"app target {app_name}")
+    else:
+        parts.append("no app target")
+    parts.append(f"unit tests {settings.get('unit_test_target', 'missing')}")
+    parts.append(f"UI tests {settings.get('ui_test_target', 'missing')}")
+    return ", ".join(parts) + "."
