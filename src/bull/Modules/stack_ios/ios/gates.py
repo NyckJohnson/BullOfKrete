@@ -44,6 +44,8 @@ from pathlib import Path
 if __package__:
     from . import simulator
 else:
+    # type: ignore: script mode is a sibling import mypy can't resolve, and the name is
+    # bound twice across the two branches.
     import simulator  # type: ignore[import-not-found,no-redef]  # coverage-exempt: script mode only
 
 _USAGE = (
@@ -253,6 +255,8 @@ def _xcodebuild(
         "-resultBundlePath",
         str(bundle),
     ]
+    if step in _UNIT_STEPS:
+        argv += ["-enableCodeCoverage", "YES"]
     if only:
         argv += ["-collect-test-diagnostics", "on-failure"]
         argv += [f"-only-testing:{target}" for target in only]
@@ -274,7 +278,7 @@ def _xcodebuild(
             time.sleep(_BUSY_WAIT_SECONDS * attempt)
 
     _show_tail(output)
-    labels = _build_labels(env, output)
+    labels = _build_labels(env, output, errors=code != 0)
     if code != 0 and not labels:
         if _BUSY in output.lower():
             labels = [f"{step}: simulator busy after {_MAX_RUNS} runs"]
@@ -287,8 +291,13 @@ def _xcodebuild(
     return 1 if code != 0 or labels else 0
 
 
-def _build_labels(env: _Env, output: str) -> list[str]:
-    """Compile errors as `<file>:<line>`; in adopt mode, module warnings as `warning …`."""
+def _build_labels(env: _Env, output: str, errors: bool) -> list[str]:
+    """Compile errors as `<file>:<line>`; in adopt mode, module warnings as `warning …`.
+
+    Error lines count only when `errors` is set (xcodebuild exited non-zero): a passing run
+    may echo an `error:` line (a test's own output), which must not fail it. Adopt-mode
+    warnings in module code fail the step whatever the exit code.
+    """
     labels: list[str] = []
     for line in output.splitlines():
         match = _DIAGNOSTIC.match(line.strip())
@@ -296,7 +305,8 @@ def _build_labels(env: _Env, output: str) -> list[str]:
             continue
         rel = env.rel(match["file"])
         if match["kind"] == "error":
-            labels.append(f"{rel or match['file']}:{match['line']}")
+            if errors:
+                labels.append(f"{rel or match['file']}:{match['line']}")
         elif env.adopt and rel is not None and _in_module_code(env, rel):
             labels.append(f"warning {rel}:{match['line']}")
     return list(dict.fromkeys(labels))
@@ -414,7 +424,13 @@ def _build_test_fast(env: _Env, args: list[str]) -> int:
 
 
 def _run_suites(env: _Env, step: str, module: str) -> int:
-    suites = _suites(env.root / env.module_tests(module))
+    folder = env.module_tests(module)
+    suites = _suites(env.root / folder)
+    if not suites and step == "build-test-fast":
+        print(
+            f"no test suites found under {folder}; "
+            "top-level suites must end in Tests or carry @Suite"
+        )
     return _xcodebuild(env, step, [f"{env.unit_target}/{suite}" for suite in suites])
 
 
@@ -533,9 +549,9 @@ def _prune(env: _Env, args: list[str]) -> int:
 
 
 def _clear_unit_bundles(env: _Env) -> None:
-    """Remove earlier unit-test bundles so a broken run can't be read as this one."""
+    """Remove earlier unit-test and journeys bundles so a stale one can't be read as this run's."""
     env.results.mkdir(parents=True, exist_ok=True)
-    for step in _UNIT_STEPS:
+    for step in (*_UNIT_STEPS, "journeys"):
         shutil.rmtree(env.results / f"{step}{_BUNDLE_SUFFIX}", ignore_errors=True)
 
 
