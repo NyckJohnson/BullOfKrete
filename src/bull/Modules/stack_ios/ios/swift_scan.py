@@ -80,7 +80,16 @@ _ONLY_ATTRIBUTES_RE = re.compile(r"^\s*(?:@[\w.]+(?:\([^()]*\))?\s*)+$")
 _CONTINUATION_RE = re.compile(r"(?:->|\{|[.:,=&?]|(?:throws|rethrows|async|where)\b)")
 # A statement whose last line ends with one of these continues on the next line. Trailing
 # `throws`/`async`/`rethrows` are left out: they also end complete members (`func f() throws`).
-_TRAILING_RE = re.compile(r"(?:->|[.:,=&]|(?<![\w$])where)\s*$")
+# A trailing `.`, `=` or `&` preceded by another operator character ends an operator token
+# (`...`, `+=`, `&&`), not a wrapped statement, so it does not count.
+_TRAILING_RE = re.compile(
+    r"(?:->|[:,]|(?<![-/=+!*%<>&|^~?.])[.=&]|(?<![\w$])where)\s*$"
+)
+# Operator and precedence group declarations are complete on their line whatever they end with
+# (`infix operator &`, `postfix operator ...`).
+_OPERATOR_DECL_RE = re.compile(
+    r"\s*(?:(?:prefix|postfix|infix)\s+)?(?:operator|precedencegroup)(?![\w$])"
+)
 _PLACEHOLDER_RE = re.compile("\x00(\\d+)\x00")
 
 
@@ -161,7 +170,10 @@ class _Scanner:
                 statement = "".join(self.buf)
                 if (
                     not _CONTINUATION_RE.match(text, i)
-                    and not _TRAILING_RE.search(statement)
+                    and (
+                        _OPERATOR_DECL_RE.match(statement)
+                        or not _TRAILING_RE.search(statement)
+                    )
                     and not _ONLY_ATTRIBUTES_RE.match(statement)
                 ):
                     self._flush()
@@ -299,7 +311,9 @@ def _normalize(statement: str) -> str:
     text = re.sub(r"([,:])(?=\S)", r"\1 ", text)
     text = re.sub(r"\s+([,:)\]])", r"\1", text)
     text = re.sub(r"([(\[])\s+", r"\1", text)
-    text = re.sub(r"\.\s+(?=\w)", ".", text)  # a member path wrapped after its dot
+    # A member path wrapped after its dot (`Swift.` / `Int`); a dot ending an operator token
+    # (`Int... x`) is left alone.
+    text = re.sub(r"(?<=\w)\.\s+(?=\w)", ".", text)
     return text
 
 
