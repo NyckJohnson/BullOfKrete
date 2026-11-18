@@ -9,6 +9,7 @@ part root or absolute; `check` returns one item per probe, found by words in the
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -162,6 +163,65 @@ def test_contract_declarations_change_when_a_field_is_added(tmp_path: Path) -> N
     assert _decls(tmp_path, head, "a.py") != _decls(
         tmp_path, head + "    y: int\n", "b.py"
     )
+
+
+def _method_decl(tmp_path: Path, decorator: str, name: str = "c.py") -> list[str]:
+    static = decorator == "@staticmethod"
+    first = "" if static else ("cls, " if decorator == "@classmethod" else "self, ")
+    prefix = f"    {decorator}\n" if decorator else ""
+    return _decls(
+        tmp_path,
+        "from abc import ABC, abstractmethod\n\n"
+        "class K(ABC):\n"
+        f"{prefix}    def run({first}n: int) -> int: ...\n",
+        name,
+    )
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    ["@property", "@classmethod", "@staticmethod", "@abstractmethod"],
+)
+def test_contract_declarations_show_a_method_decorator_in_its_declaration(
+    tmp_path: Path, decorator: str
+) -> None:
+    out = _method_decl(tmp_path, decorator)
+    assert any(decorator in line and "def run" in line for line in out), out
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    ["@property", "@classmethod", "@staticmethod", "@abstractmethod"],
+)
+def test_contract_declarations_change_when_a_method_decorator_is_added(
+    tmp_path: Path, decorator: str
+) -> None:
+    assert _method_decl(tmp_path, "", "a.py") != _method_decl(
+        tmp_path, decorator, "b.py"
+    )
+
+
+def test_contract_declarations_change_when_a_method_decorator_is_swapped(
+    tmp_path: Path,
+) -> None:
+    assert _method_decl(tmp_path, "@classmethod", "a.py") != _method_decl(
+        tmp_path, "@staticmethod", "b.py"
+    )
+
+
+def test_contract_declarations_show_stacked_method_decorators(tmp_path: Path) -> None:
+    out = _decls(
+        tmp_path,
+        "from abc import ABC, abstractmethod\n\n"
+        "class K(ABC):\n"
+        "    @property\n"
+        "    @abstractmethod\n"
+        "    def run(self) -> int: ...\n",
+    )
+    assert any(
+        "@property" in line and "@abstractmethod" in line and "def run" in line
+        for line in out
+    ), out
 
 
 # --- test_results ------------------------------------------------------------------------
@@ -367,3 +427,74 @@ def test_check_items_are_all_check_items(tmp_path: Path) -> None:
     items = readers.check(tmp_path, {"package": "demo_pkg"}, False)
     assert items
     assert all(isinstance(i, CheckItem) for i in items)
+
+
+def test_check_without_settings_falls_back_to_the_manifest_default_package(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path, "myapp")
+    items = readers.check(tmp_path, {}, False)
+    assert all(i.ok for i in items if "package" in i.item.lower()), items
+    assert "myapp" in _item(items, "package").item
+
+
+def test_check_with_only_a_package_setting_looks_for_it_under_src(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path, "other")
+    items = readers.check(tmp_path, {"package": "other"}, False)
+    assert _item(items, "package").ok is True
+
+
+_PAYLOAD = "os; open('pwned','w')"
+
+
+def _venv_python_wrapper(root: Path) -> None:
+    """A `.venv/bin/python` that runs the test interpreter (a stand-in for the app's)."""
+    exe = root / ".venv" / "bin" / "python"
+    exe.parent.mkdir(parents=True)
+    exe.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    exe.chmod(0o755)
+
+
+def test_check_never_puts_the_package_setting_into_python_source(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path, "demo_pkg")
+    _venv_python_wrapper(tmp_path)
+    settings = {"package": _PAYLOAD, "source_dir": "src/demo_pkg"}
+    items = readers.check(tmp_path, settings, False)
+    assert not (tmp_path / "pwned").exists()
+    assert _item(items, "package").ok is False
+
+
+def test_check_with_an_unlaunchable_venv_python_fails_the_package_item(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    broken = tmp_path / ".venv" / "bin" / "python"
+    broken.parent.mkdir(parents=True)
+    broken.write_text("not an executable")
+    broken.chmod(0o644)
+    items = readers.check(tmp_path, {"package": "demo_pkg"}, False)
+    assert all(isinstance(i, CheckItem) for i in items)
+    assert _item(items, "package").ok is False
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root can read anything"
+)
+def test_check_with_an_unreadable_pyvenv_cfg_returns_a_failing_item(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    cfg = tmp_path / ".venv" / "pyvenv.cfg"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("version = 3.12.0\n")
+    cfg.chmod(0)
+    try:
+        items = readers.check(tmp_path, {"package": "demo_pkg"}, False)
+    finally:
+        cfg.chmod(0o644)
+    assert all(isinstance(i, CheckItem) for i in items)
+    assert any(not i.ok for i in items)

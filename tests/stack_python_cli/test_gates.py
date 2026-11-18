@@ -11,6 +11,7 @@ returns 2 when `uv` or `uv sync` is missing; the `bull-fail:` lines go to stdout
 
 from __future__ import annotations
 
+import itertools
 import json
 import shutil
 import subprocess
@@ -253,6 +254,32 @@ def test_fast_runs_only_the_modules_tests_without_coverage_but_with_junit(
     assert f"--junitxml={app.results}/junit.xml" in text
 
 
+def test_fast_runs_strict_mypy_on_the_source_folder(app: App) -> None:
+    assert gates.main(["build-test-fast", "counter"]) == 0
+    calls = app.runner.with_words("mypy", "--strict")
+    assert calls
+    assert any(_SOURCE in c for c in calls)
+
+
+def test_fast_mypy_error_fails_the_step_with_a_labelled_file_and_line(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when(
+        "mypy",
+        rc=1,
+        out="src/demo_pkg/a.py:12: error: Incompatible types  [assignment]\n",
+    )
+    assert gates.main(["build-test-fast", "counter"]) != 0
+    assert "bull-fail: mypy src/demo_pkg/a.py:12" in capsys.readouterr().out
+
+
+def test_fast_clean_mypy_prints_no_fail_labels(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert gates.main(["build-test-fast", "counter"]) == 0
+    assert "bull-fail:" not in capsys.readouterr().out
+
+
 def test_fast_failing_pytest_fails_the_step(app: App) -> None:
     app.runner.when("pytest", rc=1)
     assert gates.main(["build-test-fast", "counter"]) != 0
@@ -326,9 +353,28 @@ def test_lint_fails_when_ruff_check_finds_problems(app: App) -> None:
     assert gates.main(["lint", "counter"]) != 0
 
 
+_RUFF_UNFORMATTED = (
+    "src/demo_pkg/a.py:2:1: unformatted: File would be reformatted\n"
+    "1 file would be reformatted\n"
+)
+
+
 def test_lint_fails_when_format_check_finds_problems(app: App) -> None:
-    app.runner.when("ruff", "format", rc=1, out="Would reformat: src/demo_pkg/a.py")
+    app.runner.when("ruff", "format", rc=1, out=_RUFF_UNFORMATTED)
     assert gates.main(["lint", "counter"]) != 0
+
+
+def test_lint_labels_an_unformatted_file_from_ruffs_concise_output(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("ruff", "format", rc=1, out=_RUFF_UNFORMATTED)
+    assert gates.main(["lint", "counter"]) != 0
+    assert "bull-fail: format src/demo_pkg/a.py" in capsys.readouterr().out
+
+
+def test_lint_asks_ruff_format_for_concise_output(app: App) -> None:
+    assert gates.main(["lint", "counter"]) == 0
+    assert "--output-format=concise" in _ruff_format(app)
 
 
 def test_lint_without_a_module_is_a_usage_error(app: App) -> None:
@@ -370,6 +416,102 @@ def test_journeys_run_pytest_over_the_journey_folder(app: App) -> None:
 def test_journeys_failing_pytest_fails_the_step(app: App) -> None:
     app.runner.when("pytest", rc=1)
     assert gates.main(["journeys"]) != 0
+
+
+# --- defaults ----------------------------------------------------------------------------
+
+
+def _no_settings(app: App) -> None:
+    app.mp.setenv("BULL_SETTINGS", "{}")
+
+
+def test_build_test_without_settings_uses_the_manifest_default_source_folder(
+    app: App,
+) -> None:
+    _no_settings(app)
+    assert gates.main(["build-test"]) == 0
+    (mypy,) = app.runner.with_words("mypy", "--strict")
+    assert "src/myapp" in mypy
+    (pytest_call,) = app.runner.with_words("pytest")
+    assert "--cov=src/myapp" in pytest_call
+
+
+def test_lint_without_settings_uses_the_manifest_default_source_folder(
+    app: App,
+) -> None:
+    _no_settings(app)
+    assert gates.main(["lint", "counter"]) == 0
+    assert "src/myapp/Modules/counter" in " ".join(_ruff_check(app))
+
+
+def test_setup_without_settings_checks_the_default_package_name(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _no_settings(app)
+    app.write("pyproject.toml", "[project]\nname = 'myapp'\n")
+    app.runner.when("python", rc=1)
+    assert gates.main(["setup"]) != 0
+    assert "myapp" in capsys.readouterr().out
+
+
+def test_package_setting_alone_puts_the_source_folder_under_src(app: App) -> None:
+    app.mp.setenv("BULL_SETTINGS", json.dumps({"package": "other"}))
+    assert gates.main(["build-test"]) == 0
+    (mypy,) = app.runner.with_words("mypy", "--strict")
+    assert "src/other" in mypy
+
+
+# --- the package setting is never code -----------------------------------------------------
+
+_PAYLOAD = "os; open('pwned','w')"
+
+
+def test_setup_never_puts_the_package_setting_into_python_source(app: App) -> None:
+    app.env(settings={"package": _PAYLOAD})
+    app.write("pyproject.toml", "[project]\nname = 'demo_pkg'\n")
+    gates.main(["setup"])
+    for call in app.runner.calls:
+        for flag, code in itertools.pairwise(call):
+            if flag == "-c":
+                assert "pwned" not in code, call
+
+
+# --- tools that are missing or broken ----------------------------------------------------
+
+
+def _tool_vanishes(app: App, exc: type[OSError]) -> None:
+    def rule(argv: list[str]) -> subprocess.CompletedProcess[str] | None:
+        if "uv" in argv:
+            raise exc(2, "No such file or directory", "uv")
+        return None
+
+    app.runner.rules.append(rule)
+
+
+@pytest.mark.parametrize("exc", [FileNotFoundError, PermissionError])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["preflight"],
+        ["setup"],
+        ["build-test"],
+        ["build-test-fast", "counter"],
+        ["lint", "counter"],
+        ["rerun", "tests/counter/test_a.py::test_one"],
+        ["journeys"],
+    ],
+)
+def test_a_tool_that_cannot_be_launched_gives_a_message_and_a_failing_exit(
+    app: App,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    exc: type[OSError],
+) -> None:
+    app.with_uv()
+    app.write("pyproject.toml", "[project]\nname = 'demo_pkg'\n")
+    _tool_vanishes(app, exc)
+    assert gates.main(argv) != 0
+    assert "uv" in _output(capsys)
 
 
 # --- end to end with the real uv ---------------------------------------------------------
@@ -482,10 +624,30 @@ def test_real_fast_runs_the_modules_tests_and_a_failure_fails_it(real: App) -> N
 
 
 @needs_uv
-def test_real_lint_passes_clean_code_and_fails_unformatted_code(real: App) -> None:
+def test_real_fast_reports_a_mypy_error_with_its_label(
+    real: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    real.write(
+        "src/demo_pkg/Modules/counter/counter.py",
+        "from __future__ import annotations\n\n\ndef add(a: int, b: int) -> int:\n    return 'x'\n",
+    )
+    assert gates.main(["build-test-fast", "counter"]) != 0
+    assert (
+        "bull-fail: mypy src/demo_pkg/Modules/counter/counter.py:5"
+        in capsys.readouterr().out
+    )
+
+
+@needs_uv
+def test_real_lint_passes_clean_code_and_fails_unformatted_code(
+    real: App, capsys: pytest.CaptureFixture[str]
+) -> None:
     assert gates.main(["lint", "counter"]) == 0
+    capsys.readouterr()
     real.write("src/demo_pkg/Modules/counter/counter.py", "import os\nx=1\n")
     assert gates.main(["lint", "counter"]) != 0
+    out = capsys.readouterr().out
+    assert "bull-fail: format src/demo_pkg/Modules/counter/counter.py" in out
 
 
 @needs_uv
@@ -505,3 +667,12 @@ def test_real_journeys_run_the_journey_folder(real: App) -> None:
         "tests/journey/test_run.py", "def test_journey() -> None:\n    assert False\n"
     )
     assert gates.main(["journeys"]) != 0
+
+
+@needs_uv
+def test_real_setup_does_not_run_code_smuggled_through_the_package_setting(
+    real: App,
+) -> None:
+    real.env(settings={"package": _PAYLOAD})
+    assert gates.main(["setup"]) != 0
+    assert not (real.root / "pwned").exists()
