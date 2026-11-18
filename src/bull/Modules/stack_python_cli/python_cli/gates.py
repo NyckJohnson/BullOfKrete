@@ -12,10 +12,16 @@ Steps:
   then pytest over the test folder minus `<test_dir>/journey` (or only `BULL_SCOPE_MODULE`'s
   tests) with coverage into `<results>/coverage.json` and `<results>/junit.xml`.
 - `build-test-fast <module>`: mypy as above, then pytest over that module's tests, junit only.
-- `lint <module>`: `ruff check` and `ruff format --check` on the module's source and tests, with
-  the app's own ruff config when it has one, else the stack's `lint/ruff.toml`.
+- `lint <module>`: `ruff check` and `ruff format --check` (both `--output-format=concise`) on the
+  module's source and tests, with the app's own ruff config when it has one, else the stack's
+  `lint/ruff.toml`.
 - `rerun <ids…>`: pytest on the given node ids, junit written.
 - `journeys`: pytest over `<test_dir>/journey`.
+
+Settings fall back to the manifest defaults: `package` → `myapp`, `source_dir` → `src/<package>`.
+The `package` setting is never put into Python source: it is passed to the interpreter as an
+argument and must be a dotted identifier. A tool that can't be launched (`uv` vanished from PATH,
+not executable) prints a message naming `uv` and its fix and exits 2, without a traceback.
 
 A failing test prints `bull-fail: test <node id>`. pytest's "no tests collected" (exit 5) does not
 fail a step by itself: bull reads the junit count and reports "no tests" itself.
@@ -49,12 +55,25 @@ _COVERAGE = "coverage.json"
 _PYTEST_NO_TESTS = 5
 _MYPY_ERROR = re.compile(r"^(?P<file>[^:\n]+):(?P<line>\d+):(?:\d+:)? error:")
 _RUFF_PROBLEM = re.compile(r"^(?P<file>[^:\n]+):(?P<line>\d+):\d+: ")
-_RUFF_REFORMAT = re.compile(r"^Would reformat: (?P<file>.+)$")
+_RUFF_UNFORMATTED = re.compile(r"^(?P<file>[^:\n]+):\d+:\d+: unformatted:")
 _APP_RUFF_FILES = ("ruff.toml", ".ruff.toml")
+DEFAULT_PACKAGE = "myapp"
+"""The manifest's default `package` setting (`stack.toml`)."""
+IMPORT_BY_ARGUMENT = "import importlib, sys; importlib.import_module(sys.argv[1])"
+"""`python -c` code importing the module named by its first argument (never interpolated)."""
+
+
+def valid_package(name: str) -> bool:
+    """Whether `name` is a dotted Python identifier (`pkg` or `pkg.sub`), safe to import by name."""
+    return bool(name) and all(part.isidentifier() for part in name.split("."))
 
 
 class _UsageError(Exception):
     """A step was called with the wrong arguments, an unknown name, or a bad environment."""
+
+
+class _LaunchError(Exception):
+    """A tool could not be started at all (missing, not executable): the run can't go on."""
 
 
 @dataclass(frozen=True)
@@ -79,12 +98,8 @@ class _Env:
         except json.JSONDecodeError as exc:
             raise _UsageError(f"BULL_SETTINGS is not JSON: {exc}") from exc
         settings: dict[str, object] = raw if isinstance(raw, dict) else {}
-        package = _text(settings.get("package"))
-        source_dir = _text(settings.get("source_dir")) or (
-            f"src/{package}" if package else "src"
-        )
-        if not package:
-            package = Path(source_dir).name
+        package = _text(settings.get("package")) or DEFAULT_PACKAGE
+        source_dir = _text(settings.get("source_dir")) or f"src/{package}"
         return _Env(
             root=root,
             results=results,
@@ -147,17 +162,26 @@ def _node_id(classname: str, name: str) -> str:
 
 
 def _run(env: _Env, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    """Run one tool in the part root, echoing its output."""
+    """Run one tool in the part root, echoing its output.
+
+    Raises `_LaunchError` when the tool can't be started (an `OSError` from the launch).
+    """
     child_env = dict(os.environ)
     child_env["COVERAGE_FILE"] = str(env.results / ".coverage")
-    done = subprocess.run(
-        list(argv),
-        cwd=env.root,
-        env=child_env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        done = subprocess.run(
+            list(argv),
+            cwd=env.root,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise _LaunchError(
+            f"could not run `{argv[0]}` ({exc.strerror or exc}): check that `uv` is "
+            f"installed and on PATH ({UV_HINT}), then run `uv sync` in the part folder."
+        ) from exc
     if done.stdout:
         print(done.stdout, end="" if done.stdout.endswith("\n") else "\n")
     if done.stderr:
@@ -227,7 +251,15 @@ def _setup(env: _Env, args: list[str]) -> int:
         print("Write pyproject.toml at the part root (see `bull stack setup`).")
         return 1
     ok = True
-    if _run(env, ["uv", "run", "python", "-c", f"import {env.package}"]).returncode:
+    if not valid_package(env.package):
+        _fail(f"package {env.package!r} is not a valid package name")
+        print(
+            "Set the package setting to a dotted Python name: `bull config set package …`."
+        )
+        ok = False
+    elif _run(
+        env, ["uv", "run", "python", "-c", IMPORT_BY_ARGUMENT, env.package]
+    ).returncode:
         _fail(f"package {env.package} not importable")
         ok = False
     version = "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)"
@@ -293,10 +325,28 @@ def _lint(env: _Env, args: list[str]) -> int:
         _fail(f"lint {match['file']}:{match['line']}")
     if check.returncode and not found:
         _fail("lint")
-    fmt = _run(env, ["uv", "run", "ruff", "format", "--check", *config, *paths])
-    unformatted = [m for m in map(_RUFF_REFORMAT.match, fmt.stdout.splitlines()) if m]
-    for match in unformatted:
-        _fail(f"format {match['file']}")
+    fmt = _run(
+        env,
+        [
+            "uv",
+            "run",
+            "ruff",
+            "format",
+            "--check",
+            "--output-format=concise",
+            *config,
+            *paths,
+        ],
+    )
+    unformatted = list(
+        dict.fromkeys(
+            m["file"]
+            for m in map(_RUFF_UNFORMATTED.match, fmt.stdout.splitlines())
+            if m
+        )
+    )
+    for file in unformatted:
+        _fail(f"format {file}")
     if fmt.returncode and not unformatted:
         _fail("format")
     return 1 if check.returncode or fmt.returncode else 0
@@ -347,6 +397,9 @@ def main(argv: Sequence[str]) -> int:
         return _STEPS[step](_Env.load(), args)
     except _UsageError as exc:
         print(f"{exc}\n{_USAGE}")
+        return 2
+    except _LaunchError as exc:
+        print(exc)
         return 2
 
 

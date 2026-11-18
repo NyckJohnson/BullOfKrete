@@ -18,10 +18,20 @@ from pathlib import Path
 
 from bull.Modules.stacks.Contracts import CheckItem, CoverageData, Role, TestRun
 
-from .gates import UV_HINT, junit_run
+from .gates import (
+    DEFAULT_PACKAGE,
+    IMPORT_BY_ARGUMENT,
+    UV_HINT,
+    junit_run,
+    valid_package,
+)
 
 _MIN_PYTHON = (3, 11)
 _PYVENV_VERSION = re.compile(r"^\s*version(?:_info)?\s*=\s*(\d+)\.(\d+)", re.MULTILINE)
+_SHOWN_METHOD_DECORATORS = frozenset(
+    {"property", "classmethod", "staticmethod", "abstractmethod"}
+)
+"""Method decorators that change how a method is called, so they are part of its contract."""
 
 
 # --- contract_declarations -----------------------------------------------------------------
@@ -31,12 +41,28 @@ def _public(name: str) -> bool:
     return not name.startswith("_")
 
 
+def _decorator_name(node: ast.expr) -> str:
+    """`abstractmethod` for both `@abstractmethod` and `@abc.abstractmethod`; '' otherwise."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
 def _signature(fn: ast.FunctionDef | ast.AsyncFunctionDef, method: bool) -> str:
-    """`def name(args) -> ret`, without the `self`/`cls` of a method."""
+    """`def name(args) -> ret`, without the `self`/`cls` of a method.
+
+    A method's `@property`, `@classmethod`, `@staticmethod` and `@abstractmethod` decorators
+    come first, in source order: `@property @abstractmethod def name() -> ret`.
+    """
     args = fn.args
-    is_static = any(
-        isinstance(d, ast.Name) and d.id == "staticmethod" for d in fn.decorator_list
+    shown = (
+        [d for d in fn.decorator_list if _decorator_name(d) in _SHOWN_METHOD_DECORATORS]
+        if method
+        else []
     )
+    is_static = any(_decorator_name(d) == "staticmethod" for d in shown)
     if method and not is_static:
         positional = [*args.posonlyargs, *args.args]
         if positional:
@@ -52,7 +78,8 @@ def _signature(fn: ast.FunctionDef | ast.AsyncFunctionDef, method: bool) -> str:
             )
     prefix = "async def" if isinstance(fn, ast.AsyncFunctionDef) else "def"
     returns = f" -> {ast.unparse(fn.returns)}" if fn.returns else ""
-    return f"{prefix} {fn.name}({ast.unparse(args)}){returns}"
+    decorators = "".join(f"@{ast.unparse(d)} " for d in shown)
+    return f"{decorators}{prefix} {fn.name}({ast.unparse(args)}){returns}"
 
 
 def _class_lines(cls: ast.ClassDef) -> list[str]:
@@ -92,7 +119,8 @@ def contract_declarations(path: Path) -> list[str]:
     """The public declarations of one Python file, one line each, in file order.
 
     Lists top-level public classes (`@decorators class Name(bases)`), their public methods
-    (`Class.def name(args) -> ret`), annotated fields (`Class.name: type`) and plain class
+    (`Class.def name(args) -> ret`, or `Class.@property def name() -> ret` when decorated with
+    `@property`, `@classmethod`, `@staticmethod` or `@abstractmethod`), annotated fields (`Class.name: type`) and plain class
     attributes such as enum members (`Class.NAME`); public functions (`def name(args) -> ret`);
     and public module-level aliases (`Name = value`, `Name: type = value`, `type Name = value`).
     Names starting with `_` are skipped. Raises `SyntaxError` for a file that doesn't parse.
@@ -196,26 +224,45 @@ def _venv_python(part_root: Path) -> Path | None:
     return None
 
 
-def _python_version(part_root: Path) -> tuple[tuple[int, int], str]:
-    """The app venv's Python version (from `.venv/pyvenv.cfg`), else this interpreter's."""
+def _python_version_item(part_root: Path) -> CheckItem:
+    """Python ≥ 3.11: the app venv's version (from `.venv/pyvenv.cfg`), else this interpreter's.
+
+    An unreadable `pyvenv.cfg` fails the item (the venv is broken) rather than raising.
+    """
     cfg = part_root / ".venv" / "pyvenv.cfg"
+    version = (sys.version_info.major, sys.version_info.minor)
+    where = "bull's interpreter"
     if cfg.is_file():
-        match = _PYVENV_VERSION.search(cfg.read_text())
+        try:
+            text = cfg.read_text()
+        except (OSError, UnicodeDecodeError) as exc:
+            return CheckItem(
+                ok=False,
+                item="Python 3.11 or newer (the app's .venv/pyvenv.cfg is unreadable)",
+                fix=f"{exc}; re-run `uv sync` in the part folder",
+            )
+        match = _PYVENV_VERSION.search(text)
         if match:
-            return (int(match[1]), int(match[2])), "the app's .venv"
-    return (sys.version_info.major, sys.version_info.minor), "bull's interpreter"
+            version = (int(match[1]), int(match[2]))
+            where = "the app's .venv"
+    return CheckItem(
+        ok=version >= _MIN_PYTHON,
+        item=f"Python 3.11 or newer ({version[0]}.{version[1]} in {where})",
+        fix="pin a newer Python: `uv python pin 3.11` (or newer), then `uv sync`",
+    )
 
 
 def _package_item(part_root: Path, settings: Mapping[str, object]) -> CheckItem:
-    package = _setting(settings, "package")
-    if not package:
-        return CheckItem(
-            ok=False,
-            item="package setting is set",
-            fix="run `bull config set package <package>`",
-        )
+    package = _setting(settings, "package") or DEFAULT_PACKAGE
     source_dir = _setting(settings, "source_dir") or f"src/{package}"
     item = f"package `{package}` importable"
+    if not valid_package(package):
+        return CheckItem(
+            ok=False,
+            item=item,
+            fix="the package setting must be a dotted Python name: "
+            "run `bull config set package <package>`",
+        )
     if not (part_root / source_dir / "__init__.py").is_file():
         return CheckItem(
             ok=False,
@@ -224,14 +271,22 @@ def _package_item(part_root: Path, settings: Mapping[str, object]) -> CheckItem:
         )
     python = _venv_python(part_root)
     if python is not None:
-        with subprocess.Popen(
-            [str(python), "-c", f"import {package}"],
-            cwd=part_root,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        ) as proc:
-            _, err = proc.communicate()
+        try:
+            with subprocess.Popen(
+                [str(python), "-c", IMPORT_BY_ARGUMENT, package],
+                cwd=part_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as proc:
+                _, err = proc.communicate()
+        except OSError as exc:
+            return CheckItem(
+                ok=False,
+                item=item,
+                fix=f"can't run {python} ({exc.strerror or exc}); "
+                "delete .venv and run `uv sync`",
+            )
         if proc.returncode != 0:
             last = err.strip().splitlines()[-1] if err.strip() else "import failed"
             return CheckItem(
@@ -247,7 +302,9 @@ def check(
 ) -> list[CheckItem]:
     """The part's setup: `uv` on PATH, `pyproject.toml`, the package imports, Python ≥ 3.11.
 
-    The import is tried with the app's `.venv` interpreter when it exists; without one, the
+    Settings fall back to the manifest defaults (`package` `myapp`, `source_dir` `src/<package>`).
+    The import is tried with the app's `.venv` interpreter when it exists, the package name passed
+    as an argument (a name that isn't a dotted identifier fails the item); without one, the
     package folder (`<source_dir>/__init__.py`) must exist. `adopting` changes nothing: the
     stack has no adoption support.
     """
@@ -263,15 +320,8 @@ def check(
             fix="write pyproject.toml from the template in `bull stack setup`",
         ),
         _package_item(part_root, settings),
+        _python_version_item(part_root),
     ]
-    version, where = _python_version(part_root)
-    items.append(
-        CheckItem(
-            ok=version >= _MIN_PYTHON,
-            item=f"Python 3.11 or newer ({version[0]}.{version[1]} in {where})",
-            fix="pin a newer Python: `uv python pin 3.11` (or newer), then `uv sync`",
-        )
-    )
     return [i if not i.ok else CheckItem(ok=True, item=i.item, fix="") for i in items]
 
 
