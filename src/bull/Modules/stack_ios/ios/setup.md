@@ -6,14 +6,16 @@ from the memo. When every step is done, `bull stack check` must show every item 
 
 1. **Create the project.** Choose `Xcode › File › New › Project › iOS › App`. Set Product Name to
    `<App>`, Interface to SwiftUI, Language to Swift, and Testing System to
-   **Swift Testing with XCUITests**, so the unit and UI test targets exist. Save it in the app folder's `App/` folder.
-   **Uncheck "Create Git repository on my Mac"**: the app folder's repo is the only one, and
-   `bull stack check` fails on a nested repo.
+   **Swift Testing with XCUITests**: the option that also creates the UI test target, so both the
+   unit and UI test targets exist (`<App>UITests` must exist afterwards). Save it in the app
+   folder's `App/` folder. **Uncheck "Create Git repository on my Mac"**: the app folder's repo is
+   the only one, and `bull stack check` fails on a nested repo.
 2. **Swift 6.** In Build Settings, for the app target and the unit test target, set **Swift
-   Language Version = Swift 6**.
-3. **Actor isolation.** If Build Settings shows **Default Actor Isolation**, set it to
-   **nonisolated** for the app and unit test targets. Xcode 26 makes new apps default to MainActor,
-   which would bind every type to the main actor.
+   Language Version** (`SWIFT_VERSION`; newer Xcode may label it "Swift Language Mode") to
+   **Swift 6**.
+3. **Actor isolation.** If Build Settings shows **Default Actor Isolation**
+   (`SWIFT_DEFAULT_ACTOR_ISOLATION`), set it to **nonisolated** for the app and unit test targets.
+   Xcode 26 makes new apps default to MainActor, which would bind every type to the main actor.
 4. **Minimum iOS.** Set the deployment target of every target to the memo's minimum iOS version.
 5. **Capabilities.** Add each capability the memo needs (iCloud, Push Notifications, Background
    Modes…) in `Signing & Capabilities › + Capability`. Choose the human's development team for
@@ -66,8 +68,8 @@ from the memo. When every step is done, `bull stack check` must show every item 
    bull config set unit_test_target TallyTests
    bull config set ui_test_target TallyUITests
    ```
-   Optionally set `simulator "<device name>"`; by default the gates use the newest available
-   iPhone. You may run these once the human confirms the names.
+   Optionally run `bull config set simulator "<device name>"`; by default the gates use the
+   newest available iPhone. You may run these once the human confirms the names.
 9. **Commit and check.** Commit the project; `git status` must show no `xcuserdata/`. Then run
    `bull stack check`. It checks that Xcode is present, the project and scheme exist, the targets
    use Swift 6, the test targets include their folders, the folders are synchronized, and there are
@@ -95,16 +97,17 @@ human through only what `bull stack check` or the detection report still shows, 
    be converted (files outside the folder, a group without a folder), resolve what it names and
    retry. Build once (⌘B) to confirm nothing moved.
 2. **Test targets.** If there is no unit test target, add one with
-   `File › New › Target › Unit Testing Bundle`: Testing System Swift Testing, target to be tested the app. If there is no UI
-   test target, add one with `File › New › Target › UI Testing Bundle`. Then set
-   `unit_test_target`, `test_dir`, `ui_test_target` and `ui_test_dir` with `bull config set` (you
-   may).
+   `File › New › Target › Unit Testing Bundle`: Testing System Swift Testing, target to be tested
+   the app. If there is no UI test target, add one with `File › New › Target › UI Testing Bundle`.
+   Then set `unit_test_target`, `test_dir`, `ui_test_target` and `ui_test_dir` with
+   `bull config set` (you may).
 3. **Shared scheme.** As in step 6 above: tick **Shared**, with both test targets in its Test
    action.
-4. **Actor isolation.** Change Default Actor Isolation from MainActor to **nonisolated** for the
-   app and unit test targets. Legacy code may show new warnings; they aren't gated during the
-   adoption.
-5. **Leave the Swift Language Version as it is.** It switches to Swift 6 at the final switch.
+4. **Actor isolation.** Change Default Actor Isolation (`SWIFT_DEFAULT_ACTOR_ISOLATION`) from
+   MainActor to **nonisolated** for the app and unit test targets. Legacy code may show new
+   warnings; they aren't gated during the adoption.
+5. **Leave the Swift Language Version as it is.** That setting (`SWIFT_VERSION`; newer Xcode may
+   label it "Swift Language Mode") switches to Swift 6 at the final switch.
 6. **Lint configs.** Keep the app's own `.swiftlint.yml` and `.swift-format` if it has them;
    otherwise write them as in step 7 above. During the adoption they only apply to `Modules/` and
    the module test folders.
@@ -114,6 +117,7 @@ human through only what `bull stack check` or the detection report still shows, 
 ## Final switch
 
 Every module is adopted, so nothing legacy holds the project back. In Build Settings, for the app,
-unit test and UI test targets, set **Swift Language Version = Swift 6**. Then run
-`bull stack check` (now the normal check) and `bull gates --all`, which build with warnings as errors again.
-Fixes go to the modules that own the files, or to the app shell's unit.
+unit test and UI test targets, set **Swift Language Version** (`SWIFT_VERSION`; newer Xcode may
+label it "Swift Language Mode") to **Swift 6**. Then run `bull stack check` (now the normal check)
+and `bull gates --all`, which build with warnings as errors again. Fixes go to the modules that own
+the files, or to the app shell's unit.

@@ -39,8 +39,9 @@ prints `## outline` only.
   `UI: UIKit` or `UI: SwiftUI`. A UIKit screen's logic lives in a tested view model. Its view
   controller is a thin view in `Views/`, left out of coverage and covered by the journey tests.
 - While an adoption is active, the project may still be in Swift 5 mode. Code in `Modules/` and in
-  module test folders must still compile without warnings under Swift 6 rules: the build gate fails
-  on any warning there, and ignores warnings in legacy code.
+  module test folders must still compile without warnings with complete strict concurrency checking
+  (what the build gate sets): the gate fails on any warning there, and ignores warnings in legacy
+  code.
 
 ## outline
 - Protocols in the memo are Swift, fenced ```` ```swift ````, and conform to `Sendable`.
@@ -109,9 +110,9 @@ prints `## outline` only.
 ## test-writer
 - Put each file's tests in a top-level suite named `<File>Tests` (`@Suite struct <File>Tests`).
   More suites per file are fine.
-- `bull gates <Module> --fast` runs every **top-level** `struct`, `class` or `actor` in the
-  module's test folder whose name ends in `Tests` (or that carries `@Suite`), whatever the file is
-  called. Nested suites run with their parent. Always end suite names in `Tests`.
+- `bull gates <Module> --fast` runs every **top-level** type (`struct`, `class`, `actor` or
+  `enum`) in the module's test folder whose name ends in `Tests` or that carries `@Suite`, whatever
+  the file is called. Nested suites run with their parent. Always end suite names in `Tests`.
 - Use parameterized tests (`@Test(arguments:)`) for input tables.
 - Name tests by behavior: `@Test("Deleting a missing counter throws notFound")`.
 - Give each test its own temporary directory (`FileManager.default.temporaryDirectory` plus a
@@ -131,6 +132,9 @@ prints `## outline` only.
 - Write doc comments (`///`) on every non-private declaration in `Contracts/`, and on tricky logic.
 - Iterate with `bull gates --failed` (it reruns the tests that just failed), then confirm with
   `bull gates <Module> --fast`.
+- Before you report, run from the part root: `xcrun swift-format format -i <your source files>`,
+  then `swiftlint lint --fix <files>` and `swiftlint lint --strict <files>`. Fix what is left: the
+  lint gate checks the module's source and test folders.
 - UIKit screens (adopted apps): the view controller is `@MainActor`, holds no business logic (it
   binds the view model's state to views and forwards actions) and lives in `Views/`.
   `@IBOutlet private weak var name: UIType!` is the one implicitly unwrapped declaration you may
