@@ -403,5 +403,7 @@ def main(argv: Sequence[str]) -> int:
         return 2
 
 
+# coverage-exempt-begin: __main__ guard; main() is tested in-process
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))  # coverage-exempt: __main__ guard; main() is tested in-process
+    sys.exit(main(sys.argv[1:]))
+# coverage-exempt-end
