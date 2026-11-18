@@ -5,9 +5,13 @@ bull runs each step in the part root with its `BULL_*` environment (`BULL_PART_R
 `BULL_URL_<PART>` for journeys). Stdlib only; every tool runs through `subprocess.run`.
 
 Steps:
-- `preflight`: choose the simulator (`simulator.choose`) and store its UDID in
-  `{results}/simulator.txt`; nothing matches → exit 2 naming the `simulator` setting.
-- `setup`: `xcodebuild -version` and `xcodebuild -list -project <project>` succeed.
+- `preflight`: choose the simulator (`simulator.choose`), store its UDID in
+  `{results}/simulator.txt` and boot it (`xcrun simctl bootstatus <udid> -b`): xcodebuild
+  launching the test host on a shut-down simulator fails with "Application failed preflight
+  checks". Nothing matches, or the boot fails → exit 2 naming the `simulator` setting.
+- `setup`: `xcodebuild -version` and `xcodebuild -list -project <project>` succeed, and an
+  existing project has the shared scheme (`xcshareddata/xcschemes/<scheme>.xcscheme`): without
+  it xcodebuild quietly makes a scheme of its own, so `-list` alone can't tell.
 - `build-test`: the unit test target (`BULL_SCOPE_MODULE` set → only that module's suites).
 - `build-test-fast <module>`: only the module's suites.
 - `rerun <ids…>`: `-only-testing:<unit target>/<id>` per id.
@@ -18,7 +22,8 @@ Steps:
 - `prune`: delete `.bull/build/` and the result bundles.
 
 Every xcodebuild run uses the simulator in `simulator.txt`, one destination, no parallel
-testing, DerivedData under `.bull/build/`, a result bundle `{results}/<step>.xcresult`, and
+testing, DerivedData under `.bull/build/` (which holds a `.gitignore` of `*`, so the build
+output never makes the working tree dirty and a passing run can be recorded), a result bundle `{results}/<step>.xcresult`, and
 diagnostics collected only on failure. Swift 6 with warnings as errors; in adopt mode the
 project's language mode is kept with complete concurrency checking, and a warning in `Modules/`
 or a module test folder fails the build. A "simulator busy" failure is rerun, at most 3 runs.
@@ -55,6 +60,9 @@ _USAGE = (
 )
 _DERIVED_DATA = ".bull/build/DerivedData"
 _BUILD_DIR = ".bull/build"
+_SELF_IGNORE = (
+    "# Build output of bull's ios gates; `bull stack run prune` deletes it.\n*\n"
+)
 _BUNDLE_SUFFIX = ".xcresult"
 _UNIT_STEPS = ("build-test", "build-test-fast", "rerun")
 _ATTACHMENTS = "journeys-attachments"
@@ -69,7 +77,11 @@ _NOISE = (
 )
 _DIAGNOSTIC = re.compile(
     r"^(?P<file>[^:\n]+\.swift):(?P<line>\d+):(?:\d+:)?\s*(?P<kind>error|warning):"
+    r"(?P<message>.*)$"
 )
+# An XCTest assertion failure is printed like a compile error:
+# `<file>.swift:11: error: -[Target.Suite testName] : XCTAssertTrue failed`.
+_XCTEST_ISSUE = re.compile(r"^\s*-\[[\w.]+ \w+\]")
 _LINT_PROBLEM = re.compile(
     r"^(?P<file>[^:\n]+):(?P<line>\d+):(?:\d+:)?\s*(?:error|warning)"
 )
@@ -236,6 +248,7 @@ def _xcodebuild(
     (`build-for-testing`). Busy-simulator failures are rerun, at most `_MAX_RUNS` runs.
     """
     udid = _udid(env)
+    _ignore_build_dir(env)
     bundle = env.results / f"{step}{_BUNDLE_SUFFIX}"
     log = env.results / f"{step}.log"
     action = "test" if only else "build-for-testing"
@@ -291,17 +304,31 @@ def _xcodebuild(
     return 1 if code != 0 or labels else 0
 
 
+def _ignore_build_dir(env: _Env) -> None:
+    """Make `.bull/build/` ignore itself, so DerivedData never shows as untracked files.
+
+    The stack's `.gitignore` lines don't cover it, and a dirty tree after a run stops bull
+    from recording the pass.
+    """
+    build = env.root / _BUILD_DIR
+    build.mkdir(parents=True, exist_ok=True)
+    marker = build / ".gitignore"
+    if not marker.is_file():
+        marker.write_text(_SELF_IGNORE, encoding="utf-8")
+
+
 def _build_labels(env: _Env, output: str, errors: bool) -> list[str]:
     """Compile errors as `<file>:<line>`; in adopt mode, module warnings as `warning …`.
 
     Error lines count only when `errors` is set (xcodebuild exited non-zero): a passing run
-    may echo an `error:` line (a test's own output), which must not fail it. Adopt-mode
+    may echo an `error:` line (a test's own output), which must not fail it. XCTest assertion
+    failures (`error: -[Suite test] : …`) are test failures, not compile errors. Adopt-mode
     warnings in module code fail the step whatever the exit code.
     """
     labels: list[str] = []
     for line in output.splitlines():
         match = _DIAGNOSTIC.match(line.strip())
-        if match is None:
+        if match is None or _XCTEST_ISSUE.match(match["message"]):
             continue
         rel = env.rel(match["file"])
         if match["kind"] == "error":
@@ -385,6 +412,15 @@ def _preflight(env: _Env, args: list[str]) -> int:
     except simulator.SimulatorError as exc:
         print(exc)
         return 2
+    code, output = _run(env, ["xcrun", "simctl", "bootstatus", udid, "-b"])
+    if code != 0:
+        _show_tail(output)
+        print(
+            f"could not boot simulator {udid} (setting `simulator`): open it once in "
+            "Xcode > Window > Devices and Simulators, or choose another device, then run "
+            "the gates again."
+        )
+        return 2
     print(f"simulator {udid}")
     return 0
 
@@ -405,6 +441,16 @@ def _setup(env: _Env, args: list[str]) -> int:
         _show_tail(output)
         _fail(f"setup project {env.project}")
         print("Check the `project` setting and that Xcode can open the project.")
+        ok = False
+    project = env.root / env.project
+    scheme_file = project / "xcshareddata" / "xcschemes" / f"{env.scheme}.xcscheme"
+    # A missing project is already reported by `xcodebuild -list` above.
+    if project.is_dir() and not scheme_file.is_file():
+        _fail(f"Shared scheme {env.scheme} exists")
+        print(
+            "In Xcode choose Product > Scheme > Manage Schemes, tick Shared for the app's "
+            "scheme and commit xcshareddata/; or set `scheme` to the shared scheme's name."
+        )
         ok = False
     return 0 if ok else 1
 

@@ -152,7 +152,7 @@
       "expect": {
         "verdict": "fail",
         "gate": "coverage",
-        "output": "Counter.swift"
+        "output": "coverage not clean for Counter"
       }
     },
     {
