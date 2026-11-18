@@ -1037,7 +1037,7 @@
             "ios/detect.py",
             "ios/inventory.py"
           ],
-          "state": "pending",
+          "state": "tests",
           "attempts": 0
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T08:16:00-08:00",
+  "updatedAt": "2026-11-18T08:18:07-08:00",
   "features": [],
   "activeFeature": null
 }
