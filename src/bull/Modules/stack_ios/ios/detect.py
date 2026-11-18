@@ -16,7 +16,7 @@ from typing import Any
 
 from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel
 
-from . import pbxproj
+from . import pbxproj, swift_scan
 
 _APP_TYPE = "com.apple.product-type.application"
 _UNIT_TYPE = "com.apple.product-type.bundle.unit-test"
@@ -29,6 +29,15 @@ _SKIP_DIRS = frozenset(
     {"DerivedData", "build", "Pods", "Carthage", "node_modules", "SourcePackages"}
 )
 _LOCATION_RE = re.compile(r'location\s*=\s*"([^"]*)"')
+# `import UIKit` (with optional attributes such as `@preconcurrency`, an import kind such as
+# `import class UIKit.UIView`, or a submodule), matched on comment- and string-free text.
+_UIKIT_IMPORT_RE = re.compile(
+    r"^[ \t]*(?:@\w+[ \t]+)*import[ \t]+"
+    r"(?:(?:typealias|struct|class|enum|protocol|let|var|func)[ \t]+)?UIKit\b",
+    re.MULTILINE,
+)
+_UI_TESTING_LITERAL = '"-uiTesting"'
+_OBJC_SUFFIXES = (".m", ".mm")
 
 # Any found project gets the found confidence, even when it can't be adopted as it is: the
 # adoption considers only stacks above 0.5, and a BLOCK issue says what stands in the way.
@@ -106,9 +115,17 @@ def detect(root: Path) -> Detection:
             issues=tuple(issues),
         )
     issues.extend(found)
+    objc = _objc_issue(root, base)
+    if objc is not None:
+        issues.append(objc)
+    swift_count = 0
+    if "source_dir" in settings:
+        swift_files = _files(root / settings["source_dir"], (".swift",))
+        swift_count = len(swift_files)
+        issues.extend(_source_notes(root, settings["source_dir"], swift_files))
     return Detection(
         confidence=_FOUND_CONFIDENCE,
-        summary=_summary(settings, app_name),
+        summary=_summary(settings, app_name, swift_count),
         settings=settings,
         issues=tuple(issues),
     )
@@ -198,6 +215,12 @@ def _analyse(
     )
     if swift_issue is not None:
         issues.append(swift_issue)
+
+    isolation_issue = _isolation_issue(
+        project, [_name(t) for t in (app, unit) if t is not None]
+    )
+    if isolation_issue is not None:
+        issues.append(isolation_issue)
     return issues, app_name
 
 
@@ -492,7 +515,113 @@ def _swift_issue(project: dict[str, Any], targets: list[str]) -> Issue | None:
     return None
 
 
-def _summary(settings: dict[str, str], app_name: str) -> str:
+def _isolation_issue(project: dict[str, Any], targets: list[str]) -> Issue | None:
+    """A FIX when Default Actor Isolation is MainActor for the app or unit test target.
+
+    Each target's own setting wins; a target without one inherits the project's.
+    """
+    main_actor = [
+        t
+        for t in targets
+        if pbxproj.build_setting(project, t, "SWIFT_DEFAULT_ACTOR_ISOLATION")
+        == "MainActor"
+    ]
+    if not main_actor:
+        return None
+    return Issue(
+        level=IssueLevel.FIX,
+        item=f"Default Actor Isolation is MainActor ({', '.join(main_actor)})",
+        fix=(
+            "In Build Settings set Default Actor Isolation to nonisolated for the app and unit "
+            "test targets. Legacy code may show new warnings; they aren't gated during the adoption."
+        ),
+    )
+
+
+def _files(folder: Path, suffixes: tuple[str, ...]) -> list[Path]:
+    """Files under `folder` ending in one of `suffixes`, sorted; skips what `_find` skips.
+
+    Hidden folders, `_SKIP_DIRS` and Xcode bundles (`.xcodeproj`, `.xcworkspace`) aren't
+    searched. A missing folder gives no files.
+    """
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        dirnames[:] = sorted(
+            d
+            for d in dirnames
+            if not d.startswith(".")
+            and d not in _SKIP_DIRS
+            and not d.endswith((".xcodeproj", ".xcworkspace"))
+        )
+        here = Path(dirpath)
+        found.extend(here / f for f in filenames if f.endswith(suffixes))
+    return sorted(found)
+
+
+def _objc_issue(root: Path, base: Path) -> Issue | None:
+    """A BLOCK when Objective-C sources (`.m`/`.mm`) sit under the project's folder."""
+    sources = _files(base, _OBJC_SUFFIXES)
+    if not sources:
+        return None
+    shown = ", ".join(_rel(root, p) for p in sources[:3])
+    more = f" and {len(sources) - 3} more" if len(sources) > 3 else ""
+    return Issue(
+        level=IssueLevel.BLOCK,
+        item=f"Objective-C sources in the project ({len(sources)}: {shown}{more})",
+        fix=(
+            "The stack adopts Swift apps only: rewrite the Objective-C code in Swift (or move it "
+            "into a Swift package), remove the .m/.mm files, then run the detection again."
+        ),
+    )
+
+
+def _source_notes(root: Path, source_dir: str, swift_files: list[Path]) -> list[Issue]:
+    """NOTEs for app Swift files importing UIKit and for a missing `-uiTesting` handler.
+
+    Comments are ignored; a `"-uiTesting"` string literal anywhere counts as handling the
+    launch argument. An unreadable file counts as neither.
+    """
+    uikit: list[Path] = []
+    handles_ui_testing = False
+    for path in swift_files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        cleaned, strings = swift_scan.clean(text)
+        if _UIKIT_IMPORT_RE.search(cleaned):
+            uikit.append(path)
+        if _UI_TESTING_LITERAL in strings:
+            handles_ui_testing = True
+    issues: list[Issue] = []
+    if uikit:
+        shown = ", ".join(_rel(root, p) for p in uikit[:3])
+        more = f" and {len(uikit) - 3} more" if len(uikit) > 3 else ""
+        issues.append(
+            Issue(
+                level=IssueLevel.NOTE,
+                item=f"{len(uikit)} Swift files import UIKit ({shown}{more})",
+                fix=(
+                    "Nothing to do now: UIKit screens stay UIKit; the memo marks each screen "
+                    "`UI: UIKit` or `UI: SwiftUI`."
+                ),
+            )
+        )
+    if not handles_ui_testing:
+        issues.append(
+            Issue(
+                level=IssueLevel.NOTE,
+                item=f"No app source in {source_dir} handles the -uiTesting launch argument",
+                fix=(
+                    "The baseline stage adds it: with -uiTesting the app starts from a clean, "
+                    "in-memory state for the UI tests."
+                ),
+            )
+        )
+    return issues
+
+
+def _summary(settings: dict[str, str], app_name: str, swift_count: int) -> str:
     parts = [f"Found Xcode project {settings['project']}"]
     if app_name:
         parts.append(f"app target {app_name}")
@@ -500,4 +629,7 @@ def _summary(settings: dict[str, str], app_name: str) -> str:
         parts.append("no app target")
     parts.append(f"unit tests {settings.get('unit_test_target', 'missing')}")
     parts.append(f"UI tests {settings.get('ui_test_target', 'missing')}")
+    if "source_dir" in settings:
+        noun = "file" if swift_count == 1 else "files"
+        parts.append(f"{swift_count} Swift {noun} in {settings['source_dir']}")
     return ", ".join(parts) + "."
