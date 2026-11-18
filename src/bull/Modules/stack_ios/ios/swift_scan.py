@@ -351,6 +351,15 @@ def _clean(text: str) -> tuple[str, list[str]]:
     return "".join(out), strings
 
 
+def clean(text: str) -> tuple[str, list[str]]:
+    """`text` without comments, each string literal (interpolations included) set aside.
+
+    Every literal becomes a `\\x00<n>\\x00` placeholder; comments keep their newlines, so line
+    structure survives. Returns the cleaned text and the literals, in order.
+    """
+    return _clean(text)
+
+
 def _block_comment_end(text: str, start: int) -> int:
     """Index just past the (possibly nested) block comment starting at `start`."""
     depth = 0

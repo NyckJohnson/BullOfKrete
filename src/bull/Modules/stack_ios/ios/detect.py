@@ -30,18 +30,23 @@ _SKIP_DIRS = frozenset(
 )
 _LOCATION_RE = re.compile(r'location\s*=\s*"([^"]*)"')
 
+# Any found project gets the found confidence, even when it can't be adopted as it is: the
+# adoption considers only stacks above 0.5, and a BLOCK issue says what stands in the way.
 _NONE_CONFIDENCE = 0.0
-_BROKEN_CONFIDENCE = 0.6
-_NO_APP_CONFIDENCE = 0.5
 _FOUND_CONFIDENCE = 0.9
+
+
+class _Unreadable(Exception):
+    """The parsed project file doesn't have the structure an Xcode project has."""
 
 
 def detect(root: Path) -> Detection:
     """How well an existing Xcode project under `root` fits the stack; never raises for content.
 
-    No `.xcodeproj` gives a low confidence and no settings. A found project gives a high
-    confidence and the settings `project`, `scheme`, `source_dir`, `test_dir`, `ui_test_dir`,
-    `unit_test_target` and `ui_test_target` (each one only when it can be worked out).
+    No `.xcodeproj` gives a low confidence and no settings. A found project always gives a high
+    confidence (a project file that can't be read, or no app target, is a BLOCK issue) and the
+    settings `project`, `scheme`, `source_dir`, `test_dir`, `ui_test_dir`, `unit_test_target` and
+    `ui_test_target` (each one only when it can be worked out).
     """
     projects, workspaces = _find(root)
     if not projects:
@@ -69,7 +74,21 @@ def detect(root: Path) -> Detection:
     pbx_path = project_dir / "project.pbxproj"
     try:
         project = pbxproj.parse(pbx_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, pbxproj.PbxprojError) as error:
+        found, app_name = _analyse(root, project_dir, project, settings)
+    except (
+        OSError,
+        UnicodeDecodeError,
+        pbxproj.PbxprojError,
+        _Unreadable,
+        # Structure the checks below didn't foresee: still "can't be read", never a crash.
+        TypeError,
+        AttributeError,
+        KeyError,
+        ValueError,
+    ) as error:
+        for key in list(settings):
+            if key != "project":
+                del settings[key]
         issues.append(
             Issue(
                 level=IssueLevel.BLOCK,
@@ -81,14 +100,36 @@ def detect(root: Path) -> Detection:
             )
         )
         return Detection(
-            confidence=_BROKEN_CONFIDENCE,
+            confidence=_FOUND_CONFIDENCE,
             summary=f"Found Xcode project {settings['project']}, but its project file can't be read.",
             settings=settings,
             issues=tuple(issues),
         )
+    issues.extend(found)
+    return Detection(
+        confidence=_FOUND_CONFIDENCE,
+        summary=_summary(settings, app_name),
+        settings=settings,
+        issues=tuple(issues),
+    )
 
+
+def _analyse(
+    root: Path, project_dir: Path, project: dict[str, Any], settings: dict[str, str]
+) -> tuple[list[Issue], str]:
+    """Fills `settings` from the parsed project; returns its issues and the app target's name.
+
+    Raises `_Unreadable` when the root object or main group is missing or isn't an object.
+    """
+    base = project_dir.parent
+    issues: list[Issue] = []
     objects_value = project.get("objects")
-    objects: dict[str, Any] = objects_value if isinstance(objects_value, dict) else {}
+    if not isinstance(objects_value, dict):
+        raise _Unreadable("no objects")
+    objects: dict[str, Any] = objects_value
+    root_object = _root(objects, project)
+    if not isinstance(_lookup(objects, root_object.get("mainGroup")), dict):
+        raise _Unreadable("the main group is missing")
     targets = _native_targets(project, objects)
     app = _first_of_type(targets, _APP_TYPE)
     unit = _first_of_type(targets, _UNIT_TYPE)
@@ -157,13 +198,7 @@ def detect(root: Path) -> Detection:
     )
     if swift_issue is not None:
         issues.append(swift_issue)
-
-    return Detection(
-        confidence=_FOUND_CONFIDENCE if app is not None else _NO_APP_CONFIDENCE,
-        summary=_summary(settings, app_name),
-        settings=settings,
-        issues=tuple(issues),
-    )
+    return issues, app_name
 
 
 def _find(root: Path) -> tuple[list[Path], list[Path]]:
@@ -282,8 +317,7 @@ def _native_targets(
     project: dict[str, Any], objects: dict[str, Any]
 ) -> list[dict[str, Any]]:
     """The project's native targets, in the root object's order (any others after)."""
-    root = objects.get(project.get("rootObject", ""))
-    order = root.get("targets") if isinstance(root, dict) else None
+    order = _root(objects, project).get("targets")
     ids = [t for t in order if isinstance(t, str)] if isinstance(order, list) else []
     ids += sorted(k for k in objects if k not in ids)
     return [
@@ -291,6 +325,19 @@ def _native_targets(
         for k in ids
         if isinstance(objects.get(k), dict) and objects[k].get("isa") == _NATIVE_TARGET
     ]
+
+
+def _lookup(objects: dict[str, Any], ref: object) -> Any:
+    """The object a reference names, or None when `ref` is not a string id."""
+    return objects.get(ref) if isinstance(ref, str) else None
+
+
+def _root(objects: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
+    """The project's root object; raises `_Unreadable` when it is missing or not an object."""
+    root = _lookup(objects, project.get("rootObject"))
+    if not isinstance(root, dict):
+        raise _Unreadable("the root object is missing")
+    return root
 
 
 def _first_of_type(
@@ -316,7 +363,7 @@ def _folder(
             if isinstance(group, dict) and group.get("isa") == _SYNC_GROUP:
                 path = group.get("path")
                 if isinstance(path, str) and path:
-                    return path, None
+                    return _group_path(objects, project, ref, path), None
     group_name = name
     for child in _main_group_children(objects, project):
         path = child.get("path")
@@ -335,11 +382,46 @@ def _folder(
     )
 
 
+def _group_path(
+    objects: dict[str, Any], project: dict[str, Any], ref: str, path: str
+) -> str:
+    """`path` of the group `ref`, joined below its parent groups' paths up to the main group.
+
+    A group's `path` is relative to its parent group (`sourceTree = "<group>"`). The walk stops
+    at the main group, at a parent with another source tree (e.g. `SOURCE_ROOT`, whose path is
+    already relative to the project's folder), or at a cycle.
+    """
+    parents: dict[str, str] = {}
+    for key, obj in objects.items():
+        children = obj.get("children") if isinstance(obj, dict) else None
+        if isinstance(children, list):
+            for child in children:
+                if isinstance(child, str):
+                    parents.setdefault(child, key)
+    main = _root(objects, project).get("mainGroup")
+    joined = PurePosixPath(path)
+    current: str = ref
+    seen = {ref}
+    while True:
+        node = objects.get(current)
+        if not isinstance(node, dict) or node.get("sourceTree", "<group>") != "<group>":
+            break
+        parent = parents.get(current)
+        if parent is None or parent == main or parent in seen:
+            break
+        seen.add(parent)
+        parent_path = _lookup(objects, parent)
+        parent_dir = parent_path.get("path") if isinstance(parent_path, dict) else None
+        if isinstance(parent_dir, str) and parent_dir:
+            joined = PurePosixPath(parent_dir) / joined
+        current = parent
+    return joined.as_posix()
+
+
 def _main_group_children(
     objects: dict[str, Any], project: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    root = objects.get(project.get("rootObject", ""))
-    main = objects.get(root.get("mainGroup", "")) if isinstance(root, dict) else None
+    main = _lookup(objects, _root(objects, project).get("mainGroup"))
     children = main.get("children") if isinstance(main, dict) else None
     if not isinstance(children, list):
         return []
@@ -348,13 +430,29 @@ def _main_group_children(
 
 
 def _scheme(project_dir: Path, app_name: str) -> tuple[str, Issue | None]:
-    """A shared scheme's name (the app's if shared), or the app's name and a FIX."""
+    """A shared scheme's name and an issue, if any.
+
+    The scheme named after the app target when it is shared; otherwise the first shared scheme
+    by name and a NOTE naming it; with no shared scheme, the app's name and a FIX.
+    """
     folder = project_dir / "xcshareddata" / "xcschemes"
     shared = (
         sorted(p.stem for p in folder.glob("*.xcscheme")) if folder.is_dir() else []
     )
+    if app_name and app_name in shared:
+        return app_name, None
+    if len(shared) == 1:
+        return shared[0], None
     if shared:
-        return (app_name if app_name in shared else shared[0]), None
+        chosen = shared[0]
+        return chosen, Issue(
+            level=IssueLevel.NOTE,
+            item=(
+                f"Several shared schemes and none named after the app target; using scheme "
+                f"{chosen} (also: {', '.join(shared[1:])})"
+            ),
+            fix="If the app builds with another scheme, set `scheme` to its name.",
+        )
     return app_name, Issue(
         level=IssueLevel.FIX,
         item=f"No shared scheme in {project_dir.name}",

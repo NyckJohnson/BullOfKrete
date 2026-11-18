@@ -3,8 +3,9 @@
 For each `.swift` file under the `source_dir` setting (sorted by path): the types it declares at
 file level (protocol, struct, enum, class, actor) and the types of the other files it mentions.
 Comments and string literals are dropped first (`swift_scan`'s cleaner), and a mention counts only
-as a whole identifier, so `BetaHelper` never references `Beta`. Not a Swift parser: it is a map for
-the adoption survey, not a dependency graph the build relies on.
+as a whole identifier, so `BetaHelper` never references `Beta`. A type used only inside a string
+interpolation (`"\\(Beta.name)"`) is not counted, since the whole literal is set aside. Not a Swift
+parser: it is a map for the adoption survey, not a dependency graph the build relies on.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ def inventory(root: Path, settings: Mapping[str, object]) -> str:
     files: dict[str, tuple[list[str], set[str]]] = {}
     for path in _swift_files(folder):
         text = path.read_text(encoding="utf-8", errors="replace")
-        cleaned, _ = swift_scan._clean(text)  # comments dropped, strings set aside
+        cleaned, _ = swift_scan.clean(text)  # comments dropped, strings set aside
         files[path.relative_to(folder).as_posix()] = (
             _top_level_types(cleaned),
             set(_IDENT_RE.findall(cleaned)),
