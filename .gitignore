@@ -16,3 +16,6 @@ __pycache__/
 htmlcov/
 dist/
 *.egg-info/
+xcuserdata/
+*.xcuserstate
+DerivedData/
