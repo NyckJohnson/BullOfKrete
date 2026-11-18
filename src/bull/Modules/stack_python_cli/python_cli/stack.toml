@@ -1,0 +1,58 @@
+# The `python_cli` stack: a Python 3.11+ command-line tool built with uv, pytest, ruff and mypy.
+format = 1
+
+[stack]
+name = "python_cli"
+title = "Python CLI tool"
+description = "A Python 3.11+ command-line tool: uv, pytest with coverage.py, ruff, mypy --strict"
+language = "python"
+kind = "tool"
+maturity = "experimental"
+source_glob = "*.py"
+test_glob = ["test_*.py", "*_test.py"]
+comment = "#"
+scaffold = ["src", "tests"]
+gitignore = [".venv/", "__pycache__/"]
+agents = [
+    "skeleton-builder",
+    "test-writer",
+    "code-writer",
+    "reviewer",
+    "coverage-analyst",
+    "journey-test-writer",
+]
+
+[[stack.requires]]
+tool = "uv"
+hint = "https://docs.astral.sh/uv/getting-started/installation/"
+
+[settings.source_dir]
+type = "str"
+default = "src/myapp"
+description = "The app's package folder, relative to the part root (src/<package>); modules live in <source_dir>/Modules/<module>/"
+
+[settings.test_dir]
+type = "str"
+default = "tests"
+description = "Folder (relative to the part root) holding <module>/test_<file>.py and journey/test_<command>.py"
+
+[settings.package]
+type = "str"
+default = "myapp"
+description = "The importable package name (the folder under src/ and the console script's name)"
+
+[settings."coverage.exclude"]
+default = ["*/mocks/*", "*/Views/*"]
+description = "Mocks and views are left out of coverage"
+
+[gates]
+preflight = ["{python}", "{stack_dir}/gates.py", "preflight"]
+setup = ["{python}", "{stack_dir}/gates.py", "setup"]
+build_test = ["{python}", "{stack_dir}/gates.py", "build-test"]
+build_test_fast = ["{python}", "{stack_dir}/gates.py", "build-test-fast", "{module}"]
+lint = ["{python}", "{stack_dir}/gates.py", "lint", "{module}"]
+rerun_failed = ["{python}", "{stack_dir}/gates.py", "rerun", "{failed_ids}"]
+journeys = ["{python}", "{stack_dir}/gates.py", "journeys"]
+
+[interfaces]
+formats = ["json-schema"]

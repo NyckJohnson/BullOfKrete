@@ -1,1 +1,8 @@
-# skeleton placeholder: the default lint config is written in Stage 5.
+# The python_cli stack's default lint config, used when the app has no ruff config of its own
+# (no [tool.ruff] in pyproject.toml, no ruff.toml or .ruff.toml). `N` (naming) is not selected so
+# the capitalized `Modules` and `Contracts` folders pass.
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]

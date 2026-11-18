@@ -1,1 +1,229 @@
-{}
+{
+  "format": 1,
+  "layout": {
+    "app/": "."
+  },
+  "settings": {
+    "package": "fixture_cli",
+    "source_dir": "src/fixture_cli",
+    "test_dir": "tests"
+  },
+  "cases": [
+    {
+      "id": "clean",
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "fast",
+      "run": [
+        "gates",
+        "counter",
+        "--fast"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "no-tests",
+      "change": {
+        "replace": {
+          "tests/counter/test_counter.py": "\"\"\"Tests for the counter: none written yet.\"\"\"\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "no tests ran",
+        "recorded": false
+      }
+    },
+    {
+      "id": "failing-test",
+      "change": {
+        "replace": {
+          "tests/counter/test_counter.py": "\"\"\"Tests for the counter: start value, increment, and the count kept in the folder.\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nimport pytest\n\nfrom fixture_cli.Modules.counter.counter import FileCounter\n\n\ndef test_a_new_counter_starts_at_zero(tmp_path: Path) -> None:\n    assert FileCounter(tmp_path).value() == 0\n\n\n@pytest.mark.parametrize(\"start\", [0, 5, -2])\ndef test_a_new_counter_starts_at_its_start_value(tmp_path: Path, start: int) -> None:\n    assert FileCounter(tmp_path, start).value() == start\n\n\ndef test_increment_adds_one(tmp_path: Path) -> None:\n    counter = FileCounter(tmp_path, 3)\n    assert counter.increment() == 5\n    assert counter.value() == 4\n\n\ndef test_the_count_is_kept_in_the_folder(tmp_path: Path) -> None:\n    FileCounter(tmp_path).increment()\n    FileCounter(tmp_path).increment()\n    assert FileCounter(tmp_path).value() == 2\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "tests",
+        "output": "tests/counter/test_counter.py::test_increment_adds_one"
+      },
+      "then": {
+        "run": [
+          "gates",
+          "--failed"
+        ],
+        "expect": {
+          "verdict": "fail",
+          "gate": "tests",
+          "output": "tests/counter/test_counter.py::test_increment_adds_one",
+          "ran": 1
+        }
+      }
+    },
+    {
+      "id": "build-warning",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/counter.py": "\"\"\"The counter: a count kept in a file in a folder (the working folder, for the CLI).\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nfrom fixture_cli.Modules.counter.Contracts import CounterStore\n\nCOUNT_FILE = \".fixture_cli_count\"\n\"\"\"The file, inside the counter's folder, that holds the count.\"\"\"\n\n\nclass FileCounter(CounterStore):\n    \"\"\"A `CounterStore` that keeps its count in `<folder>/.fixture_cli_count`.\n\n    Raises `ValueError` when that file holds something other than a whole number.\n    \"\"\"\n\n    def __init__(self, folder: Path, start: int = 0) -> None:\n        self._path = folder / COUNT_FILE\n        self._start = start\n\n    def value(self) -> int:\n        if not self._path.is_file():\n            return self._start\n        text: int = self._path.read_text().strip()\n        return int(text)\n\n    def increment(self) -> int:\n        new = self.value() + 1\n        self._path.write_text(f\"{new}\\n\")\n        return new\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "build",
+        "output": "mypy src/fixture_cli/Modules/counter/counter.py:26"
+      }
+    },
+    {
+      "id": "lint",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/counter.py": "\"\"\"The counter: a count kept in a file in a folder (the working folder, for the CLI).\"\"\"\n\nfrom __future__ import annotations\n\nimport os\nfrom pathlib import Path\n\nfrom fixture_cli.Modules.counter.Contracts import CounterStore\n\nCOUNT_FILE = \".fixture_cli_count\"\n\"\"\"The file, inside the counter's folder, that holds the count.\"\"\"\n\n\nclass FileCounter(CounterStore):\n    \"\"\"A `CounterStore` that keeps its count in `<folder>/.fixture_cli_count`.\n\n    Raises `ValueError` when that file holds something other than a whole number.\n    \"\"\"\n\n    def __init__(self, folder: Path, start: int = 0) -> None:\n        self._path = folder / COUNT_FILE\n        self._start = start\n\n    def value(self) -> int:\n        if not self._path.is_file():\n            return self._start\n        return int(self._path.read_text().strip())\n\n    def increment(self) -> int:\n        new = self.value() + 1\n        self._path.write_text(f\"{new}\\n\")\n        return new\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "lint",
+        "output": "lint src/fixture_cli/Modules/counter/counter.py:5"
+      }
+    },
+    {
+      "id": "contract-change",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/Contracts/__init__.py": "\"\"\"The counter module's contract: a count that goes up by one.\"\"\"\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom typing import Protocol\n\n\n@dataclass(frozen=True)\nclass Count:\n    \"\"\"A count, as the `Count` interface (`interfaces/count.json`) carries it.\"\"\"\n\n    value: int\n\n\nclass CounterStore(Protocol):\n    \"\"\"Holds a count and bumps it by one.\"\"\"\n\n    def value(self) -> int:\n        \"\"\"The current count: the start value until the first increment.\"\"\"\n\n    def increment(self) -> int:\n        \"\"\"Add one to the count and return the new count.\"\"\"\n\n\nMAX_COUNT = 1_000_000\n\"\"\"The largest count the counter is meant to hold.\"\"\"\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "api",
+        "output": "contract differs from docs/api/counter.md"
+      }
+    },
+    {
+      "id": "uncovered",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/counter.py": "\"\"\"The counter: a count kept in a file in a folder (the working folder, for the CLI).\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nfrom fixture_cli.Modules.counter.Contracts import CounterStore\n\nCOUNT_FILE = \".fixture_cli_count\"\n\"\"\"The file, inside the counter's folder, that holds the count.\"\"\"\n\n\nclass FileCounter(CounterStore):\n    \"\"\"A `CounterStore` that keeps its count in `<folder>/.fixture_cli_count`.\n\n    Raises `ValueError` when that file holds something other than a whole number.\n    \"\"\"\n\n    def __init__(self, folder: Path, start: int = 0) -> None:\n        self._path = folder / COUNT_FILE\n        self._start = start\n\n    def value(self) -> int:\n        if not self._path.is_file():\n            return self._start\n        return int(self._path.read_text().strip())\n\n    def increment(self) -> int:\n        new = self.value() + 1\n        self._path.write_text(f\"{new}\\n\")\n        return new\n\n    def reset(self) -> None:\n        self._path.unlink(missing_ok=True)\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "coverage",
+        "output": "coverage not clean for counter"
+      }
+    },
+    {
+      "id": "exemption",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/counter.py": "\"\"\"The counter: a count kept in a file in a folder (the working folder, for the CLI).\"\"\"\n\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nfrom fixture_cli.Modules.counter.Contracts import CounterStore\n\nCOUNT_FILE = \".fixture_cli_count\"\n\"\"\"The file, inside the counter's folder, that holds the count.\"\"\"\n\n\nclass FileCounter(CounterStore):\n    \"\"\"A `CounterStore` that keeps its count in `<folder>/.fixture_cli_count`.\n\n    Raises `ValueError` when that file holds something other than a whole number.\n    \"\"\"\n\n    def __init__(self, folder: Path, start: int = 0) -> None:\n        self._path = folder / COUNT_FILE\n        self._start = start\n\n    def value(self) -> int:\n        if not self._path.is_file():\n            return self._start\n        return int(self._path.read_text().strip())\n\n    def increment(self) -> int:\n        new = self.value() + 1\n        self._path.write_text(f\"{new}\\n\")\n        return new\n\n    # coverage-exempt-begin: reset is only reached by hand\n    def reset(self) -> None:\n        self._path.unlink(missing_ok=True)\n\n    # coverage-exempt-end\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": true
+      }
+    },
+    {
+      "id": "setup-broken",
+      "change": {
+        "replace": {
+          ".bull/config.toml": "format = 1\nstack = \"python_cli\"\npackage = \"fixture_cli_missing\"\nsource_dir = \"src/fixture_cli\"\ntest_dir = \"tests\"\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "setup",
+        "output": "package fixture_cli_missing not importable"
+      }
+    },
+    {
+      "id": "journey",
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "pass",
+        "recorded": false
+      }
+    },
+    {
+      "id": "journey-failing",
+      "change": {
+        "replace": {
+          "tests/journey/test_count.py": "\"\"\"Journey 1, Count: `fixture_cli count` twice in an empty folder prints 1, then 2.\"\"\"\n\nfrom __future__ import annotations\n\nimport shutil\nimport subprocess\nfrom pathlib import Path\n\n\ndef _count(folder: Path) -> subprocess.CompletedProcess[str]:\n    script = shutil.which(\"fixture_cli\")\n    assert script is not None, \"fixture_cli is not installed: run `uv sync`\"\n    return subprocess.run(\n        [script, \"count\"], cwd=folder, capture_output=True, text=True, check=False\n    )\n\n\ndef test_count_prints_one_then_two(tmp_path: Path) -> None:\n    first = _count(tmp_path)\n    assert first.returncode == 0, first.stderr\n    assert first.stdout.strip() == \"1\"\n    second = _count(tmp_path)\n    assert second.returncode == 0, second.stderr\n    assert second.stdout.strip() == \"3\"\n"
+        }
+      },
+      "run": [
+        "gates",
+        "--journeys"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "journeys"
+      }
+    },
+    {
+      "id": "interface-drift",
+      "change": {
+        "replace": {
+          "src/fixture_cli/Modules/counter/Contracts/__init__.py": "\"\"\"The counter module's contract: a count that goes up by one.\"\"\"\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\nfrom typing import Protocol\n\n\n@dataclass(frozen=True)\nclass Count:\n    \"\"\"A count, as the `Count` interface (`interfaces/count.json`) carries it.\"\"\"\n\n    total: int\n\n\nclass CounterStore(Protocol):\n    \"\"\"Holds a count and bumps it by one.\"\"\"\n\n    def value(self) -> int:\n        \"\"\"The current count: the start value until the first increment.\"\"\"\n\n    def increment(self) -> int:\n        \"\"\"Add one to the count and return the new count.\"\"\"\n",
+          "docs/api/counter.md": "# counter contract\n\n<!-- Generated by `bull api`; do not edit. A change here is a contract change. -->\n\n## Contracts/__init__.py\n```\n@dataclass(frozen=True) class Count\nCount.total: int\nclass CounterStore(Protocol)\nCounterStore.def value() -> int\nCounterStore.def increment() -> int\n```\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "interface",
+        "output": "provider `Count` has field `total` not in the schema"
+      }
+    }
+  ]
+}
