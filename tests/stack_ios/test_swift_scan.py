@@ -480,3 +480,56 @@ def test_property_type_wrapped_after_a_dot_matches_single_line(tmp_path: Path) -
         "public struct S {\n    public var v: Swift.\n        Int\n    public var w: Int\n}\n",
     )
     assert _has(out, r"var w: Int")
+
+
+# --- operator and precedencegroup declarations do not swallow the next declaration ---------
+
+
+@pytest.mark.parametrize(
+    "operator",
+    [
+        "infix operator +=",
+        "postfix operator ...",
+        "infix operator &",
+        "infix operator ~=",
+        "prefix operator ..<",
+        "infix operator ===",
+    ],
+)
+def test_operator_declaration_does_not_swallow_the_next_type(
+    tmp_path: Path, operator: str
+) -> None:
+    out = _decls(
+        tmp_path,
+        f"public struct A {{}}\n{operator}\npublic struct B {{}}\n",
+    )
+    assert _has(out, r"struct A\b")
+    assert _has(out, r"struct B\b")
+
+
+def test_precedencegroup_declaration_does_not_swallow_the_next_type(
+    tmp_path: Path,
+) -> None:
+    out = _decls(
+        tmp_path,
+        "public struct A {}\n"
+        "precedencegroup P { associativity: left }\n"
+        "public struct B {}\n",
+    )
+    assert _has(out, r"struct A\b")
+    assert _has(out, r"struct B\b")
+
+
+def test_variadic_and_range_operators_in_signatures_keep_their_text(
+    tmp_path: Path,
+) -> None:
+    out = _decls(
+        tmp_path,
+        "public struct S {\n"
+        "    public func f(_ xs: Int...) -> Int { 0 }\n"
+        "    public func g(r: Range<Int> = 0..<1) -> Int { 0 }\n"
+        "}\n",
+    )
+    assert _has(out, r"Int\.\.\.")
+    assert not _has(out, r"Int \.\.\.|Int\.\. \.|\.\.\. ")
+    assert _has(out, r"0\.\.<1")
