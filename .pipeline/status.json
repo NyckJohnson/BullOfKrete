@@ -1,5 +1,5 @@
 {
-  "stage": 5,
+  "stage": 6,
   "paused": false,
   "pauseReason": null,
   "checkpoints": {
@@ -1063,7 +1063,80 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T12:43:54-08:00",
+  "updatedAt": "2026-11-18T15:50:48-08:00",
   "features": [],
-  "activeFeature": null
+  "activeFeature": null,
+  "plan": {
+    "label": "verify",
+    "items": [
+      {
+        "name": "mocks-check",
+        "done": true
+      },
+      {
+        "name": "j01-install-init",
+        "done": false
+      },
+      {
+        "name": "j02-build-end-to-end",
+        "done": false
+      },
+      {
+        "name": "j03-pause-resume",
+        "done": false
+      },
+      {
+        "name": "j04-features",
+        "done": false
+      },
+      {
+        "name": "j05-adopt",
+        "done": false
+      },
+      {
+        "name": "j06-add-stack",
+        "done": false
+      },
+      {
+        "name": "j07-two-parts",
+        "done": false
+      },
+      {
+        "name": "j08-contract-change",
+        "done": false
+      },
+      {
+        "name": "j09-unverified-merge",
+        "done": false
+      },
+      {
+        "name": "j10-settings",
+        "done": false
+      },
+      {
+        "name": "j11-format-versions",
+        "done": false
+      },
+      {
+        "name": "j12-reference-tests",
+        "done": false
+      },
+      {
+        "name": "app-review",
+        "done": false
+      },
+      {
+        "name": "fixes",
+        "done": false
+      },
+      {
+        "name": "device-test",
+        "done": false
+      },
+      {
+        "name": "backlog",
+        "done": false
+      }
+    ]
+  }
 }
