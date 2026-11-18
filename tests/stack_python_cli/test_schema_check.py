@@ -239,3 +239,153 @@ def test_every_returned_item_has_text_and_fix_for_failures(tmp_path: Path) -> No
     schema = _setup(tmp_path, _contract(["name: int"]))
     for item in _failing(_check(tmp_path, schema)):
         assert item.item
+
+
+# --- coverage triage: unsupported types, decorators, annotation shapes --------------------
+
+
+def _one(
+    tmp_path: Path,
+    props: dict[str, Any],
+    required: list[str],
+    fields: list[str],
+    decorator: str = "@dataclass",
+    imports: str = "from dataclasses import dataclass\nimport dataclasses\n"
+    "from typing import ClassVar, Optional, Union\n",
+) -> list[CheckItem]:
+    body = "".join(f"    {f}\n" for f in fields) or "    pass\n"
+    text = f"from __future__ import annotations\n{imports}\n\n{decorator}\nclass T:\n{body}"
+    schema = _setup(
+        tmp_path,
+        text,
+        {"title": "T", "type": "object", "properties": props, "required": required},
+    )
+    return _check(tmp_path, schema)
+
+
+@pytest.mark.parametrize(
+    ("spec", "shown"),
+    [
+        ({"type": "object"}, "object"),
+        ({"type": "null"}, "null"),
+        (5, "no type"),
+    ],
+)
+def test_unsupported_property_type_is_reported_naming_the_field(
+    tmp_path: Path, spec: Any, shown: str
+) -> None:
+    items = _one(tmp_path, {"a": spec}, ["a"], ["a: int"])
+    failing = _failing(items)
+    assert len(failing) == 1
+    assert "`a`" in failing[0].item
+    assert f"unsupported type ({shown})" in failing[0].item
+
+
+def test_property_without_a_type_is_reported_as_no_type(tmp_path: Path) -> None:
+    failing = _failing(_one(tmp_path, {"a": {}}, ["a"], ["a: int"]))
+    assert any("a" in i.item and "no type" in i.item for i in failing)
+
+
+def test_array_of_an_unsupported_item_type_is_unsupported(tmp_path: Path) -> None:
+    failing = _failing(
+        _one(
+            tmp_path,
+            {"a": {"type": "array", "items": {"type": "object"}}},
+            ["a"],
+            ["a: list"],
+        )
+    )
+    assert any("unsupported type" in i.item and "`a`" in i.item for i in failing)
+
+
+def test_array_without_items_matches_a_plain_list_field(tmp_path: Path) -> None:
+    items = _one(tmp_path, {"a": {"type": "array"}}, ["a"], ["a: list"])
+    assert _failing(items) == []
+
+
+def test_properties_that_is_not_an_object_is_a_bad_input_item(tmp_path: Path) -> None:
+    schema = _setup(
+        tmp_path,
+        _contract([]),
+        '{"title": "Tally", "properties": [1, 2]}',
+    )
+    items = _check(tmp_path, schema)
+    assert len(items) == 1
+    assert items[0].ok is False
+    assert "properties" in items[0].item
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    ["@dataclass(frozen=True)", "@dataclasses.dataclass", "@dataclasses.dataclass()"],
+)
+def test_dataclass_decorator_forms_are_recognised(
+    tmp_path: Path, decorator: str
+) -> None:
+    items = _one(tmp_path, {"a": {"type": "integer"}}, ["a"], ["a: int"], decorator)
+    assert _failing(items) == []
+
+
+def test_a_class_without_a_dataclass_decorator_fails(tmp_path: Path) -> None:
+    items = _one(
+        tmp_path, {"a": {"type": "integer"}}, ["a"], ["a: int"], "@something_else"
+    )
+    assert _failing(items)
+    assert any("dataclass" in i.item for i in _failing(items))
+
+
+def test_a_string_annotation_is_read_as_its_type(tmp_path: Path) -> None:
+    assert (
+        _failing(_one(tmp_path, {"a": {"type": "integer"}}, ["a"], ['a: "int"'])) == []
+    )
+
+
+def test_an_unparsable_string_annotation_is_a_mismatch_naming_the_field(
+    tmp_path: Path,
+) -> None:
+    failing = _failing(_one(tmp_path, {"a": {"type": "integer"}}, ["a"], ['a: "in t"']))
+    assert len(failing) == 1
+    assert "`a`" in failing[0].item
+
+
+@pytest.mark.parametrize(
+    "annotation", ["Union[int, None]", "Optional[int]", "Union[None, int]"]
+)
+def test_union_and_optional_forms_are_accepted_for_a_non_required_field(
+    tmp_path: Path,
+    annotation: str,
+) -> None:
+    items = _one(tmp_path, {"a": {"type": "integer"}}, [], [f"a: {annotation} = None"])
+    assert _failing(items) == []
+
+
+def test_optional_annotation_on_a_required_field_is_a_mismatch(tmp_path: Path) -> None:
+    failing = _failing(
+        _one(tmp_path, {"a": {"type": "integer"}}, ["a"], ["a: Optional[int]"])
+    )
+    assert len(failing) == 1
+    assert "`a`" in failing[0].item
+
+
+@pytest.mark.parametrize(
+    "annotation", ["dict[str, int]", "int | str", "Union[int, str]"]
+)
+def test_an_annotation_the_schema_cannot_express_is_a_mismatch(
+    tmp_path: Path,
+    annotation: str,
+) -> None:
+    failing = _failing(
+        _one(tmp_path, {"a": {"type": "integer"}}, ["a"], [f"a: {annotation}"])
+    )
+    assert len(failing) == 1
+    assert "`a`" in failing[0].item
+
+
+def test_classvar_fields_are_ignored(tmp_path: Path) -> None:
+    items = _one(
+        tmp_path,
+        {"a": {"type": "integer"}},
+        ["a"],
+        ["a: int", "kind: ClassVar[str] = 'x'", "other: ClassVar = 1"],
+    )
+    assert _failing(items) == []

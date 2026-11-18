@@ -498,3 +498,141 @@ def test_check_with_an_unreadable_pyvenv_cfg_returns_a_failing_item(
         cfg.chmod(0o644)
     assert all(isinstance(i, CheckItem) for i in items)
     assert any(not i.ok for i in items)
+
+
+# --- coverage triage: decorators, coverage data, venv probes ---------------------------------
+
+
+def test_contract_declarations_show_an_attribute_form_abstractmethod(
+    tmp_path: Path,
+) -> None:
+    out = _decls(
+        tmp_path,
+        "import abc\n\n"
+        "class K(abc.ABC):\n"
+        "    @abc.abstractmethod\n"
+        "    def run(self, n: int) -> int: ...\n",
+    )
+    assert any("abstractmethod" in line and "def run" in line for line in out)
+
+
+@pytest.mark.parametrize("decorator", ["@(lambda f: f)", "@registry['x']"])
+def test_contract_declarations_do_not_show_an_unrecognised_decorator_shape(
+    tmp_path: Path, decorator: str
+) -> None:
+    out = _decls(
+        tmp_path,
+        "registry = {}\n\n"
+        "class K:\n"
+        f"    {decorator}\n"
+        "    def run(self, n: int) -> int: ...\n",
+    )
+    (line,) = [x for x in out if "def run" in x]
+    assert line.startswith("K.def run")
+    assert "lambda" not in line and "registry" not in line
+
+
+def test_uncovered_with_malformed_coverage_json_reports_every_source_as_no_data(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "coverage.json").write_text("{not json")
+    src = _source(tmp_path, "src/a.py")
+    data = readers.uncovered(tmp_path, [src], tmp_path)
+    assert data.no_data == (src,)
+    assert dict(data.uncovered) == {}
+
+
+@pytest.mark.parametrize("files", ['"files": []', '"files": 5', '"other": {}'])
+def test_uncovered_when_files_is_not_an_object_reports_every_source_as_no_data(
+    tmp_path: Path, files: str
+) -> None:
+    (tmp_path / "coverage.json").write_text("{" + files + "}")
+    src = _source(tmp_path, "src/a.py")
+    data = readers.uncovered(tmp_path, [src], tmp_path)
+    assert data.no_data == (src,)
+    assert dict(data.uncovered) == {}
+
+
+def test_uncovered_skips_a_file_entry_without_missing_lines(tmp_path: Path) -> None:
+    (tmp_path / "coverage.json").write_text(
+        json.dumps(
+            {
+                "files": {
+                    "src/a.py": {"executed_lines": [1]},
+                    "src/b.py": {"missing_lines": [4]},
+                }
+            }
+        )
+    )
+    a = _source(tmp_path, "src/a.py")
+    b = _source(tmp_path, "src/b.py")
+    data = readers.uncovered(tmp_path, [a, b], tmp_path)
+    assert data.no_data == (a,)
+    assert dict(data.uncovered) == {b: (4,)}
+
+
+def _py_item(root: Path) -> CheckItem:
+    return _item(readers.check(root, {"package": "demo_pkg"}, False), "python")
+
+
+def _pyvenv(root: Path, version: str) -> None:
+    cfg = root / ".venv" / "pyvenv.cfg"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(f"home = /usr/bin\nversion = {version}\n")
+
+
+def test_check_fails_python_when_the_apps_venv_is_older_than_311(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    _pyvenv(tmp_path, "3.10.4")
+    item = _py_item(tmp_path)
+    assert item.ok is False
+    assert ".venv" in item.item
+    assert item.fix
+
+
+def test_check_passes_python_when_the_apps_venv_is_312(tmp_path: Path) -> None:
+    _part(tmp_path)
+    _pyvenv(tmp_path, "3.12.1")
+    item = _py_item(tmp_path)
+    assert item.ok is True
+    assert item.fix == ""
+
+
+def _fake_python(root: Path, body: str) -> None:
+    exe = root / ".venv" / "bin" / "python"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text(f"#!/bin/sh\n{body}\n")
+    exe.chmod(0o755)
+
+
+def test_check_package_item_passes_when_the_venv_python_imports_the_package(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    _fake_python(tmp_path, "exit 0")
+    item = _item(readers.check(tmp_path, {"package": "demo_pkg"}, False), "package")
+    assert item.ok is True
+    assert item.fix == ""
+
+
+def test_check_package_item_fix_carries_the_last_stderr_line_of_a_failed_import(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    _fake_python(tmp_path, "echo 'Traceback' >&2; echo 'ImportError: boom' >&2; exit 1")
+    item = _item(readers.check(tmp_path, {"package": "demo_pkg"}, False), "package")
+    assert item.ok is False
+    assert "ImportError: boom" in item.fix
+    assert "Traceback" not in item.fix
+
+
+def test_check_package_item_says_import_failed_when_stderr_is_empty(
+    tmp_path: Path,
+) -> None:
+    _part(tmp_path)
+    _fake_python(tmp_path, "exit 1")
+    item = _item(readers.check(tmp_path, {"package": "demo_pkg"}, False), "package")
+    assert item.ok is False
+    assert "import failed" in item.fix

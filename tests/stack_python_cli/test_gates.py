@@ -676,3 +676,81 @@ def test_real_setup_does_not_run_code_smuggled_through_the_package_setting(
     real.env(settings={"package": _PAYLOAD})
     assert gates.main(["setup"]) != 0
     assert not (real.root / "pwned").exists()
+
+
+# --- coverage triage: error paths and junit node ids --------------------------------------
+
+
+def test_invalid_bull_settings_json_is_a_usage_error_naming_the_variable(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.mp.setenv("BULL_SETTINGS", "{not json")
+    assert gates.main(["journeys"]) == 2
+    assert "BULL_SETTINGS" in _output(capsys)
+    assert app.runner.calls == []
+
+
+def test_junit_run_is_none_for_malformed_xml(tmp_path: Path) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text("<testsuites><testcase")
+    assert gates.junit_run(path) is None
+
+
+def test_junit_run_rebuilds_a_collection_error_node_id_from_its_name(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        '<testsuites><testsuite><testcase classname="" name="tests.x.test_y">'
+        '<error message="boom"/></testcase></testsuite></testsuites>'
+    )
+    assert gates.junit_run(path) == (1, ["tests/x/test_y.py"])
+
+
+def test_junit_run_puts_a_test_class_between_file_and_test_name(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "junit.xml"
+    path.write_text(
+        '<testsuites><testsuite><testcase classname="tests.x.test_y.TestY" '
+        'name="test_z"><failure message="no"/></testcase></testsuite></testsuites>'
+    )
+    assert gates.junit_run(path) == (1, ["tests/x/test_y.py::TestY::test_z"])
+
+
+def test_lint_treats_a_malformed_pyproject_as_having_no_ruff_config(app: App) -> None:
+    app.write("pyproject.toml", "this is = [not toml")
+    assert gates.main(["lint", "counter"]) == 0
+    assert any(a.endswith("lint/ruff.toml") for a in _ruff_check(app))
+
+
+def test_lint_prints_a_bare_lint_failure_when_ruff_check_fails_without_parsable_output(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("ruff", "check", rc=2, out="ruff exploded\n")
+    assert gates.main(["lint", "counter"]) != 0
+    assert "bull-fail: lint\n" in capsys.readouterr().out
+
+
+def test_lint_prints_a_bare_format_failure_when_format_check_fails_without_parsable_output(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app.runner.when("ruff", "format", rc=2, out="ruff exploded\n")
+    assert gates.main(["lint", "counter"]) != 0
+    assert "bull-fail: format\n" in capsys.readouterr().out
+
+
+def test_rerun_without_node_ids_is_a_usage_error(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert gates.main(["rerun"]) == 2
+    assert "usage" in _output(capsys).lower()
+    assert app.runner.with_words("pytest") == []
+
+
+def test_a_step_that_takes_no_arguments_rejects_extra_ones(
+    app: App, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert gates.main(["journeys", "x"]) == 2
+    assert "usage" in _output(capsys).lower()
+    assert app.runner.calls == []
