@@ -676,3 +676,26 @@ def test_an_unreadable_swift_path_counts_as_neither_uikit_nor_ui_testing(
     assert d.confidence >= HIGH
     assert not any("UIKit" in i.item for i in d.issues)
     assert any("-uiTesting" in i.item for i in _issues(d, IssueLevel.NOTE))
+
+
+def test_a_late_failure_drops_settings_found_before_it_and_keeps_only_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    make_project(tmp_path)
+    ok = detect_mod.detect(tmp_path)
+    assert "source_dir" in ok.settings and "unit_test_target" in ok.settings
+
+    def boom(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError("unexpected structure")
+
+    monkeypatch.setattr(detect_mod, "_swift_issue", boom)
+    d = detect_mod.detect(tmp_path)
+    assert d.settings == {"project": "App/MyApp/MyApp.xcodeproj"}
+    blocks = _issues(d, IssueLevel.BLOCK)
+    assert any(
+        i.item.startswith(
+            "The project file App/MyApp/MyApp.xcodeproj/project.pbxproj can't be read"
+        )
+        for i in blocks
+    )
+    assert "can't be read" in d.summary

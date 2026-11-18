@@ -648,3 +648,28 @@ def test_clean_runs_an_unterminated_block_comment_to_the_end() -> None:
     assert "let a = 1" in cleaned
     assert "let b = 2" not in cleaned
     assert strings == []
+
+
+@pytest.mark.parametrize(
+    "tail",
+    ['let s = "a\\(b', 'let s = "x \\(y(1)'],
+)
+def test_unclosed_interpolation_at_end_of_file_keeps_earlier_declarations(
+    tmp_path: Path, tail: str
+) -> None:
+    text = "struct A {}\n" + tail
+    decls = _decls(tmp_path, text)
+    assert _has(decls, r"\bA\b")
+    cleaned, literals = swift_scan.clean(text)
+    assert cleaned.startswith("struct A {}")
+    assert len(literals) == 1
+    assert swift_scan.legacy_declarations(tmp_path) == []
+
+
+def test_unclosed_interpolation_does_not_expose_following_text_as_code(
+    tmp_path: Path,
+) -> None:
+    decls = _decls(tmp_path, 'struct A {}\nlet s = "a\\(struct LegacyB {}')
+    assert _has(decls, r"\bA\b")
+    assert "struct LegacyB" not in decls
+    assert swift_scan.legacy_declarations(tmp_path) == []
