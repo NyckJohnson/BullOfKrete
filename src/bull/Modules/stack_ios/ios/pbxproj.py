@@ -14,6 +14,9 @@ from typing import Any
 _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0"}
 # Characters that end a bare (unquoted) string.
 _DELIMITERS = frozenset('{}()=;,"')
+# Deepest dict/list nesting `parse` accepts. Real project files nest about five levels; the cap
+# keeps hostile input from exhausting Python's recursion limit.
+_MAX_DEPTH = 200
 
 
 class PbxprojError(ValueError):
@@ -24,8 +27,8 @@ def parse(text: str) -> dict[str, Any]:
     """The file's top-level dictionary: dicts, lists, and `str` scalars, comments dropped.
 
     Raises `PbxprojError` on malformed input (unbalanced brackets, a missing `=` or `;`, an
-    unterminated string or comment, an empty value, text after the top-level dictionary, or no
-    dictionary at all).
+    unterminated string or comment, an empty value, text after the top-level dictionary, no
+    dictionary at all, or dictionaries and lists nested more than 200 levels deep).
     """
     parser = _Parser(text)
     parser.skip()
@@ -98,6 +101,7 @@ class _Parser:
     def __init__(self, text: str) -> None:
         self.text = text
         self.pos = 0
+        self.depth = 0
 
     def error(self, message: str) -> PbxprojError:
         line = self.text.count("\n", 0, self.pos) + 1
@@ -143,13 +147,21 @@ class _Parser:
             return self.array()
         return self.string()
 
+    def enter(self, opener: str) -> None:
+        """Consume `opener` one level deeper; raises `PbxprojError` past `_MAX_DEPTH`."""
+        self.expect(opener)
+        self.depth += 1
+        if self.depth > _MAX_DEPTH:
+            raise self.error(f"nested more than {_MAX_DEPTH} levels deep")
+
     def dictionary(self) -> dict[str, Any]:
-        self.expect("{")
+        self.enter("{")
         result: dict[str, Any] = {}
         while True:
             self.skip()
             if self.peek() == "}":
                 self.pos += 1
+                self.depth -= 1
                 return result
             if self.at_end():
                 raise self.error("unterminated dictionary")
@@ -159,12 +171,13 @@ class _Parser:
             self.expect(";")
 
     def array(self) -> list[Any]:
-        self.expect("(")
+        self.enter("(")
         result: list[Any] = []
         while True:
             self.skip()
             if self.peek() == ")":
                 self.pos += 1
+                self.depth -= 1
                 return result
             if self.at_end():
                 raise self.error("unterminated list")

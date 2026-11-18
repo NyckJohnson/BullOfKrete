@@ -2,9 +2,10 @@
 
 Not a Swift parser: it drops comments, sets string literals aside, and walks the braces. At file
 level and inside type bodies (protocol, struct, enum, class, actor, extension) each declaration
-is one statement, which may span lines while brackets are open or the next line continues it
-(`-> T`, `throws`, `where`, …). Function and property bodies are skipped, except a property's
-accessor list (`{ get set }`), which is part of its signature. Whitespace is normalized, so
+is one statement, which may span lines while brackets are open, the next line continues it
+(`-> T`, `throws`, `where`, …) or the line ends unfinished (`,`, `:`, `->`, `where`, …).
+Function and property bodies are skipped, except a property's accessor list (`{ get set }`),
+which is part of its signature. Whitespace is normalized, so
 formatting and comments never change the result; a changed type, parameter or member does.
 """
 
@@ -77,6 +78,9 @@ _NAME_RE = re.compile(r"\s*`?([^\s(<:{=,`]+)")
 _ONLY_ATTRIBUTES_RE = re.compile(r"^\s*(?:@[\w.]+(?:\([^()]*\))?\s*)+$")
 # A line starting with one of these continues the statement on the line before.
 _CONTINUATION_RE = re.compile(r"(?:->|\{|[.:,=&?]|(?:throws|rethrows|async|where)\b)")
+# A statement whose last line ends with one of these continues on the next line. Trailing
+# `throws`/`async`/`rethrows` are left out: they also end complete members (`func f() throws`).
+_TRAILING_RE = re.compile(r"(?:->|[.:,=&]|(?<![\w$])where)\s*$")
 _PLACEHOLDER_RE = re.compile("\x00(\\d+)\x00")
 
 
@@ -155,9 +159,11 @@ class _Scanner:
             if self.pending_end and not char.isspace():
                 self.pending_end = False
                 statement = "".join(self.buf)
-                if not _CONTINUATION_RE.match(
-                    text, i
-                ) and not _ONLY_ATTRIBUTES_RE.match(statement):
+                if (
+                    not _CONTINUATION_RE.match(text, i)
+                    and not _TRAILING_RE.search(statement)
+                    and not _ONLY_ATTRIBUTES_RE.match(statement)
+                ):
                     self._flush()
             self._in_type(char)
         self._flush()
@@ -293,6 +299,7 @@ def _normalize(statement: str) -> str:
     text = re.sub(r"([,:])(?=\S)", r"\1 ", text)
     text = re.sub(r"\s+([,:)\]])", r"\1", text)
     text = re.sub(r"([(\[])\s+", r"\1", text)
+    text = re.sub(r"\.\s+(?=\w)", ".", text)  # a member path wrapped after its dot
     return text
 
 
