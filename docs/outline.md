@@ -2298,12 +2298,13 @@ when `readers.py` defines `detect`.
     on the source folder — any error → `bull-fail: mypy <file>:<line>`; then `uv run pytest` over
     the test folder minus `tests/journey` with coverage (`--cov`, `coverage json` into
     `{results}/coverage.json`) and `--junitxml={results}/junit.xml`; `BULL_SCOPE_MODULE` limits
-    pytest to that module's tests); build-test-fast `<module>` (`pytest tests/<module>`, no
-    coverage, junit); lint `<module>` (`ruff check` and `ruff format --check` on the module's source
+    pytest to that module's tests); build-test-fast `<module>` (`mypy --strict` on the source
+    folder as in build-test, then `pytest tests/<module>`, no coverage, junit); lint `<module>` (`ruff check` and `ruff format --check` on the module's source
     and tests; config: the app's own ruff config, else `lint/ruff.toml`; rule set without `N`);
     rerun (`pytest <node ids>`); journeys (`pytest tests/journey`).
   - readers.contract_declarations: `ast`-based: top-level public classes (name, bases, decorators
-    `dataclass`/`Protocol`), their public methods as `def name(args) -> ret`, dataclass fields
+    `dataclass`/`Protocol`), their public methods as `def name(args) -> ret` (prefixed with
+    `@property`/`@classmethod`/`@staticmethod`/`@abstractmethod` when decorated so), dataclass fields
     `name: type`, enum members, public functions, type aliases; private names skipped; formatting
     differences don't change the output.
   - readers.test_results: parses `junit.xml` (count, failed/errored node ids); missing → None.
@@ -2489,3 +2490,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-17: open for /verify (cont.): (3) a `gates --journeys` run reports `tests_run` 0 (no journey count), so a stack case can't check `ran` for journeys.
 - 2026-11-17: stack_fixture coverage triage — human kept, specified and tested readers' error branches (invalid fixture.toml TOML, unreadable/non-JSON schema, schema without `properties`, unsupported interface format, unsupported field type, source outside `part_root`); listed under stack_fixture Behavior spec "readers error handling". tool.py and serve.py get in-process tests (they were only run as subprocesses, which coverage doesn't measure). No contract change — approved by Nicholas Johnson
 - 2026-11-17: source note `docs/process/stack_python_cli.md` approved, with its six choices (§7): `pytest-cov` added to the `pyproject.toml` template; `lint/ruff.toml` selects `E, F, W, I, B, UP`, line length 100 (no `N`); interface types add `number` → `float`, `array` → `list[...]`; `shellcheck` dropped; the fixture keeps one module (`Count` interface with a provider only); journeys needing `BULL_URL_<PART>` fail, not skip, when it is missing. No adoption support (no `detect`), so no surveyor, `## For an adoption` or `## Final switch` — approved by Nicholas Johnson
+- 2026-11-17: stack_python_cli unit 2 review — human: build-test-fast also runs `mypy --strict` on the source folder (a type error is a build failure in this stack); contract_declarations shows `@property`/`@classmethod`/`@staticmethod`/`@abstractmethod` on methods so changing one is a contract change. Kept as the code-writer chose (internal): pytest exit 5 alone doesn't fail a step (bull's no-tests check does); labels `bull-fail: test <node id>`, `lint <file>:<line>`, `format <file>`; journeys write no junit; check imports the package with the app's `.venv` interpreter when present — approved by Nicholas Johnson
