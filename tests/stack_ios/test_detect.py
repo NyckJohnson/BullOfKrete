@@ -222,3 +222,95 @@ def test_every_issue_has_a_non_empty_fix(
 def test_readers_detect_returns_what_detect_returns(tmp_path: Path) -> None:
     make_project(tmp_path)
     assert readers.detect(tmp_path) == detect_mod.detect(tmp_path)
+
+
+def _edit_pbxproj(proj: Path, old: str, new: str) -> None:
+    pbx = proj / "project.pbxproj"
+    text = pbx.read_text(encoding="utf-8")
+    assert old in text
+    pbx.write_text(text.replace(old, new), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ('"rootObject" = "ROOT";', '"rootObject" = ( a, );'),
+        ('"rootObject" = "ROOT";', '"rootObject" = { a = b; };'),
+        ('"mainGroup" = "MAIN";', '"mainGroup" = ( x, );'),
+        ('"mainGroup" = "MAIN";', '"mainGroup" = { a = b; };'),
+    ],
+)
+def test_odd_root_or_main_group_structure_gives_a_block_not_an_exception(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    proj = make_project(tmp_path)
+    _edit_pbxproj(proj, old, new)
+    d = detect_mod.detect(tmp_path)
+    assert _issues(d, IssueLevel.BLOCK)
+    assert d.confidence >= HIGH
+
+
+@pytest.mark.parametrize(
+    "content", ["{ unbalanced", "", "not a plist at all", "{ a = ; }"]
+)
+def test_malformed_pbxproj_still_reports_high_confidence_with_a_block(
+    tmp_path: Path, content: str
+) -> None:
+    proj = make_project(tmp_path)
+    (proj / "project.pbxproj").write_text(content, encoding="utf-8")
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert _issues(d, IssueLevel.BLOCK)
+
+
+def test_unreadable_pbxproj_still_reports_high_confidence_with_a_block(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    (proj / "project.pbxproj").write_bytes(b"\xff\xfe\x00\x80 not utf-8 \xc3\x28")
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert _issues(d, IssueLevel.BLOCK)
+
+
+def test_project_without_an_app_target_reports_high_confidence_with_a_block(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    _edit_pbxproj(
+        proj,
+        '"productType" = "com.apple.product-type.application";',
+        '"productType" = "com.apple.product-type.framework";',
+    )
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert _issues(d, IssueLevel.BLOCK)
+
+
+def _add_schemes(proj: Path, names: list[str], *, drop: str | None = None) -> None:
+    schemes = proj / "xcshareddata" / "xcschemes"
+    schemes.mkdir(parents=True, exist_ok=True)
+    if drop:
+        (schemes / f"{drop}.xcscheme").unlink()
+    for n in names:
+        (schemes / f"{n}.xcscheme").write_text("<Scheme/>\n", encoding="utf-8")
+
+
+def test_several_shared_schemes_choose_the_one_named_after_the_app_target(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    _add_schemes(proj, ["Aardvark", "Zebra"])
+    assert detect_mod.detect(tmp_path).settings["scheme"] == "MyApp"
+
+
+def test_several_shared_schemes_with_no_app_match_choose_one_and_note_it(
+    tmp_path: Path,
+) -> None:
+    proj = make_project(tmp_path)
+    _add_schemes(proj, ["Beta", "Alpha"], drop="MyApp")
+    d = detect_mod.detect(tmp_path)
+    chosen = d.settings["scheme"]
+    assert chosen in {"Alpha", "Beta"}
+    notes = _issues(d, IssueLevel.NOTE)
+    assert any(chosen in _text(i) and "scheme" in _text(i).lower() for i in notes)
