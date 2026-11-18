@@ -314,3 +314,143 @@ def test_several_shared_schemes_with_no_app_match_choose_one_and_note_it(
     assert chosen in {"Alpha", "Beta"}
     notes = _issues(d, IssueLevel.NOTE)
     assert any(chosen in _text(i) and "scheme" in _text(i).lower() for i in notes)
+
+
+# --- reference scan: actor isolation, Objective-C, UIKit, -uiTesting, Swift file count -------
+
+APP_DIR = "App/MyApp/MyApp"
+ISOLATION = '"SWIFT_DEFAULT_ACTOR_ISOLATION" = "{}"; '
+
+
+def _set_isolation(proj: Path, cfg: str, value: str) -> None:
+    head = (
+        f'"{cfg}" = {{ "isa" = "XCBuildConfiguration"; "name" = "Debug"; '
+        '"buildSettings" = { '
+    )
+    _edit_pbxproj(proj, head, head + ISOLATION.format(value))
+
+
+def _swift(root: Path, name: str, body: str, folder: str = APP_DIR) -> None:
+    path = root / folder / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _is_isolation(i: Issue) -> bool:
+    return "isolation" in _text(i).lower()
+
+
+@pytest.mark.parametrize("cfg", ["CFG_app", "CFG_unit", "CFG_project"])
+def test_main_actor_default_isolation_gives_a_fix_mentioning_nonisolated(
+    tmp_path: Path, cfg: str
+) -> None:
+    proj = make_project(tmp_path)
+    _set_isolation(proj, cfg, "MainActor")
+    d = detect_mod.detect(tmp_path)
+    found = [i for i in _issues(d, IssueLevel.FIX) if _is_isolation(i)]
+    assert found
+    assert any("nonisolated" in _text(i) for i in found)
+    assert d.confidence >= HIGH
+
+
+@pytest.mark.parametrize("value", ["nonisolated", None])
+def test_nonisolated_or_unset_default_isolation_gives_no_isolation_issue(
+    tmp_path: Path, value: str | None
+) -> None:
+    proj = make_project(tmp_path)
+    if value:
+        _set_isolation(proj, "CFG_app", value)
+    d = detect_mod.detect(tmp_path)
+    assert not any(_is_isolation(i) for i in d.issues)
+
+
+@pytest.mark.parametrize("ext", ["m", "mm"])
+def test_objective_c_sources_give_a_block_naming_objective_c(
+    tmp_path: Path, ext: str
+) -> None:
+    make_project(tmp_path)
+    _swift(tmp_path, f"Legacy.{ext}", "@implementation X\n@end\n")
+    d = detect_mod.detect(tmp_path)
+    blocks = _issues(d, IssueLevel.BLOCK)
+    assert any("objective-c" in _text(i).lower() for i in blocks)
+    assert d.confidence >= HIGH
+
+
+def test_a_swift_only_app_has_no_objective_c_issue(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    d = detect_mod.detect(tmp_path)
+    assert not any("objective-c" in _text(i).lower() for i in d.issues)
+
+
+@pytest.mark.parametrize("folder", ["Pods/Lib", "build/out", "App/MyApp/Pods/Lib"])
+def test_objective_c_under_pods_or_build_folders_is_ignored(
+    tmp_path: Path, folder: str
+) -> None:
+    make_project(tmp_path)
+    _swift(tmp_path, "Lib.m", "@end\n", folder=folder)
+    d = detect_mod.detect(tmp_path)
+    assert not any("objective-c" in _text(i).lower() for i in d.issues)
+
+
+def test_swift_files_importing_uikit_give_a_note_with_a_count(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    for n in ("A", "B", "C"):
+        _swift(tmp_path, f"{n}.swift", "import UIKit\nstruct X {}\n")
+    _swift(tmp_path, "D.swift", "import SwiftUI\n")
+    d = detect_mod.detect(tmp_path)
+    notes = [i for i in _issues(d, IssueLevel.NOTE) if "UIKit" in _text(i)]
+    assert notes
+    assert any("3" in _text(i) for i in notes)
+
+
+def test_no_uikit_imports_give_no_uikit_note(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    _swift(tmp_path, "A.swift", "import SwiftUI\n")
+    d = detect_mod.detect(tmp_path)
+    assert not any("UIKit" in _text(i) for i in d.issues)
+
+
+def test_no_ui_testing_launch_argument_gives_a_note(tmp_path: Path) -> None:
+    make_project(tmp_path)
+    _swift(tmp_path, "A.swift", "import SwiftUI\n")
+    d = detect_mod.detect(tmp_path)
+    assert any("-uiTesting" in _text(i) for i in _issues(d, IssueLevel.NOTE))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        'let on = CommandLine.arguments.contains("-uiTesting")\n',
+        'let flag = "-uiTesting"\n',
+    ],
+)
+def test_a_handled_ui_testing_launch_argument_gives_no_note(
+    tmp_path: Path, body: str
+) -> None:
+    make_project(tmp_path)
+    _swift(tmp_path, "Launch.swift", body)
+    d = detect_mod.detect(tmp_path)
+    assert not any("-uiTesting" in _text(i) for i in d.issues)
+
+
+@pytest.mark.parametrize("count", [0, 1, 4])
+def test_summary_includes_the_swift_file_count(tmp_path: Path, count: int) -> None:
+    make_project(tmp_path)
+    (tmp_path / APP_DIR / "MyAppApp.swift").unlink()
+    for n in range(count):
+        _swift(tmp_path, f"F{n}.swift", "struct X {}\n")
+    d = detect_mod.detect(tmp_path)
+    assert str(count) in d.summary
+
+
+def test_new_issues_keep_confidence_high_and_have_fixes(tmp_path: Path) -> None:
+    proj = make_project(tmp_path)
+    _set_isolation(proj, "CFG_app", "MainActor")
+    _swift(tmp_path, "Legacy.m", "@end\n")
+    _swift(tmp_path, "V.swift", "import UIKit\n")
+    d = detect_mod.detect(tmp_path)
+    assert d.confidence >= HIGH
+    assert len(d.issues) >= 4
+    for issue in d.issues:
+        assert issue.item.strip()
+        assert issue.fix.strip()

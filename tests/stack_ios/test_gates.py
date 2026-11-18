@@ -744,3 +744,40 @@ def test_fast_for_a_module_without_suites_says_so_and_names_the_test_folder(
     shown = _out(capsys)
     line = next(ln for ln in shown.splitlines() if "no test suites found" in ln)
     assert f"{_TESTS}/Counter" in line
+
+
+# --- build-test-fast: attributes on the same line as the type -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("@Suite(.tags(.fast)) struct ParserTests {\n}\n", "ParserTests"),
+        ('@Suite("Move (drag)") struct DragBehavior {\n}\n', "DragBehavior"),
+        ("@MainActor final class StoreTests: XCTestCase {\n}\n", "StoreTests"),
+        ("@MainActor struct ViewModelTests {\n}\n", "ViewModelTests"),
+    ],
+)
+def test_fast_finds_a_suite_whose_attributes_sit_on_the_same_line_as_the_type(
+    app: App, source: str, expected: str
+) -> None:
+    app.write(f"{_TESTS}/Counter/Some.swift", "import Testing\n" + source)
+    gates.main(["build-test-fast", "Counter"])
+    assert _only(app.runner.xcodebuild()[0]) == [f"-only-testing:DemoTests/{expected}"]
+
+
+def test_fast_finds_every_same_line_attribute_suite_in_one_file(app: App) -> None:
+    app.write(
+        f"{_TESTS}/Counter/Many.swift",
+        "@Suite(.tags(.fast)) struct ParserTests {\n}\n"
+        '@Suite("Move (drag)") struct DragBehavior {\n}\n'
+        "@MainActor final class StoreTests: XCTestCase {\n}\n"
+        "@MainActor struct ViewModelTests {\n}\n",
+    )
+    gates.main(["build-test-fast", "Counter"])
+    assert sorted(_only(app.runner.xcodebuild()[0])) == [
+        "-only-testing:DemoTests/DragBehavior",
+        "-only-testing:DemoTests/ParserTests",
+        "-only-testing:DemoTests/StoreTests",
+        "-only-testing:DemoTests/ViewModelTests",
+    ]
