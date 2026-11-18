@@ -2268,6 +2268,12 @@ when `readers.py` defines `detect`.
     legacy_declarations, interface_check (json-schema: provider/consumer `field` lines must equal the
     schema's `properties` names and types — `string`/`integer`/`boolean`; an extra field on the
     provider → item "provider has field `x` not in the schema").
+  - readers error handling: `check` on a `fixture.toml` that isn't valid TOML → failing item
+    "fixture.toml is valid TOML"; `interface_check` on a schema file that can't be read or isn't JSON,
+    or has no `properties` object → failing item "fix the interface file"; a format other than
+    json-schema → item "interface format `<x>` is not supported"; a schema field of a type other than
+    string/integer/boolean → item "unsupported type"; `uncovered` keys a source outside `part_root`
+    by its absolute posix path.
   - serve.py: an HTTP server on 127.0.0.1:`<port>` answering `GET /health` 200; ready polls it; stop
     terminates it via its pid file in `{results}`.
   - Each stack's `cases.json` covers every required id for its capabilities and passes `bull stack
@@ -2481,3 +2487,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-17: found while building cli/stack_fixture, open for /verify (other modules, not changed): (1) `bull stack test .` reports "stack.name '<n>' does not match the folder name ''" — `Path('.').name` is empty (stacks/stacktest path handling); (2) stacktest's runner marks a module as having reference tests when its memo line reads `- Reference tests: none`.
 - 2026-11-17: stack_fixture unit 4 construction (set by test-writer; spec left open) — `serve.main([step, port, ...]) -> int`, results folder from `BULL_RESULTS`; `start` launches the server in the background and returns 0 without waiting, writing one `*.pid` file (pid as text) in `{results}`; `ready <port> [--timeout <s>]` polls `/health`; `stop` terminates via the pid file and removes it, a missing pid file returns 0; unknown paths 404; empty argv or unknown step non-zero. The service stack reuses the fixture-language readers; its manifest is kind service with `[run]` start/ready/stop = `-m bull.Modules.stack_fixture.tool <step> {port}`. Internal behavior, no contract change.
 - 2026-11-17: open for /verify (cont.): (3) a `gates --journeys` run reports `tests_run` 0 (no journey count), so a stack case can't check `ran` for journeys.
+- 2026-11-17: stack_fixture coverage triage — human kept, specified and tested readers' error branches (invalid fixture.toml TOML, unreadable/non-JSON schema, schema without `properties`, unsupported interface format, unsupported field type, source outside `part_root`); listed under stack_fixture Behavior spec "readers error handling". tool.py and serve.py get in-process tests (they were only run as subprocesses, which coverage doesn't measure). No contract change — approved by Nicholas Johnson
