@@ -1,0 +1,18 @@
+# The ios stack's SwiftLint defaults (an app's own .swiftlint.yml replaces this file).
+# force_try and force_cast are on by default; --strict turns every warning into a failure.
+disabled_rules:
+  - trailing_comma        # swift-format adds trailing commas
+  - todo
+opt_in_rules:
+  - force_unwrapping
+  - implicitly_unwrapped_optional   # IBOutlets stay allowed (the rule's default mode)
+  - empty_count
+  - first_where
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+line_length:
+  warning: 120
+  ignores_comments: true
+identifier_name:
+  min_length: 1
+  excluded: [id, x, y]

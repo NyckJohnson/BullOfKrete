@@ -450,7 +450,7 @@ Every required id, plus `journey`, `journey-failing` and `adopt-mode` (no `inter
 | `build-warning` | an unused `let` in `Counter.swift` | fail `build`, `Counter.swift` |
 | `lint` | a `try!` or `as!` in `Counter.swift` (still builds, still covered) | fail `lint` |
 | `contract-change` | a new requirement in `CounterStore` (implemented in `Counter`) | fail `api` |
-| `uncovered` | an untested method in `Counter` | fail `coverage`, `Counter.swift` |
+| `uncovered` | an untested method in `Counter` | fail `coverage`, "coverage not clean for Counter" |
 | `exemption` | the same method with `// coverage-exempt: <reason>` | pass |
 | `setup-broken` | the shared scheme file deleted | fail `setup`, "scheme" |
 | `journey` | none; `gates --journeys` | pass, not recorded |

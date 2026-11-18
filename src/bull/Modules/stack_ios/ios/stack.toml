@@ -1,0 +1,89 @@
+# The `ios` stack: a SwiftUI app in Swift 6, tested with Swift Testing and XCUITest (Xcode on macOS).
+format = 1
+
+[stack]
+name = "ios"
+title = "iOS app"
+description = "A SwiftUI iOS app in Swift 6: Xcode, Swift Testing, XCUITest, SwiftLint and swift-format"
+language = "swift"
+kind = "app"
+maturity = "experimental"
+source_glob = "*.swift"
+test_glob = ["*Tests.swift"]
+comment = "//"
+scaffold = ["App"]
+gitignore = ["xcuserdata/", "*.xcuserstate", ".DS_Store"]
+agents = [
+    "skeleton-builder",
+    "screen-builder",
+    "test-writer",
+    "code-writer",
+    "reviewer",
+    "coverage-analyst",
+    "journey-test-writer",
+    "surveyor",
+]
+
+[[stack.requires]]
+tool = "xcodebuild"
+hint = "Install Xcode 26 or later from the App Store, open it once, then run `xcode-select -s /Applications/Xcode.app`"
+
+[[stack.requires]]
+tool = "swiftlint"
+hint = "brew install swiftlint"
+
+[settings.project]
+type = "str"
+default = "App/MyApp/MyApp.xcodeproj"
+description = "The .xcodeproj, relative to the part root"
+
+[settings.scheme]
+type = "str"
+default = "MyApp"
+description = "The shared scheme the gates build and test"
+
+[settings.source_dir]
+type = "str"
+default = "App/MyApp/MyApp"
+description = "The app target's folder; modules live in <source_dir>/Modules/<Module>/"
+
+[settings.test_dir]
+type = "str"
+default = "App/MyApp/MyAppTests"
+description = "The unit test target's folder"
+
+[settings.ui_test_dir]
+type = "str"
+default = "App/MyApp/MyAppUITests"
+description = "The UI test target's folder; journeys live in JourneyTests.swift"
+
+[settings.unit_test_target]
+type = "str"
+default = "MyAppTests"
+description = "The unit test target's name"
+
+[settings.ui_test_target]
+type = "str"
+default = "MyAppUITests"
+description = "The UI test target's name"
+
+[settings.simulator]
+type = "str"
+default = ""
+description = "Simulator device name; empty means the newest available iPhone"
+
+[settings."coverage.exclude"]
+default = ["*/Views/*", "*/Mocks/*"]
+description = "Views and mocks are left out of coverage"
+
+[gates]
+preflight = ["{python}", "{stack_dir}/gates.py", "preflight"]
+setup = ["{python}", "{stack_dir}/gates.py", "setup"]
+build_test = ["{python}", "{stack_dir}/gates.py", "build-test"]
+build_test_fast = ["{python}", "{stack_dir}/gates.py", "build-test-fast", "{module}"]
+lint = ["{python}", "{stack_dir}/gates.py", "lint", "{module}"]
+rerun_failed = ["{python}", "{stack_dir}/gates.py", "rerun", "{failed_ids}"]
+journeys = ["{python}", "{stack_dir}/gates.py", "journeys"]
+
+[commands]
+prune = ["{python}", "{stack_dir}/gates.py", "prune"]

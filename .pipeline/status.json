@@ -1000,14 +1000,14 @@
       "dependsOn": [
         "stacks"
       ],
-      "state": "pending",
+      "state": "coverage",
       "units": [
         {
           "number": 1,
           "files": [
             "Contracts/__init__.py"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -1018,8 +1018,8 @@
             "ios/swift_scan.py",
             "ios/pbxproj.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 2
         },
         {
           "number": 3,
@@ -1028,8 +1028,8 @@
             "ios/gates.py",
             "ios/simulator.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 4,
@@ -1037,8 +1037,8 @@
             "ios/detect.py",
             "ios/inventory.py"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         },
         {
           "number": 5,
@@ -1048,7 +1048,7 @@
             "ios/lint/swiftlint.yml",
             "ios/lint/swift-format.json"
           ],
-          "state": "pending",
+          "state": "done",
           "attempts": 0
         },
         {
@@ -1057,13 +1057,13 @@
             "ios/cases.json",
             "ios/fixture/"
           ],
-          "state": "pending",
-          "attempts": 0
+          "state": "done",
+          "attempts": 1
         }
       ]
     }
   ],
-  "updatedAt": "2026-11-18T01:54:11-08:00",
+  "updatedAt": "2026-11-18T11:58:25-08:00",
   "features": [],
   "activeFeature": null
 }
