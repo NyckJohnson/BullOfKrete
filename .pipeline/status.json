@@ -143,7 +143,7 @@
       "dependsOn": [
         "foundation"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -160,7 +160,7 @@
             "parser.py",
             "problems.py"
           ],
-          "state": "done",
+          "state": "pending",
           "attempts": 0
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T16:32:53-08:00",
+  "updatedAt": "2026-11-18T16:53:48-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {

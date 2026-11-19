@@ -111,6 +111,37 @@ def test_reference_tests_none_is_empty() -> None:
     assert LiveMemoReader().parse(text).modules[0].reference_tests == ()
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["none.", "none (helpers only).", "none (new in v2)", "None", "NONE.", "None (x)"],
+)
+def test_reference_tests_none_with_period_or_note_is_empty(value: str) -> None:
+    text = f"## Modules\n### A\n- Files: a.py\n- Reference tests: {value}\n"
+    assert LiveMemoReader().parse(text).modules[0].reference_tests == ()
+
+
+@pytest.mark.parametrize("value", ["none.", "none (leaf module).", "None"])
+def test_depends_on_none_with_period_or_note_is_empty(value: str) -> None:
+    text = f"## Modules\n### A\n- Depends on: {value}\n- Files: a.py\n"
+    assert LiveMemoReader().parse(text).modules[0].depends == ()
+
+
+def test_reference_tests_real_list_still_parses_to_two_items() -> None:
+    text = (
+        "## Modules\n### A\n- Files: a.py\n"
+        "- Reference tests: v1-tests/a.py::t, v1-tests/b.py\n"
+    )
+    assert LiveMemoReader().parse(text).modules[0].reference_tests == (
+        "v1-tests/a.py::t",
+        "v1-tests/b.py",
+    )
+
+
+def test_reference_tests_name_starting_with_none_is_not_empty() -> None:
+    text = "## Modules\n### A\n- Files: a.py\n- Reference tests: nonesuch.py\n"
+    assert LiveMemoReader().parse(text).modules[0].reference_tests == ("nonesuch.py",)
+
+
 def test_files_trims_whitespace_and_drops_empty_entries() -> None:
     text = "## Modules\n### A\n- Files:  a.py ,, b.py  |  | c.py ,\n"
     assert LiveMemoReader().parse(text).modules[0].units == (
