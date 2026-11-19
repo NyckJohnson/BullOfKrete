@@ -97,8 +97,9 @@ def test_reference_test_scan_is_required_before_store_merges(
         refused.stdout + refused.stderr
     )
 
-    # Recording the scan on main (where the merge guard reads it) makes the merge
-    # allowed, and it goes through.
+    # Stage 5 order: record the scan on the module branch, commit, run the full gates so the
+    # new head has a pass, then merge from main.
+    git(app, env, "switch", "module/Store")
     recorded = bull(
         "status",
         "refscan",
@@ -123,6 +124,8 @@ def test_reference_test_scan_is_required_before_store_merges(
     assert scan["covered"] == 3 and scan["missed"] == 1
     assert scan["contradicts"] == 0 and scan["not_in_spec"] == 0
     commit_all(app, env, "chore: reference-test scan recorded")
+    bull_ok(bull, "gates", "Store", cwd=app)
+    git(app, env, "switch", "main")
     allowed = bull("hook", "before-shell", cwd=app, stdin=shell)
     assert allowed.returncode == 0, allowed.stdout + allowed.stderr
     merged = git(
