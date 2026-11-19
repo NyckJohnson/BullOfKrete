@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest

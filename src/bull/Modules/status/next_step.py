@@ -77,15 +77,22 @@ def _in_progress(status: Status) -> ModuleStatus | None:
 
 
 def _stage_command(track: Track, mode: Mode) -> str:
-    """The command for a stage other than 5."""
+    """The command for a stage other than 5; once the checkpoint ending stage 2, 3 or 4
+    is recorded, the next stage's command."""
     if mode == Mode.FEATURE:
         return "run /bull:feature"
     if mode == Mode.ADOPT:
         return "run /bull:adopt"
     if track.stage == 2:
+        if "setup" in track.checkpoints:
+            return "run /bull:skeleton"
         if "outline-approved" in track.checkpoints:
             return "run /bull:setup"
         return "run /bull:outline"
+    if track.stage == 3 and "skeleton" in track.checkpoints:
+        return "run /bull:prototype"
+    if track.stage == 4 and "ui-approved" in track.checkpoints:
+        return "run /bull:build"
     if track.stage >= 6:
         if "app-accepted" in track.checkpoints:
             return "run /bull:feature"

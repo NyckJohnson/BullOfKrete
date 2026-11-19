@@ -278,7 +278,7 @@
         "memo",
         "parts"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T22:12:18-08:00",
+  "updatedAt": "2026-11-19T15:24:57-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {
