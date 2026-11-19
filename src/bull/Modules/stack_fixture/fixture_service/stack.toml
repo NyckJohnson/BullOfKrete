@@ -1,6 +1,7 @@
 # The `fixture_service` stack: the fixture language as a service part, for bull's own tests.
 # It shares `tool.py` and the fixture readers with the `fixture` stack, and adds `[run]`:
-# an HTTP server on 127.0.0.1:{port} answering `GET /health` (see serve.py).
+# an HTTP server on 127.0.0.1:{port} answering `GET /health` (see serve.py), and the fixture
+# stack's json-schema interface check.
 format = 1
 
 [stack]
@@ -50,3 +51,6 @@ start = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "start", "{port}"]
 ready = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "ready", "{port}"]
 stop = ["{python}", "-m", "bull.Modules.stack_fixture.tool", "stop", "{port}"]
 ready_timeout = 30
+
+[interfaces]
+formats = ["json-schema"]

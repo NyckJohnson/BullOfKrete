@@ -17,4 +17,11 @@ service answers `GET /health` while it runs.
 - Depends on: none
 - Files: Contracts/counter.fx, counter.fx
 
+## Interfaces
+
+### Count
+- File: interfaces/count.json (json-schema)
+- Provider: app / counter
+- Consumers: none
+
 ## Decisions log
