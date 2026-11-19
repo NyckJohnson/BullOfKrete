@@ -318,7 +318,33 @@ def test_branch_without_a_status_file_falls_back_to_the_working_tree(
     assert decision.allow is scan_in_working_tree
 
 
-@pytest.mark.parametrize("text", ["", "not json {", "[1, 2]", '{"unrelated": true}'])
+def _one_module(**overrides: object) -> str:
+    module: dict[str, object] = {
+        "name": "Counter",
+        "part": "app",
+        "depends": [],
+        "state": "in_progress",
+        "reference_tests": True,
+        "scan": None,
+        "units": [],
+    }
+    module.update(overrides)
+    return json.dumps({"format": 1, "modules": [module]})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "not json {",
+        "[1, 2]",
+        '{"unrelated": true}',
+        json.dumps({"format": 1, "modules": [1]}),
+        _one_module(name=5),
+        _one_module(reference_tests="yes"),
+        _one_module(scan=5),
+    ],
+)
 @pytest.mark.parametrize("scan_in_working_tree", [True, False])
 def test_branch_status_that_is_not_valid_status_json_falls_back_to_the_working_tree(
     tmp_path: Path, text: str, scan_in_working_tree: bool
