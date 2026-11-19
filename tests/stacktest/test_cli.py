@@ -101,6 +101,37 @@ def test_a_relative_path_with_a_separator_loads_through_load_path(
     assert not [c for c in registry.calls if c[0] == "get"]
 
 
+def test_dot_resolves_to_an_absolute_folder_and_loads_through_load_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "mystack"
+    folder.mkdir()
+    monkeypatch.chdir(folder)
+    tester, registry = MockStackTester(), MockStackRegistry()
+    code, _ = _run(tester, registry, ["."])
+    assert code == 0
+    loads = [c for c in registry.calls if c[0] == "load_path"]
+    assert len(loads) == 1
+    path = loads[0][1][0]
+    assert path.is_absolute()
+    assert path.resolve() == folder.resolve()
+    assert not [c for c in registry.calls if c[0] == "get"]
+    assert [c for c in tester.calls if c[0] == "run"]
+
+
+def test_a_dot_dot_path_is_resolved_to_an_absolute_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    monkeypatch.chdir(tmp_path / "a")
+    tester, registry = MockStackTester(), MockStackRegistry()
+    _run(tester, registry, ["../b"])
+    path = next(c for c in registry.calls if c[0] == "load_path")[1][0]
+    assert path.is_absolute()
+    assert path.resolve() == (tmp_path / "b").resolve()
+
+
 def test_static_runs_the_static_check_and_not_the_cases() -> None:
     tester, registry = MockStackTester(), MockStackRegistry()
     code, _ = _run(tester, registry, ["fixture", "--static"])

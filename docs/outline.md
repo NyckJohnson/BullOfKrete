@@ -1891,7 +1891,7 @@ when `readers.py` defines `detect`.
     from the fixture memo), commit, apply `change` (a change whose `replace`/`delete` path doesn't
     exist → FAIL "change does not apply"), commit unless the case says `"dirty": true`, run
     `bull <run…> --json` as a subprocess (the bull command is a constructor argument) with
-    `BULL_EXTRA_STACKS` set to the stack's own folder (absolute), so a stack that is not installed
+    `BULL_EXTRA_STACKS` set to the stack's own folder (absolute; any existing entries kept after it), so a stack that is not installed
     yet can be self-tested, compare with
     `expect`; `then` runs in the same folder afterwards. Temp folders removed afterwards.
   - run: a `layout` that is not a folder→folder object, or `settings` that is not an object →
