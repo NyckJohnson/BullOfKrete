@@ -2,11 +2,14 @@
 
 Built-in stacks are folders holding `stack.toml` directly under the built-in roots; installed
 stacks live in `<user_data_dir>/stacks/<name>/`. The registry scans the folders on every call,
-so a stack installed through any registry is seen at once.
+so a stack installed through any registry is seen at once. Stack folders listed in the
+`BULL_EXTRA_STACKS` environment variable (`os.pathsep`-separated, read on every call) are added
+too; one wins over an installed stack of the same name, a built-in stack wins over both.
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -16,6 +19,7 @@ from bull.Modules.stacks.loader import load_readers
 from bull.Modules.stacks.manifest import MANIFEST_FILE, SURVEYOR_AGENT, parse_manifest
 
 INSTALLED_DIR = "stacks"
+EXTRA_STACKS_ENV = "BULL_EXTRA_STACKS"
 _TEMPLATE_FOLDER = "_template"
 
 
@@ -49,9 +53,10 @@ class LiveStackRegistry(StackRegistry):
     def load_path(self, path: Path) -> Stack:
         folder = path.resolve()
         builtin = any(folder.parent == root.resolve() for root in self._builtin_roots)
-        return self._load(path, builtin)
+        return self._load(folder, builtin)
 
     def install(self, path: Path) -> Stack:
+        path = path.resolve()
         # Check the name from the manifest alone first: a refused install must not import the
         # stack's readers, which would replace a built-in stack's package in `sys.modules`.
         name = parse_manifest(path).name
@@ -109,13 +114,31 @@ class LiveStackRegistry(StackRegistry):
         return found
 
     def _folders(self) -> dict[str, tuple[Path, bool]]:
-        """Every stack folder by name; a built-in stack wins over an installed one."""
+        """Every stack folder by name: built-in first, then `BULL_EXTRA_STACKS`, then installed."""
         found: dict[str, tuple[Path, bool]] = {
             name: (folder, True) for name, folder in self._builtin_folders().items()
         }
+        for folder in _extra_stack_folders():
+            found.setdefault(folder.name, (folder, False))
         for folder in _stack_folders(self._installed_root):
             found.setdefault(folder.name, (folder, False))
         return found
+
+
+def _extra_stack_folders() -> list[Path]:
+    """Stack folders listed in `BULL_EXTRA_STACKS`, in order, resolved.
+
+    Empty entries, missing paths and folders without a `stack.toml` are skipped.
+    """
+    value = os.environ.get(EXTRA_STACKS_ENV, "")
+    folders: list[Path] = []
+    for entry in value.split(os.pathsep):
+        if not entry:
+            continue
+        folder = Path(entry).resolve()
+        if folder.is_dir() and (folder / MANIFEST_FILE).is_file():
+            folders.append(folder)
+    return folders
 
 
 def _stack_folders(root: Path) -> list[Path]:

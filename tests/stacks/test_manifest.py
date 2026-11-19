@@ -501,3 +501,20 @@ def test_an_invalid_ready_timeout_is_reported(tmp_path: Path, value: str) -> Non
     run = RUN_SECTION.replace("ready_timeout = 12", f"ready_timeout = {value}")
     text = manifest_text("sample", append="\n" + run)
     assert "ready_timeout" in _bad(tmp_path, text)
+
+
+def test_relative_dot_path_inside_the_folder_uses_the_real_folder_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = write_stack(tmp_path, "rel_dot", manifest=manifest_text("rel_dot"))
+    monkeypatch.chdir(folder)
+    assert parse_manifest(Path(".")).name == "rel_dot"
+
+
+def test_relative_dot_path_with_a_mismatched_name_still_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = write_stack(tmp_path, "rel_dir", manifest=manifest_text("rel_other"))
+    monkeypatch.chdir(folder)
+    with pytest.raises(StackError):
+        parse_manifest(Path("."))
