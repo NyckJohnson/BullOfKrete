@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from bull.Modules.stack_fixture.fixture_service import readers
+from bull.Modules.stacks.Contracts import Role
 
 
 def test_contract_declarations_returns_pub_lines(tmp_path: Path) -> None:
@@ -78,3 +79,56 @@ def test_check_reports_not_ok_flag(tmp_path: Path) -> None:
     (tmp_path / "fixture.toml").write_text("ok = false\n")
     failing = [i for i in readers.check(tmp_path, {}, False) if not i.ok]
     assert [i.item for i in failing] == ["fixture.toml says not ok"]
+
+
+# --- interface_check (same json-schema check as the fixture stack) -------------------------
+
+_SCHEMA = {
+    "title": "Tally",
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "count": {"type": "integer"}},
+}
+_GOOD = ["field name: string", "field count: integer"]
+
+
+def _setup_interface(tmp_path: Path, fields: list[str]) -> Path:
+    contracts = tmp_path / "src" / "Modules" / "m" / "Contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "tally.fx").write_text("".join(f"{line}\n" for line in fields))
+    schema = tmp_path / "tally.json"
+    schema.write_text(json.dumps(_SCHEMA))
+    return schema
+
+
+@pytest.mark.parametrize("role", [Role.PROVIDER, Role.CONSUMER])
+def test_interface_check_matching_fields_pass(tmp_path: Path, role: Role) -> None:
+    schema = _setup_interface(tmp_path, _GOOD)
+    items = readers.interface_check(
+        tmp_path, {"source_dir": "src"}, schema, "json-schema", role, "m"
+    )
+    assert all(i.ok for i in items)
+
+
+def test_interface_check_extra_provider_field_is_reported(tmp_path: Path) -> None:
+    schema = _setup_interface(tmp_path, [*_GOOD, "field x: string"])
+    items = readers.interface_check(
+        tmp_path, {"source_dir": "src"}, schema, "json-schema", Role.PROVIDER, "m"
+    )
+    failing = [i for i in items if not i.ok]
+    assert [i.item for i in failing] == ["provider has field `x` not in the schema"]
+
+
+def test_interface_check_wrong_type_is_reported(tmp_path: Path) -> None:
+    schema = _setup_interface(tmp_path, ["field name: string", "field count: string"])
+    items = readers.interface_check(
+        tmp_path, {"source_dir": "src"}, schema, "json-schema", Role.CONSUMER, "m"
+    )
+    assert any(not i.ok and "count" in i.item for i in items)
+
+
+def test_interface_check_unsupported_format_is_reported(tmp_path: Path) -> None:
+    schema = _setup_interface(tmp_path, _GOOD)
+    items = readers.interface_check(
+        tmp_path, {"source_dir": "src"}, schema, "openapi", Role.PROVIDER, "m"
+    )
+    assert any(i.item == "interface format `openapi` is not supported" for i in items)

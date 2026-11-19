@@ -38,6 +38,10 @@ def test_manifest_loads_with_expected_identity(stack: Stack) -> None:
     assert stack.home == _FOLDER
 
 
+def test_manifest_declares_json_schema_interfaces(stack: Stack) -> None:
+    assert tuple(stack.manifest.interface_formats) == ("json-schema",)
+
+
 def test_manifest_has_run_section_with_positive_ready_timeout(stack: Stack) -> None:
     run = stack.manifest.run
     assert run is not None

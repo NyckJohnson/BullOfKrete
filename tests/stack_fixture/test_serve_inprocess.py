@@ -389,6 +389,25 @@ def test_start_server_exiting_at_once_fails_and_leaves_no_pid_file(
     assert "exited at once" in capsys.readouterr().err
 
 
+def test_start_server_ended_by_stop_in_the_check_window_is_not_a_failure(
+    results: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class Stopped(FakeProc):
+        def wait(self, timeout: float) -> int:
+            # `stop` runs while start is checking: it terminates the server and removes the
+            # pid file
+            (results / "serve-5017.pid").unlink()
+            return -15
+
+    _popen(monkeypatch, Stopped(None))
+    assert serve.main(["start", "5017"]) == 0
+    assert "exited at once" not in capsys.readouterr().err
+    assert "exited at once" not in (results / "serve-5017.log").read_text()
+    assert not (results / "serve-5017.pid").exists()
+
+
 def test_start_refused_while_our_server_owns_pid_file(
     results: Path,
     monkeypatch: pytest.MonkeyPatch,

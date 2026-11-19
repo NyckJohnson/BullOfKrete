@@ -314,3 +314,41 @@ def test_background_launch_does_not_use_python_313_only_setsid_keyword() -> None
         for kw in node.keywords
     }
     assert "setsid" not in keywords
+
+
+def _start_in_background(svc: Service) -> subprocess.Popen[str]:
+    env = dict(os.environ, BULL_RESULTS=str(svc.results))
+    return subprocess.Popen(
+        [sys.executable, "-c", _DRIVER, "start", str(svc.port)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def test_stop_during_the_start_check_window_is_not_a_start_failure(
+    service: Service,
+) -> None:
+    starter = _start_in_background(service)
+    deadline = time.monotonic() + 20
+    while not service.pid_files() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert service.pid_files()
+    assert service.main("stop", str(service.port)).returncode == 0
+    out, err = starter.communicate(timeout=60)
+    assert starter.returncode == 0, err
+    assert "exited at once" not in out + err
+    logs = list(service.results.glob("*.log"))
+    assert all("exited at once" not in log.read_text() for log in logs)
+    assert service.pid_files() == []
+
+
+def test_start_with_port_already_taken_is_a_start_failure(service: Service) -> None:
+    with socket.socket() as blocker:
+        blocker.bind(("127.0.0.1", service.port))
+        blocker.listen()
+        result = service.main("start", str(service.port))
+    assert result.returncode == 1
+    assert "exited at once" in result.stderr
+    assert service.pid_files() == []

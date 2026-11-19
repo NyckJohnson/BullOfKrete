@@ -891,7 +891,7 @@
       "dependsOn": [
         "stacks"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -929,8 +929,8 @@
             "fixture_service/readers.py",
             "fixture_service/serve.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "state": "pending",
+          "attempts": 0
         },
         {
           "number": 5,
@@ -940,7 +940,7 @@
             "fixture_service/cases.json",
             "fixture_service/fixture/"
           ],
-          "state": "done",
+          "state": "pending",
           "attempts": 0
         }
       ]
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T19:10:48-08:00",
+  "updatedAt": "2026-11-18T19:10:57-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {
