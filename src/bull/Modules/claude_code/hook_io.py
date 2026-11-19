@@ -53,12 +53,14 @@ def hook_output(kind: HookKind, decision: HookDecision) -> HookOutput:
     """What the hook command prints and exits with for `decision`.
 
     Block → exit 2 with the message on stderr (Claude Code shows it to the model);
-    allow → exit 0, printing the message on stdout only for session start.
+    allow → exit 0; session start prints the message on stdout (added to the model's
+    context), every other kind prints it on stderr (a warning such as unknown usage).
     """
     if not decision.allow:
         return HookOutput(stdout="", stderr=decision.message, exit_code=_BLOCK_EXIT)
-    stdout = decision.message if kind is HookKind.SESSION_START else ""
-    return HookOutput(stdout=stdout, stderr="", exit_code=0)
+    if kind is HookKind.SESSION_START:
+        return HookOutput(stdout=decision.message, stderr="", exit_code=0)
+    return HookOutput(stdout="", stderr=decision.message, exit_code=0)
 
 
 def parse_statusline(raw: str, now: datetime) -> StatusLineInput:
