@@ -94,11 +94,14 @@ def init_modules(
 ) -> Status:
     """Replace the status's modules with the memo's, in build order.
 
-    Refused when the memo has `problems` (every one listed with its line), or when a module
-    is already past pending and `replace` is false. With `replace`, a module still in the
-    memo keeps the progress of its unchanged units (see `_carry_over`); modules no longer in
-    the memo are dropped.
+    Refused, in this order, when the memo has no modules (whatever `replace` says), when it
+    has `problems` (every one listed with its line), or when a module is already past
+    pending and `replace` is false. With `replace`, a module still in the memo keeps the
+    progress of its unchanged units (see `_carry_over`); modules no longer in the memo are
+    dropped.
     """
+    if not memo.modules:
+        raise StatusError("docs/outline.md has no modules", "write the memo first")
     if problems:
         listed = "; ".join(f"line {p.line}: {p.message}" for p in problems)
         raise StatusError(
