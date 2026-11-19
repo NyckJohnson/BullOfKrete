@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T22:01:44-08:00",
+  "updatedAt": "2026-11-18T22:12:18-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {
@@ -1127,7 +1127,7 @@
       },
       {
         "name": "fixes",
-        "done": false
+        "done": true
       },
       {
         "name": "device-test",
