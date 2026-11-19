@@ -88,15 +88,17 @@ class LiveFeatureCycle(FeatureCycle):
     def start(self, slug: str | None = None) -> BacklogItem:
         root = self._app.root
         status = self._store.load()
-        if _ACCEPTED_APP not in status.app.checkpoints:
-            raise BullError(
-                "Features start only after the app is accepted.",
-                "Finish the app's stage 6 first.",
-            )
+        # Adoption first: an adoption in progress has no `app-accepted` yet, so checking
+        # acceptance first would hide the adoption refusal.
         if status.adoption is not None:
             raise BullError(
                 "An adoption is in progress; a feature can start after the adoption finishes.",
                 "Finish or abandon the adoption first.",
+            )
+        if _ACCEPTED_APP not in status.app.checkpoints:
+            raise BullError(
+                "Features start only after the app is accepted.",
+                "Finish the app's stage 6 first.",
             )
         if status.feature is not None:
             raise BullError(
