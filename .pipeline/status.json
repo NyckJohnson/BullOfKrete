@@ -929,7 +929,7 @@
             "fixture_service/readers.py",
             "fixture_service/serve.py"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 1
         },
         {
