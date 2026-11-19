@@ -204,7 +204,7 @@
         "foundation",
         "settings"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -222,8 +222,8 @@
             "loader.py",
             "registry.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "state": "pending",
+          "attempts": 0
         },
         {
           "number": 3,
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T18:23:05-08:00",
+  "updatedAt": "2026-11-18T18:23:13-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {

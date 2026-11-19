@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -422,3 +423,108 @@ def test_failed_final_move_on_reinstall_raises_and_keeps_the_earlier_install(
     assert [p.name for p in _installed_root(tmp_path).iterdir()] == ["rg_move"]
     stack = registry.get("rg_move")
     assert stack.readers.contract_declarations(tmp_path) == ["version-one"]
+
+
+# ------------------------------------------------ relative stack paths
+
+
+def test_load_path_dot_inside_a_stack_folder_loads_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _make(tmp_path / "elsewhere", "rg_dot")
+    monkeypatch.chdir(folder)
+    stack = _registry(tmp_path).load_path(Path("."))
+    assert stack.manifest.name == "rg_dot"
+
+
+def test_load_path_relative_folder_name_from_its_parent_loads_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make(tmp_path / "elsewhere", "rg_rel")
+    monkeypatch.chdir(tmp_path / "elsewhere")
+    stack = _registry(tmp_path).load_path(Path("rg_rel"))
+    assert stack.manifest.name == "rg_rel"
+
+
+def test_install_dot_inside_a_stack_folder_installs_under_the_stack_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _make(tmp_path / "src", "rg_inst_dot")
+    monkeypatch.chdir(folder)
+    stack = _registry(tmp_path).install(Path("."))
+    assert stack.manifest.name == "rg_inst_dot"
+    assert (_installed_root(tmp_path) / "rg_inst_dot" / "stack.toml").is_file()
+
+
+def test_load_path_dot_still_refuses_a_name_that_does_not_match_the_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = write_stack(
+        tmp_path / "elsewhere", "rg_folder", manifest=manifest_text("rg_other")
+    )
+    monkeypatch.chdir(folder)
+    with pytest.raises(StackError):
+        _registry(tmp_path).load_path(Path("."))
+
+
+# ------------------------------------------------ BULL_EXTRA_STACKS
+
+
+def test_extra_stack_folder_appears_in_all_and_get(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    extra = _make(tmp_path / "extra", "rg_extra")
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(extra))
+    registry = _registry(tmp_path)
+    assert [s.manifest.name for s in registry.all()] == ["rg_extra"]
+    assert registry.get("rg_extra").home == extra
+
+
+def test_several_extra_stack_folders_separated_by_pathsep_all_appear(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one = _make(tmp_path / "extra", "rg_extra_one")
+    two = _make(tmp_path / "extra", "rg_extra_two")
+    monkeypatch.setenv("BULL_EXTRA_STACKS", os.pathsep.join([str(one), str(two)]))
+    registry = _registry(tmp_path)
+    assert [s.manifest.name for s in registry.all()] == [
+        "rg_extra_one",
+        "rg_extra_two",
+    ]
+    assert registry.get("rg_extra_two").home == two
+
+
+def test_extra_stack_wins_over_an_installed_stack_of_the_same_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make(_installed_root(tmp_path), "rg_both")
+    extra = _make(tmp_path / "extra", "rg_both")
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(extra))
+    registry = _registry(tmp_path)
+    assert registry.get("rg_both").home == extra
+    assert [s.manifest.name for s in registry.all()] == ["rg_both"]
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_unset_or_empty_extra_stacks_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str | None
+) -> None:
+    root = tmp_path / "builtin"
+    _make(root, "rg_only")
+    if value is None:
+        monkeypatch.delenv("BULL_EXTRA_STACKS", raising=False)
+    else:
+        monkeypatch.setenv("BULL_EXTRA_STACKS", value)
+    assert [s.manifest.name for s in _registry(tmp_path, root).all()] == ["rg_only"]
+
+
+def test_extra_entry_that_is_not_a_stack_folder_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    extra = _make(tmp_path / "extra", "rg_extra_ok")
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    entries = [str(plain), str(tmp_path / "missing"), str(extra)]
+    monkeypatch.setenv("BULL_EXTRA_STACKS", os.pathsep.join(entries))
+    names = [s.manifest.name for s in _registry(tmp_path).all()]
+    assert names == ["rg_extra_ok"]
