@@ -295,3 +295,76 @@ def tag_checkpoint(
     """Create the git tag the pipeline names for ``label`` (``bull status ref tag <label>``)."""
     name = bull_ok(bull, "status", "ref", "tag", label, cwd=app).stdout.strip()
     git(app, env, "tag", name)
+
+
+def build_tally_module(
+    bull: BullRunner, app: Path, env: Mapping[str, str], module: str
+) -> None:
+    """Build ``module`` of the tally app as the orchestrator would: tests, code, gates, merge, tag.
+
+    Writes the files the test-writer and code-writer agents would, runs the full gates (which
+    record the pass the merge guard needs), merges ``module/<module>`` into ``main``, writes the
+    API snapshot, marks the module done and tags it.
+    """
+    branch = f"module/{module}"
+    git(app, env, "switch", "-c", branch, "main")
+    bull_ok(bull, "status", "module", module, "in_progress", cwd=app)
+    bull_ok(bull, "status", "unit", module, "1", "tests", cwd=app)
+    work = TALLY_MODULE_WORK[module]
+    write_files(app, {k: v for k, v in work.items() if k.startswith("tests/")})
+    commit_all(app, env, f"test({module}): unit 1 tests")
+    write_files(app, {k: v for k, v in work.items() if k.startswith("src/")})
+    bull_ok(bull, "gates", module, "--fast", cwd=app)
+    bull_ok(bull, "status", "unit", module, "1", "code", cwd=app)
+    bull_ok(bull, "status", "unit", module, "1", "done", cwd=app)
+    commit_all(app, env, f"feat({module}): unit 1")
+    bull_ok(bull, "gates", module, cwd=app)
+    git(app, env, "switch", "main")
+    git(app, env, "merge", "--no-ff", "-m", f"Merge {branch}", branch)
+    bull_ok(bull, "gates", "--after-merge", branch, cwd=app)
+    bull_ok(bull, "api", module, "--write", cwd=app)
+    bull_ok(bull, "status", "module", module, "done", cwd=app)
+    commit_all(app, env, f"chore: {module} done")
+    tag_checkpoint(bull, app, env, f"module/{module}")
+
+
+def new_accepted_tally_app(
+    bull: BullRunner, tmp_path: Path, env: Mapping[str, str]
+) -> Path:
+    """A tally app with both modules built and ``app-accepted`` recorded and committed on main."""
+    app = new_tally_app(bull, tmp_path, env, stage=5)
+    write_files(app, TALLY_SKELETON)
+    for module in ("Store", "Counter"):
+        bull_ok(bull, "api", module, "--write", cwd=app)
+    commit_all(app, env, "chore: skeleton")
+    bull_ok(bull, "gates", "--all", cwd=app)
+    for module in ("Store", "Counter"):
+        build_tally_module(bull, app, env, module)
+    bull_ok(bull, "gates", "--all", cwd=app)
+    bull_ok(bull, "status", "stage", "6", cwd=app)
+    bull_ok(bull, "status", "checkpoint", "app-accepted", cwd=app)
+    commit_all(app, env, "chore: app accepted")
+    tag_checkpoint(bull, app, env, "app-accepted")
+    return app
+
+
+#: A small app built without bull (fixture-stack files, a legacy test and a journey test).
+LEGACY_APP_FILES: dict[str, str] = {
+    "fixture.toml": "",
+    "src/main.fx": "# entry point\nstart value 0\n",
+    "src/counter.fx": "# counter\non increment: value = value + 1\n",
+    "tests/counter_test.test": "pass increments\ncovers src/counter.fx:2\n",
+    "tests/journey/count.test": "pass journey_smoke\n",
+}
+
+
+def new_legacy_app(tmp_path: Path, env: Mapping[str, str]) -> Path:
+    """A plain git repo (no bull) with two commits on ``main`` holding ``LEGACY_APP_FILES``."""
+    app = tmp_path / "legacy"
+    app.mkdir()
+    git(app, env, "init", "-q", "-b", "main")
+    write_files(app, LEGACY_APP_FILES)
+    commit_all(app, env, "the app before bull")
+    write_files(app, {"README.md": "A tiny counter.\n"})
+    commit_all(app, env, "add readme")
+    return app
