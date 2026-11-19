@@ -278,7 +278,7 @@
         "memo",
         "parts"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -306,7 +306,7 @@
             "modules.py",
             "next_step.py"
           ],
-          "state": "done",
+          "state": "pending",
           "attempts": 0
         },
         {
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T17:15:10-08:00",
+  "updatedAt": "2026-11-18T17:15:14-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {

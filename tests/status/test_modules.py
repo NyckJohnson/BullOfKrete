@@ -95,6 +95,37 @@ def test_init_modules_on_problems_does_not_return_modules() -> None:
         init(sample_memo(), problems=(MemoProblem(1, "bad"),))
 
 
+def test_init_modules_refuses_a_memo_with_no_modules() -> None:
+    with pytest.raises(StatusError) as caught:
+        init(memo_of())
+    assert caught.value.message == "docs/outline.md has no modules"
+    assert caught.value.fix == "write the memo first"
+
+
+def test_init_modules_with_replace_refuses_a_memo_with_no_modules() -> None:
+    base = at_modules((module_in("Old", ModuleState.PENDING),))
+    with pytest.raises(StatusError) as caught:
+        init(memo_of(), base, replace_existing=True)
+    assert caught.value.message == "docs/outline.md has no modules"
+    assert caught.value.fix == "write the memo first"
+
+
+def test_init_modules_refusing_an_empty_memo_leaves_the_given_status_unchanged() -> (
+    None
+):
+    base = at_modules((module_in("Old", ModuleState.IN_PROGRESS),))
+    before = base
+    with pytest.raises(StatusError):
+        init(memo_of(), base, replace_existing=True)
+    assert base == before
+    assert [m.name for m in base.modules] == ["Old"]
+
+
+def test_init_modules_accepts_a_memo_with_a_single_module() -> None:
+    status = init(memo_of(entry("Store")))
+    assert [m.name for m in status.modules] == ["Store"]
+
+
 def test_init_modules_follows_the_build_order_not_the_module_order() -> None:
     store = entry("Store")
     counter = entry("Counter", depends=("Store",))
