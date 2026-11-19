@@ -133,3 +133,5 @@ def test_usage_check_with_no_usage_data_is_unknown_and_agent_launches_are_allowe
 
     launch = bull("hook", "before-agent", cwd=app, stdin=_before_agent_json(app))
     assert launch.returncode == 0, launch.stdout + launch.stderr  # allowed, not blocked
+    assert launch.stdout.strip() == ""
+    assert "usage unknown" in launch.stderr.lower()  # the warning reaches the user

@@ -26,21 +26,24 @@ INTERFACE_BLOCK = """
 
 ### TallyEvents
 - File: interfaces/tally-events.json (json-schema)
-- Provider: {provider}
-- Consumers: {consumer}
+- Provider: cli / Export
+- Consumers: web / Import
+
+### TallyApi
+- File: interfaces/tally-api.json (json-schema)
+- Provider: web / Import
+- Consumers: cli / Export
 """
 
 
 def _memo(
     export_depends: str = "none",
     import_depends: str = "none",
-    provider: str | None = None,
-    consumer: str | None = None,
+    interfaces: bool = False,
 ) -> str:
-    """The two-part memo: ``cli / Export`` and ``web / Import``, optionally with an interface."""
-    interfaces = ""
-    if provider and consumer:
-        interfaces = INTERFACE_BLOCK.format(provider=provider, consumer=consumer)
+    """The two-part memo: ``cli / Export`` and ``web / Import``, optionally with the two
+    interfaces (TallyEvents: cli to web; TallyApi: web to cli)."""
+    interface_text = INTERFACE_BLOCK if interfaces else ""
     return f"""# Two parts
 
 ## Purpose
@@ -77,7 +80,7 @@ Events exported by a command line tool and imported by a web service.
   - imports the events
 - Reference tests: none
 - Contract: pending
-{interfaces}
+{interface_text}
 ## Decisions log
 """
 
@@ -125,7 +128,11 @@ def _two_part_app(
     bull_ok(bull, "status", "stage", "2", cwd=app)
     write_files(
         app,
-        {"docs/outline.md": memo, "interfaces/tally-events.json": INTERFACE_SCHEMA},
+        {
+            "docs/outline.md": memo,
+            "interfaces/tally-events.json": INTERFACE_SCHEMA,
+            "interfaces/tally-api.json": INTERFACE_SCHEMA,
+        },
     )
     commit_all(app, env, "docs: outline memo")
     bull_ok(bull, "status", "checkpoint", "outline-approved", cwd=app)
@@ -139,6 +146,15 @@ def _two_part_app(
         write_files(app, _skeleton())
     commit_all(app, env, "chore: setup and skeleton")
     return app
+
+
+def _snapshot_everything(bull: BullRunner, app: Path, env: dict[str, str]) -> None:
+    """Snapshot both modules and both interfaces, then commit."""
+    for module in ("Export", "Import"):
+        bull_ok(bull, "api", module, "--write", cwd=app)
+    for interface in ("TallyEvents", "TallyApi"):
+        bull_ok(bull, "api", "--interface", interface, "--write", cwd=app)
+    commit_all(app, env, "chore: snapshots")
 
 
 def _port_is_free(port: int) -> bool:
@@ -293,7 +309,7 @@ def test_interface_is_snapshotted_and_each_side_is_gated_with_its_own_stack(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    memo = _memo(provider="cli / Export", consumer="web / Import")
+    memo = _memo(interfaces=True)
     app = _two_part_app(bull, tmp_path, env, memo)
 
     # Not snapshotted yet: the check says so; --write stores the file's text.
@@ -320,13 +336,14 @@ def test_the_consumer_is_built_and_gated_before_the_provider_exists(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    memo = _memo(provider="cli / Export", consumer="web / Import")
+    memo = _memo(interfaces=True)
     app = _two_part_app(bull, tmp_path, env, memo, skeleton=False)
     # Only the consumer's files exist: Export (the provider) has no code yet.
     consumer_only = {k: v for k, v in _skeleton().items() if k.startswith("web/")}
     write_files(app, consumer_only)
     bull_ok(bull, "api", "Import", "--write", cwd=app)
-    bull_ok(bull, "api", "--interface", "TallyEvents", "--write", cwd=app)
+    for interface in ("TallyEvents", "TallyApi"):
+        bull_ok(bull, "api", "--interface", interface, "--write", cwd=app)
     commit_all(app, env, "chore: consumer skeleton")
     assert not (app / "cli/src/Modules/Export").exists()
 
@@ -336,21 +353,20 @@ def test_the_consumer_is_built_and_gated_before_the_provider_exists(
     assert "not recorded" not in gates.stdout
 
 
-def test_gates_all_checks_interfaces_after_the_parts(
+def test_gates_all_runs_parts_then_interfaces_then_journeys(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    memo = _memo(provider="cli / Export", consumer="web / Import")
+    memo = _memo(interfaces=True)
     app = _two_part_app(bull, tmp_path, env, memo)
-    for module in ("Export", "Import"):
-        bull_ok(bull, "api", module, "--write", cwd=app)
-    bull_ok(bull, "api", "--interface", "TallyEvents", "--write", cwd=app)
-    commit_all(app, env, "chore: snapshots")
+    _snapshot_everything(bull, app, env)
 
     everything = bull_ok(bull, "gates", "--all", cwd=app)
     out = everything.stdout
-    assert out.index("interface cli Export") < out.index("interface web Import")
-    assert out.index("tests web") < out.rindex("journeys cli")
+    assert out.index("tests cli") < out.index("tests web")
+    assert out.index("tests web") < out.index("✓ interface\n")
+    assert out.index("✓ interface\n") < out.index("journeys cli")
+    assert "✗" not in out
     assert "not recorded" not in out
 
 
@@ -358,12 +374,9 @@ def test_a_provider_field_missing_from_the_schema_fails_the_interface_gate_on_th
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    memo = _memo(provider="cli / Export", consumer="web / Import")
+    memo = _memo(interfaces=True)
     app = _two_part_app(bull, tmp_path, env, memo)
-    for module in ("Export", "Import"):
-        bull_ok(bull, "api", module, "--write", cwd=app)
-    bull_ok(bull, "api", "--interface", "TallyEvents", "--write", cwd=app)
-    commit_all(app, env, "chore: snapshots")
+    _snapshot_everything(bull, app, env)
 
     write_files(app, _skeleton(extra_export_field="field extra: string\n"))
     bull_ok(bull, "api", "Export", "--write", "--approved", "adds a field", cwd=app)
@@ -380,12 +393,9 @@ def test_editing_the_interface_file_fails_the_api_gate_until_approved(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    memo = _memo(provider="cli / Export", consumer="web / Import")
+    memo = _memo(interfaces=True)
     app = _two_part_app(bull, tmp_path, env, memo)
-    for module in ("Export", "Import"):
-        bull_ok(bull, "api", module, "--write", cwd=app)
-    bull_ok(bull, "api", "--interface", "TallyEvents", "--write", cwd=app)
-    commit_all(app, env, "chore: snapshots")
+    _snapshot_everything(bull, app, env)
 
     edited = INTERFACE_SCHEMA.replace(
         '"name": {"type": "string"}',
@@ -413,18 +423,13 @@ def test_editing_the_interface_file_fails_the_api_gate_until_approved(
     assert "matches its snapshot" in matches.stdout
 
 
-def _service_provider_app(
-    bull: BullRunner, tmp_path: Path, env: dict[str, str]
-) -> Path:
-    """An app whose interface is provided by the service part, consumed by the cli part."""
-    memo = _memo(provider="web / Import", consumer="cli / Export")
-    return _two_part_app(bull, tmp_path, env, memo)
-
-
-def test_the_service_part_is_started_ready_and_stopped_around_a_cross_part_journey(
+def test_the_web_service_is_started_and_stopped_around_the_cross_part_journey(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
-    app = _service_provider_app(bull, tmp_path, journey_env)
+    env = journey_env
+    memo = _memo(interfaces=True)
+    app = _two_part_app(bull, tmp_path, env, memo)
+    _snapshot_everything(bull, app, env)
 
     done = bull_ok(bull, "gates", "--journeys", cwd=app)
     assert "journeys cli" in done.stdout
@@ -432,11 +437,13 @@ def test_the_service_part_is_started_ready_and_stopped_around_a_cross_part_journ
     _assert_service_left_nothing_behind(app)
 
 
-def test_the_service_part_is_stopped_even_when_the_cross_part_journey_fails(
+def test_the_web_service_is_stopped_even_when_the_cross_part_journey_fails(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
     env = journey_env
-    app = _service_provider_app(bull, tmp_path, env)
+    memo = _memo(interfaces=True)
+    app = _two_part_app(bull, tmp_path, env, memo)
+    _snapshot_everything(bull, app, env)
     write_files(app, {"cli/tests/journey/export.test": "fail export_is_broken\n"})
     commit_all(app, env, "test: a failing journey")
 

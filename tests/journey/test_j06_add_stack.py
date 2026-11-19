@@ -486,16 +486,10 @@ def _build_stack_to_gate_code(
     return stack
 
 
-def _add_a_stack(
-    bull: BullRunner,
-    tmp_path: Path,
-    env: dict[str, str],
-    literal: bool,
-) -> None:
-    """The whole journey. ``literal`` follows the memo to the letter: ``stack test .``, and the
-    full self-test before ``stack install``; otherwise the stack is named by path and installed
-    before its full self-test."""
-    here = "." if literal else None
+def _add_a_stack(bull: BullRunner, tmp_path: Path, env: dict[str, str]) -> None:
+    """The whole journey, to the memo's letter: ``stack test .`` runs the full self-test before
+    ``stack install``."""
+    here = "."
     stack = tmp_path / "stacks" / "go_cli"
     stack.parent.mkdir()
 
@@ -518,8 +512,6 @@ def _add_a_stack(
 
     # Build the stack up to the gate code.
     _build_stack_to_gate_code(bull, tmp_path, env, initialize=False, here=here)
-    if not literal:
-        bull_ok(bull, "stack", "install", str(stack), cwd=tmp_path)
     assert _status_file(stack)["checkpoints"] == ["design-approved"]
     assert "stack/design-approved" in git_out(stack, env, "tag")
 
@@ -527,7 +519,7 @@ def _add_a_stack(
     assert bull("status", "stage", "5", cwd=stack).returncode != 0
 
     # Not installable before... static passes already; the full test runs every case.
-    full = bull_ok(bull, "stack", "test", here or str(stack), cwd=stack)
+    full = bull_ok(bull, "stack", "test", here, cwd=stack)
     for case in (c["id"] for c in CASES["cases"]):
         assert case in full.stdout
     assert "0 failed" in full.stdout
@@ -540,7 +532,7 @@ def _add_a_stack(
     tag_checkpoint(bull, stack, env, "rules-approved")
     # Acceptance needs a full pass at the new HEAD, so the self-test runs once more.
     assert bull("status", "checkpoint", "accepted", cwd=stack).returncode != 0
-    bull_ok(bull, "stack", "test", here or str(stack), cwd=stack)
+    bull_ok(bull, "stack", "test", here, cwd=stack)
     bull_ok(bull, "status", "checkpoint", "accepted", cwd=stack)
     commit_all(stack, env, "chore: accepted")
     tag_checkpoint(bull, stack, env, "accepted")
@@ -556,7 +548,7 @@ def _add_a_stack(
 
     # Install: selectable, and listed as experimental.
     before = bull_ok(bull, "stacks", cwd=tmp_path).stdout
-    assert literal == ("go_cli" not in before)
+    assert "go_cli" not in before  # not selectable until installed
     bull_ok(bull, "stack", "install", str(stack), cwd=tmp_path)
     listing = bull_ok(bull, "stacks", cwd=tmp_path)
     line = next(ln for ln in listing.stdout.splitlines() if "go_cli" in ln)
@@ -575,13 +567,7 @@ def _add_a_stack(
 def test_add_a_stack_through_the_stack_workflow_ends_with_it_listed_as_experimental(
     bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
 ) -> None:
-    _add_a_stack(bull, tmp_path, journey_env, literal=True)
-
-
-def test_add_a_stack_when_it_is_installed_before_its_full_self_test(
-    bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
-) -> None:
-    _add_a_stack(bull, tmp_path, journey_env, literal=False)
+    _add_a_stack(bull, tmp_path, journey_env)
 
 
 def test_a_gate_that_passes_everything_gives_the_failing_test_case_the_wrong_verdict(

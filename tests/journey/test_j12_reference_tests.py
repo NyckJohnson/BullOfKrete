@@ -97,9 +97,21 @@ def test_reference_test_scan_is_required_before_store_merges(
         refused.stdout + refused.stderr
     )
 
-    # Recording the scan makes the merge allowed, and it goes through.
+    # Recording the scan on main (where the merge guard reads it) makes the merge
+    # allowed, and it goes through.
     recorded = bull(
-        "status", "refscan", "Store", "--covered", "3", "--missed", "1", cwd=app
+        "status",
+        "refscan",
+        "Store",
+        "--covered",
+        "3",
+        "--missed",
+        "1",
+        "--contradicts",
+        "0",
+        "--not-in-spec",
+        "0",
+        cwd=app,
     )
     assert recorded.returncode == 0, recorded.stdout + recorded.stderr
     scan = {
@@ -110,12 +122,37 @@ def test_reference_test_scan_is_required_before_store_merges(
     }["Store"]["scan"]
     assert scan["covered"] == 3 and scan["missed"] == 1
     assert scan["contradicts"] == 0 and scan["not_in_spec"] == 0
+    commit_all(app, env, "chore: reference-test scan recorded")
     allowed = bull("hook", "before-shell", cwd=app, stdin=shell)
     assert allowed.returncode == 0, allowed.stdout + allowed.stderr
-    commit_all(app, env, "chore: reference-test scan recorded")
-    merged = git(app, env, "merge", "--no-ff", "-m", "Merge Store", "module/Store")
-    assert merged.returncode == 0
+    merged = git(
+        app, env, "merge", "--no-ff", "-m", "Merge Store", "module/Store", check=False
+    )
+    assert merged.returncode == 0, merged.stdout + merged.stderr
     assert (app / "src/Modules/Store/store.fx").is_file()
+
+
+def test_refscan_without_every_count_is_a_usage_error_and_records_nothing(
+    bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
+) -> None:
+    app = _store_ready_to_merge(bull, tmp_path, journey_env)
+    before = (app / ".bull" / "status.json").read_text()
+    partial_runs = (
+        ("--covered", "3", "--missed", "1"),
+        ("--covered", "3", "--missed", "1", "--contradicts", "0"),
+        ("--covered", "3", "--missed", "1", "--not-in-spec", "0"),
+    )
+    for counts in partial_runs:
+        result = bull("status", "refscan", "Store", *counts, cwd=app)
+        assert result.returncode == 2, counts
+    assert (app / ".bull" / "status.json").read_text() == before
+    scan = {
+        m["name"]: m
+        for m in json.loads(bull_ok(bull, "status", "--json", cwd=app).stdout)[
+            "modules"
+        ]
+    }["Store"]["scan"]
+    assert scan is None
 
 
 def test_agents_that_write_code_are_kept_away_from_the_reference_folder(
