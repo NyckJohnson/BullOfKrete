@@ -218,6 +218,24 @@ def test_start_during_an_adoption_is_refused_with_a_message_about_after_it_finis
         rig.cycle.start()
 
 
+def test_start_during_an_adoption_without_app_accepted_names_the_adoption_not_acceptance() -> (
+    None
+):
+    rig = Rig(status=replace(sample_status(), adoption=Track(2, ("setup",))))
+    assert "app-accepted" not in rig.store.status.app.checkpoints
+    before = rig.files.texts[LAYOUT.backlog_file]
+    with pytest.raises(BullError) as raised:
+        rig.cycle.start()
+    message = str(raised.value).lower()
+    assert "adoption" in message
+    assert "after the adoption finishes" in message
+    assert "accepted" not in message
+    assert rig.store_calls("start_feature") == []
+    assert rig.git_calls("commit_all") == []
+    assert rig.git_calls("create_branch") == []
+    assert rig.files.texts[LAYOUT.backlog_file] == before
+
+
 def test_start_with_slug_is_refused_when_that_feature_branch_exists() -> None:
     rig = Rig()
     rig.git.branches.add("feature/dark-mode/main")
