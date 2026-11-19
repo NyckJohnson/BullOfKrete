@@ -2,8 +2,8 @@
 
 The static check and the end-to-end run both go through the real stacktest module
 (`static`, `load_cases`, `LiveStackTester`), and the end-to-end run is repeated through the
-`bull stack test` command as a subprocess. The service stack has `[run]` and no journeys,
-interfaces or `detect`, so its required ids are the base ten plus `run-lifecycle`.
+`bull stack test` command as a subprocess. The service stack has `[run]` and `[interfaces]` and no journeys
+or `detect`, so its required ids are the base ten plus `run-lifecycle` and `interface-drift`.
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ _BASE_IDS = {
     "exemption",
     "setup-broken",
 }
-_REQUIRED_IDS = _BASE_IDS | {"run-lifecycle"}
-_UNDECLARED_IDS = {"journey", "journey-failing", "interface-drift", "adopt-mode"}
+_REQUIRED_IDS = _BASE_IDS | {"run-lifecycle", "interface-drift"}
+_UNDECLARED_IDS = {"journey", "journey-failing", "adopt-mode"}
 
 
 def _server_processes() -> set[str]:
@@ -89,6 +89,15 @@ def test_cases_cover_every_required_id(cases: list[Case]) -> None:
 
 def test_cases_have_a_run_lifecycle_case(cases: list[Case]) -> None:
     assert "run-lifecycle" in {c.id for c in cases}
+
+
+def test_cases_have_an_interface_drift_case_failing_the_interface_gate(
+    cases: list[Case],
+) -> None:
+    case = next(c for c in cases if c.id == "interface-drift")
+    assert case.expect["verdict"] == "fail"
+    assert case.expect["gate"] == "interface"
+    assert "not in the schema" in str(case.expect["output"])
 
 
 def test_cases_omit_ids_for_undeclared_capabilities(cases: list[Case]) -> None:

@@ -189,7 +189,6 @@
         "add": {
           ".bull/parts/api.toml": "format = 1\nstack = \"fixture_service\"\ndir = \".\"\nsource_dir = \"src\"\ntest_dir = \"tests\"\n",
           ".bull/parts/web.toml": "format = 1\nstack = \"fixture\"\ndir = \"web\"\nsource_dir = \"src\"\ntest_dir = \"tests\"\n",
-          "interfaces/count.json": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"title\": \"Count\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"value\": {\"type\": \"integer\"}\n  },\n  \"required\": [\"value\"]\n}\n",
           "web/fixture.toml": "",
           "web/src/Modules/display/Contracts/display.fx": "# The display's contract: shows the counter's value.\npub Display\nfield value: integer\n",
           "web/src/Modules/display/display.fx": "# display: prints the current count.\nshow value\n",
@@ -220,6 +219,23 @@
           "gate": "journeys",
           "output": "journey/check::service_answers_health"
         }
+      }
+    },
+    {
+      "id": "interface-drift",
+      "change": {
+        "replace": {
+          "src/Modules/counter/Contracts/counter.fx": "# The counter's contract: a count that goes up and down by one.\npub Counter\npub increment\npub decrement\nfield total: integer\n"
+        }
+      },
+      "run": [
+        "gates",
+        "counter"
+      ],
+      "expect": {
+        "verdict": "fail",
+        "gate": "interface",
+        "output": "provider has field `total` not in the schema"
       }
     }
   ]

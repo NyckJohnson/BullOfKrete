@@ -2,8 +2,9 @@
 
 ## common
 - This stack is a **service part**: the fixture language (below) plus a small HTTP service that
-  bull starts before another part's journey tests and stops after them. It has no journey tests,
-  interfaces or `detect` of its own.
+  bull starts before another part's journey tests and stops after them. It has no journey tests
+  or `detect` of its own; its `field <name>: <type>` contract lines are checked against
+  json-schema interfaces the same way as the `fixture` stack's.
 - The fixture language is line-based and has no toolchain. Sources are `*.fx` files under
   `<source_dir>/Modules/<module>/` (`source_dir` defaults to `src`); module names are lowercase.
 - In a `*.fx` file, every non-blank line not starting with `#` is a **code line**. `#` starts a

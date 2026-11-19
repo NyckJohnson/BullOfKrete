@@ -4,9 +4,10 @@
 `tool.py start|ready|stop <port>`):
 
 - `start <port>`: launches the server as a detached background process and returns 0 without
-  waiting for readiness (it does check briefly that the process did not exit at once, e.g. on a
-  taken port: exit 1); its pid goes to `<results>/serve-<port>.pid` and its output to
-  `<results>/serve-<port>.log`. Refuses (exit 1) while our server for that port owns the pid file.
+  waiting for readiness. It does check briefly that the process did not exit at once (e.g. on a
+  taken port: exit 1); a server ended by `stop` within that check is a normal stop (exit 0). Its
+  pid goes to `<results>/serve-<port>.pid` and its output to `<results>/serve-<port>.log`.
+  Refuses (exit 1) while our server for that port owns the pid file.
 - `ready <port> [--timeout <seconds>]`: polls `GET /health` until it answers 200 (exit 0) or the
   timeout (default 30 s) passes (exit 1).
 - `stop <port>`: terminates the server named by the pid file and removes the file; a missing pid
@@ -136,6 +137,17 @@ def _is_our_server(pid: int, port: int) -> bool:
     return _MODULE in words and _SERVE_STEP in words and str(port) in words
 
 
+def _ended_by_stop(code: int) -> bool:
+    """Whether a server that ended during start's check window was ended by `stop`.
+
+    `stop` ends the server with SIGTERM, then SIGKILL, so the process dies by one of those
+    signals. A server that dies on its own (e.g. a taken port) exits with a non-negative code.
+    An external SIGTERM/SIGKILL in the check window also reads as a stop; that is harmless,
+    because `ready` then fails.
+    """
+    return code in (-signal.SIGTERM, -signal.SIGKILL)
+
+
 def _start(args: list[str]) -> int:
     port = _port(args)
     pid_file = _pid_file(port)
@@ -165,6 +177,8 @@ def _start(args: list[str]) -> int:
         code = proc.wait(timeout=_START_CHECK)
     except subprocess.TimeoutExpired:
         return 0  # still running: launched
+    if _ended_by_stop(code):
+        return 0  # launched, then ended by our own `stop` within the check window
     print(
         f"start: the server for port {port} exited at once (code {code}); see {log}",
         file=sys.stderr,
