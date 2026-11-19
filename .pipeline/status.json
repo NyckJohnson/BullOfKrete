@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T15:50:48-08:00",
+  "updatedAt": "2026-11-18T16:32:53-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {
@@ -1075,55 +1075,55 @@
       },
       {
         "name": "j01-install-init",
-        "done": false
+        "done": true
       },
       {
         "name": "j02-build-end-to-end",
-        "done": false
+        "done": true
       },
       {
         "name": "j03-pause-resume",
-        "done": false
+        "done": true
       },
       {
         "name": "j04-features",
-        "done": false
+        "done": true
       },
       {
         "name": "j05-adopt",
-        "done": false
+        "done": true
       },
       {
         "name": "j06-add-stack",
-        "done": false
+        "done": true
       },
       {
         "name": "j07-two-parts",
-        "done": false
+        "done": true
       },
       {
         "name": "j08-contract-change",
-        "done": false
+        "done": true
       },
       {
         "name": "j09-unverified-merge",
-        "done": false
+        "done": true
       },
       {
         "name": "j10-settings",
-        "done": false
+        "done": true
       },
       {
         "name": "j11-format-versions",
-        "done": false
+        "done": true
       },
       {
         "name": "j12-reference-tests",
-        "done": false
+        "done": true
       },
       {
         "name": "app-review",
-        "done": false
+        "done": true
       },
       {
         "name": "fixes",

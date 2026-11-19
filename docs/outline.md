@@ -99,9 +99,11 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    - Interface: the memo's `## Interfaces` names `interfaces/tally-events.json` (json-schema),
      provider `cli / Export`, consumer `web / Import`. `bull api --interface TallyEvents --write`
      snapshots it; the `interface` gate checks each side with its own stack; `web / Import` is built
-     and gated before `cli / Export` exists. Before a journey that crosses parts, bull starts the
-     `web` part (start/ready), passes its address, and stops it afterwards even when the journey
-     fails, leaving no process.
+     and gated before `cli / Export` exists (each side is checked against the file on its own).
+   - Cross-part journey: a second interface `interfaces/tally-api.json` (json-schema), provider
+     `web / Import`, consumer `cli / Export`. Before `cli`'s journeys bull starts the `web` part
+     (start/ready, because a `cli` module consumes an interface `web` provides), passes its address
+     (`BULL_URL_WEB`), and stops it afterwards even when the journey fails, leaving no process.
    - Failure path: the provider declares a field the schema doesn't have → the `interface` gate fails
      on the provider side; editing the interface file fails the `api` gate until approved.
 8. **A contract change stops the pipeline** — during `Counter` unit 2 a contract declaration in
@@ -134,8 +136,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
 12. **Reference tests for a rewrite** — Dana rewrites an old tool with bull. Her memo gives module
     `Store` a `Reference tests:` line naming two old test files and lists one old test under `##
     Unmapped reference tests` with a reason. After `Store`'s last unit, `bull status next` names the
-    reference-test scan before coverage triage; `bull status refscan Store --covered 3 --missed 1`
-    records it. Ends when the merge of `module/Store` is allowed.
+    reference-test scan before coverage triage; `bull status refscan Store --covered 3 --missed 1
+    --contradicts 0 --not-in-spec 0` records it (all four counts are required). Ends when the merge of `module/Store` is allowed.
     - Failure path: before the scan is recorded, `bull hook before-shell` blocks the merge of
       `module/Store`, naming the scan.
     - Failure path: `bull hook before-agent` launching `bull:test-writer` or `bull:code-writer` with a
@@ -774,7 +776,7 @@ when `readers.py` defines `detect`.
   - parse `## Modules`: each `### <Name>` block's `- Key: value` lines: `Part`, `Depends on`
     (`none` → empty), `Files` (units split on `|`, files on `,`, trimmed, empty entries dropped),
     `Legacy files`, `Legacy tests`, `Callers to repoint`, `Reference tests` (comma-separated;
-    `none` → empty), `Changes (<slug>)`, `Contract changes (<slug>)`. Fenced code blocks inside a
+    `none` → empty, also when followed by `.` or a parenthesized note, e.g. `none (helpers only).`), `Changes (<slug>)`, `Contract changes (<slug>)`. Fenced code blocks inside a
     block are skipped. Lines keep their 1-based line numbers.
   - parse `## User journeys`: `<n>. **<Title>** — …` with an optional indented `- Part: <p>`.
   - parse `## Interfaces`: `### <Name>` blocks with `- File: <path> (<format>)`, `- Provider:
@@ -937,7 +939,9 @@ when `readers.py` defines `detect`.
     None in `OptionalReaders`.
   - registry.all: built-in stacks (folders with `stack.toml` under the built-in roots given to the
     constructor) plus installed ones (`<user_data_dir>/stacks/<name>/`), sorted by name; `test`
-    maturity only with `include_test`. get(unknown) → `StackError` listing known names.
+    maturity only with `include_test`. Stack folders listed in the environment variable
+    `BULL_EXTRA_STACKS` (`os.pathsep`-separated, set by `stack test` for its child runs) are added
+    too, and one wins over an installed stack of the same name. get(unknown) → `StackError` listing known names.
   - install(path): loads and validates the folder; name of a built-in → refused; copies it to
     `<user_data_dir>/stacks/<name>/` (replacing an earlier install of the same name); returns it.
     (`stack install` in the CLI also runs `stack test --static` first; see stacktest.)
@@ -1006,7 +1010,7 @@ when `readers.py` defines `detect`.
 - Purpose: the pipeline state in `.bull/status.json`: stages and checkpoints (for the app, the
   active feature or the adoption), modules and units, attempts, pause, approval waits, the
   progress gauge, branch and tag names, and the next step.
-- Depends on: foundation, gitrepo, events, settings, memo, parts
+- Depends on: foundation, gitrepo, events, settings, memo, parts, usage
 - Files: Contracts/__init__.py, mocks/__init__.py | model.py, store.py, refs.py | transitions.py, modules.py, next_step.py | summary.py, cli.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
@@ -1126,7 +1130,8 @@ when `readers.py` defines `detect`.
     `skeleton`, `ui-approved`, `app-accepted`; feature: the same plus `accepted`; adopt:
     `outline-approved`, `setup`, `baseline`, `scaffold`, `adopted`); `app-accepted`/`accepted`/
     `adopted` need stage 6; recording twice is a no-op.
-  - init_modules(memo): memo problems (with the app's parts and `max_files_per_unit`) → refused
+  - init_modules(memo): no `docs/outline.md`, or a memo with no modules → refused
+    ("docs/outline.md has no modules", fix "write the memo first"); memo problems (with the app's parts and `max_files_per_unit`) → refused
     listing every problem with its line; modules in build order with part (the only part when the
     memo has none), depends, one unit per `Files` group (state pending, attempts 1),
     `reference_tests` true when the memo line is non-empty; while adopting, a module with
@@ -1884,7 +1889,9 @@ when `readers.py` defines `detect`.
     write `.bull/` with `bull init`-equivalent files for the stack (status at stage 5 with modules
     from the fixture memo), commit, apply `change` (a change whose `replace`/`delete` path doesn't
     exist → FAIL "change does not apply"), commit unless the case says `"dirty": true`, run
-    `bull <run…> --json` as a subprocess (the bull command is a constructor argument), compare with
+    `bull <run…> --json` as a subprocess (the bull command is a constructor argument) with
+    `BULL_EXTRA_STACKS` set to the stack's own folder (absolute), so a stack that is not installed
+    yet can be self-tested, compare with
     `expect`; `then` runs in the same folder afterwards. Temp folders removed afterwards.
   - run: a `layout` that is not a folder→folder object, or `settings` that is not an object →
     `StackError`; an `expect` key other than verdict/gate/output/recorded/ran → the case FAILs
@@ -1893,7 +1900,8 @@ when `readers.py` defines `detect`.
   - render: each problem, each case with its verdict (expected/got for a failure, the reason for
     NOT_RUN), then a summary line "N passed, N failed, N not run".
   - cli: `bull stack test <name|path> [--static] [--case <id>] [--json]`; exit 1 unless ok; a path
-    loads the folder with `registry.load_path`.
+    (relative ones like `.` included) is resolved to an absolute folder and loaded with
+    `registry.load_path`.
 - Reference tests: v1-tests/test_stack_test.py (all except test_the_real_ios_stack_passes)
 - Contract: see `docs/api/stacktest.md` (generated; do not edit by hand)
 
@@ -2123,7 +2131,8 @@ when `readers.py` defines `detect`.
   - parse_hook: Claude Code's hook JSON → HookEvent (cwd, `agent_type` of the calling subagent if
     present, the launched `subagent_type`, `prompt`, Bash `command`, file paths from `file_path`,
     `path`, `notebook_path`); malformed JSON → an allow-everything event of the kind with cwd `.`.
-  - hook_output: block → exit 2 with the message on stderr; allow → exit 0; session start → the
+  - hook_output: block → exit 2 with the message on stderr; allow → exit 0, and an allow that
+    carries a message (e.g. the unknown-usage warning) prints it on stderr; session start → the
     message on stdout.
   - parse_statusline: reads `cwd` (or `workspace.current_dir`) and the rate-limit fields (5-hour and
     7-day used percentage and reset time) when present → UsageSample; absent → usage None. The
@@ -2240,7 +2249,8 @@ when `readers.py` defines `detect`.
 ### stack_fixture
 - Purpose: two small, fast, toolchain-free stacks for bull's own tests and journeys: `fixture` (a
   tool with journeys, detect and json-schema interfaces) and `fixture_service` (a service part with
-  start/ready/stop). Maturity `test` (hidden from `bull stacks` without `--all`).
+  start/ready/stop and the same json-schema interface check). `stop` ending the server is a normal
+  stop, never reported as a start failure. Maturity `test` (hidden from `bull stacks` without `--all`).
 - Depends on: stacks
 - Files: Contracts/__init__.py, tool.py | fixture/stack.toml, fixture/readers.py, fixture/rules.md, fixture/setup.md | fixture/cases.json, fixture/fixture/ | fixture_service/stack.toml, fixture_service/readers.py, fixture_service/serve.py | fixture_service/rules.md, fixture_service/setup.md, fixture_service/cases.json, fixture_service/fixture/
 - Protocol (draft; lives in `Contracts/`):
@@ -2508,3 +2518,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-18: stack_ios unit 6 real self-test (first run on Xcode 26.6) — four gate fixes in gates.py: before each xcodebuild run `.bull/build/.gitignore` (`*`) is written so build output never dirties the tree (a dirty tree blocks the pass record); preflight boots the chosen simulator (`xcrun simctl bootstatus <udid> -b`; a failed boot exits 2 naming `simulator`), since a shut-down simulator fails the test host's launch; setup also requires `xcshareddata/xcschemes/<scheme>.xcscheme` (`bull-fail: Shared scheme <scheme> exists`), since xcodebuild silently autocreates a missing scheme; XCTest assertion lines (`file:line: error: -[Suite test] …`) are not compile errors, so a failed journey is labelled `test <Suite>/<test>()`. Internal behavior, no contract change.
 - 2026-11-18: stack_ios reference scan (covered 20, missed 1, contradicts 0, not-in-spec 4, obsolete 0) — human: detect adds NOTE items for UIKit files and a missing `-uiTesting` launch option and counts the Swift files in its summary; detect gives a FIX for Default Actor Isolation = MainActor; Objective-C sources (`.m`/`.mm`) BLOCK an adoption; the inventory's v1 extras (extensions, skipping `Modules/`, "used by N", line counts, UIKit flag, test folder) are dropped (the inventory reader stays unused in v2.0). Missed: fast-gate suite discovery finds a suite whose attributes sit on the same line as the type (`@Suite(...) struct …`, `@MainActor final class …Tests`). Internal behavior, no contract change — approved by Nicholas Johnson
 - 2026-11-18: stack_ios coverage triage (missed 58, exempt 0, not-in-spec 5) — human kept and specified all five: several `.xcodeproj` found → detect uses the first and adds a NOTE naming the others; an unreadable workspace file → FIX "workspace can't be read" (restore from git); fast-gate suite discovery skips an unreadable test file with a "could not read … for its test suites" message; coverage matches a source outside the part root by its absolute path; when xccov returns exactly one entry under a different path spelling than the one asked for, that entry is used. Missed blocks get tests. Internal behavior, no contract change — approved by Nicholas Johnson
+- 2026-11-18: /verify journey findings — human decided: (A) `bull stack test` sets `BULL_EXTRA_STACKS` to the stack's own folder for its child `bull` runs and the stack registry also loads stacks listed there (winning over an installed one of the same name), so a stack is self-tested before `stack install` (stacks, stacktest; journey 6 unchanged); (B) each side of an interface stays checked against the file on its own; `fixture_service` gets the same json-schema interface check as `fixture`; journey 7 gains a second interface `TallyApi` (provider `web / Import`, consumer `cli / Export`) so a cross-part journey starts and stops the `web` service; bull's `parts_to_run` rule unchanged (stack_fixture, journey 7); (C) `bull status refscan` keeps all four counts required so an omitted count can't read as zero; journey 12 passes all four (no code change); (D) a hook "allow" that carries a message prints it on stderr, exit 0, so the unknown-usage warning reaches the user (claude_code). Bugs against the memo fixed without a spec change: feature start during an adoption gives the adoption reason (features); relative stack paths resolved (stacks/stacktest, open item 1); serve.py logs a stop as a start failure (stack_fixture). Clarified while fixing: `status init-modules` without a memo or with no modules refuses like `feature plan`; `none.` / `none (note)` in a memo list means empty (memo; open item 2's root cause); status depends on usage (it already used it). No contract change in any of these — approved by Nicholas Johnson
