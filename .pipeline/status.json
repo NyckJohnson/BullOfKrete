@@ -940,7 +940,7 @@
             "fixture_service/cases.json",
             "fixture_service/fixture/"
           ],
-          "state": "code",
+          "state": "done",
           "attempts": 0
         }
       ]
@@ -1063,7 +1063,7 @@
       ]
     }
   ],
-  "updatedAt": "2026-11-18T19:16:59-08:00",
+  "updatedAt": "2026-11-18T19:18:46-08:00",
   "features": [],
   "activeFeature": null,
   "plan": {
