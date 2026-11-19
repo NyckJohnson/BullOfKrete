@@ -37,6 +37,9 @@ _MACHINE_LOCAL_IGNORES = (
     ".bull/plugin/",
     ".bull/run/",
 )
+# Read by the stacks registry (stacks' memo entry); named here, not imported from
+# the stacks implementation, which this module may not reach into.
+_EXTRA_STACKS_VAR = "BULL_EXTRA_STACKS"
 _CHECKPOINTS = ("outline-approved", "setup", "skeleton", "ui-approved")
 _FAILING_STEP = ("fail", "aborted")
 _GIT_IDENTITY = {
@@ -195,11 +198,11 @@ class LiveStackTester(StackTester):
                         for later in _chain(current.then)
                     )
                     break
-                results.append(self._judge(root, current))
+                results.append(self._judge(stack, root, current))
                 current = current.then
             return results
 
-    def _judge(self, root: Path, case: Case) -> CaseResult:
+    def _judge(self, stack: Stack, root: Path, case: Case) -> CaseResult:
         argv = [*self._bull, *case.run]
         if case.run and case.run[0] == "gates" and "--json" not in case.run:
             argv.append("--json")
@@ -208,7 +211,7 @@ class LiveStackTester(StackTester):
             done = subprocess.run(
                 argv,
                 cwd=root,
-                env=_child_env(),
+                env=_bull_env(stack),
                 capture_output=True,
                 encoding="utf-8",
                 errors="replace",
@@ -474,6 +477,18 @@ def _status_module(name: str, fields: Mapping[str, str]) -> dict[str, object]:
 def _child_env() -> dict[str, str]:
     """This process's env without the git repo-location variables."""
     return {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_VARS}
+
+
+def _bull_env(stack: Stack) -> dict[str, str]:
+    """The child env for a `bull` run: `_child_env` with the stack's absolute folder
+    first in `BULL_EXTRA_STACKS` (any existing value kept after it), so a stack that
+    is not installed yet can be found. The caller's `os.environ` is not changed.
+    """
+    env = _child_env()
+    folder = str(stack.home.absolute())
+    existing = env.get(_EXTRA_STACKS_VAR, "")
+    env[_EXTRA_STACKS_VAR] = os.pathsep.join(p for p in (folder, existing) if p)
+    return env
 
 
 def _git(root: Path, *args: str) -> None:

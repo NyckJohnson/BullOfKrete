@@ -58,7 +58,7 @@ def _is_path(argument: str) -> bool:
 
 def _load(registry: StackRegistry, argument: str) -> Stack:
     if _is_path(argument):
-        return registry.load_path(Path(argument))
+        return registry.load_path(Path(argument).resolve())
     return registry.get(argument)
 
 
