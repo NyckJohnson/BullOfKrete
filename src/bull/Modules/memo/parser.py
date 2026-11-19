@@ -90,9 +90,14 @@ def _split(value: str, sep: str = ",") -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(sep) if part.strip())
 
 
+# `none`, any case, optionally followed by a period and/or a parenthesized note,
+# e.g. `none.`, `none (helpers only).`; `nonesuch.py` does not match.
+_NONE = re.compile(r"none\s*(?:\([^)]*\))?\s*\.?", re.IGNORECASE)
+
+
 def _list(value: str) -> tuple[str, ...]:
-    """A comma-separated list; `none` means empty."""
-    if value.strip().lower() == "none":
+    """A comma-separated list; `none` (with an optional note or period) means empty."""
+    if _NONE.fullmatch(value.strip()):
         return ()
     return _split(value)
 
