@@ -280,9 +280,11 @@ class _Parser:
                 "(lowercase letter, then lowercase letters, digits or _)"
             )
             bad = True
-        if name != self.folder.name:
+        # Resolve first: a relative folder such as `.` has no name of its own.
+        folder_name = self.folder.resolve().name
+        if name != folder_name:
             self.problem(
-                f"stack.name: {name!r} does not match the folder name {self.folder.name!r}"
+                f"stack.name: {name!r} does not match the folder name {folder_name!r}"
             )
             bad = True
         return None if bad else name

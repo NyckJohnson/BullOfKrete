@@ -528,3 +528,43 @@ def test_extra_entry_that_is_not_a_stack_folder_is_ignored(
     monkeypatch.setenv("BULL_EXTRA_STACKS", os.pathsep.join(entries))
     names = [s.manifest.name for s in _registry(tmp_path).all()]
     assert names == ["rg_extra_ok"]
+
+
+def test_builtin_stack_wins_over_an_extra_stack_of_the_same_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builtin = _make(tmp_path / "builtin", "rg_dup")
+    extra = _make(tmp_path / "extra", "rg_dup")
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(extra))
+    registry = _registry(tmp_path, tmp_path / "builtin")
+    assert registry.get("rg_dup").home == builtin
+    assert registry.get("rg_dup").builtin is True
+    assert [s.manifest.name for s in registry.all()] == ["rg_dup"]
+
+
+def test_extra_test_maturity_stack_is_hidden_unless_include_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    extra = _make(tmp_path / "extra", "rg_extra_test", maturity="test")
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(extra))
+    registry = _registry(tmp_path)
+    assert registry.all() == []
+    assert [s.manifest.name for s in registry.all(include_test=True)] == [
+        "rg_extra_test"
+    ]
+
+
+def test_extra_stacks_variable_is_read_when_all_is_called(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one = _make(tmp_path / "extra", "rg_late_one")
+    two = _make(tmp_path / "extra", "rg_late_two")
+    monkeypatch.delenv("BULL_EXTRA_STACKS", raising=False)
+    registry = _registry(tmp_path)
+    assert registry.all() == []
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(one))
+    assert [s.manifest.name for s in registry.all()] == ["rg_late_one"]
+    monkeypatch.setenv("BULL_EXTRA_STACKS", str(two))
+    assert [s.manifest.name for s in registry.all()] == ["rg_late_two"]
+    monkeypatch.delenv("BULL_EXTRA_STACKS")
+    assert registry.all() == []

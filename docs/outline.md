@@ -941,7 +941,8 @@ when `readers.py` defines `detect`.
     constructor) plus installed ones (`<user_data_dir>/stacks/<name>/`), sorted by name; `test`
     maturity only with `include_test`. Stack folders listed in the environment variable
     `BULL_EXTRA_STACKS` (`os.pathsep`-separated, set by `stack test` for its child runs) are added
-    too, and one wins over an installed stack of the same name. get(unknown) → `StackError` listing known names.
+    too (each entry is a stack folder; entries without `stack.toml` are skipped); on a name clash
+    a built-in wins over an extra one, and an extra one over an installed one. get(unknown) → `StackError` listing known names.
   - install(path): loads and validates the folder; name of a built-in → refused; copies it to
     `<user_data_dir>/stacks/<name>/` (replacing an earlier install of the same name); returns it.
     (`stack install` in the CLI also runs `stack test --static` first; see stacktest.)
