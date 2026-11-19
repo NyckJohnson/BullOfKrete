@@ -544,7 +544,7 @@
         "gitrepo",
         "stacks"
       ],
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "number": 1,
@@ -570,8 +570,8 @@
             "runner.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "state": "pending",
+          "attempts": 0
         }
       ]
     },

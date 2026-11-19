@@ -64,6 +64,8 @@ calls.append(
         "backlog": text(".bull/backlog.json"),
         "gitignore": text(".gitignore"),
         "watch": watch,
+        "extra_stacks": os.environ.get("BULL_EXTRA_STACKS"),
+        "keep_me": os.environ.get("KEEP_ME"),
     }
 )
 log.write_text(json.dumps(calls))
@@ -501,6 +503,60 @@ def test_run_failure_names_the_mismatching_value(h: Harness) -> None:
     result = report.cases[0]
     assert "99" in result.expected
     assert "3" in result.got
+
+
+# --- BULL_EXTRA_STACKS ---------------------------------------------------------
+
+
+def test_run_sets_bull_extra_stacks_to_the_stacks_absolute_folder(
+    h: Harness,
+) -> None:
+    h.monkeypatch.delenv("BULL_EXTRA_STACKS", raising=False)
+    _, calls = h.run(h.stack([case("clean")]))
+    assert calls[0]["extra_stacks"] == str(h.home)
+    assert os.path.isabs(calls[0]["extra_stacks"])
+
+
+def test_run_sets_bull_extra_stacks_for_every_case_and_the_then_run(
+    h: Harness,
+) -> None:
+    h.monkeypatch.delenv("BULL_EXTRA_STACKS", raising=False)
+    h.respond(gates_json("pass"), gates_json("pass"), gates_json("pass"))
+    stack = h.stack(
+        [
+            case("one", then={"run": ["gates", "--failed"], "expect": {}}),
+            case("two"),
+        ]
+    )
+    _, calls = h.run(stack)
+    assert len(calls) == 3
+    assert [c["extra_stacks"] for c in calls] == [str(h.home)] * 3
+
+
+def test_run_keeps_the_other_environment_entries_for_bull(h: Harness) -> None:
+    h.monkeypatch.setenv("KEEP_ME", "yes")
+    _, calls = h.run(h.stack([case("clean")]))
+    assert calls[0]["keep_me"] == "yes"
+    assert calls[0]["extra_stacks"] is not None
+
+
+def test_run_includes_the_stacks_folder_when_bull_extra_stacks_was_already_set(
+    h: Harness,
+) -> None:
+    # Assumed reading: the stack's folder is prepended to the existing value.
+    other = str(h.tmp / "other-stacks")
+    h.monkeypatch.setenv("BULL_EXTRA_STACKS", other)
+    _, calls = h.run(h.stack([case("clean")]))
+    parts = calls[0]["extra_stacks"].split(os.pathsep)
+    assert str(h.home) in parts
+    assert other in parts
+    assert parts[0] == str(h.home)
+
+
+def test_run_does_not_change_the_callers_bull_extra_stacks(h: Harness) -> None:
+    h.monkeypatch.delenv("BULL_EXTRA_STACKS", raising=False)
+    h.run(h.stack([case("clean")]))
+    assert "BULL_EXTRA_STACKS" not in os.environ
 
 
 # --- then ---------------------------------------------------------------------
