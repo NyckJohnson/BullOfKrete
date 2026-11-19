@@ -144,8 +144,22 @@ def test_stage_2_says_setup_after_outline_approved() -> None:
     assert "/bull:outline" not in text
 
 
+def test_stage_2_says_skeleton_once_setup_is_recorded() -> None:
+    text = step(app(2, cps=("outline-approved", "setup"))).text
+    assert "/bull:skeleton" in text
+    assert "/bull:setup" not in text
+
+
 def test_stage_3_says_skeleton() -> None:
-    assert "/bull:skeleton" in step(app(3, cps=("outline-approved", "setup"))).text
+    text = step(app(3, cps=("outline-approved", "setup"))).text
+    assert "/bull:skeleton" in text
+    assert "/bull:prototype" not in text
+
+
+def test_stage_3_says_prototype_once_skeleton_is_recorded() -> None:
+    text = step(app(3, cps=("outline-approved", "setup", "skeleton"))).text
+    assert "/bull:prototype" in text
+    assert "/bull:skeleton" not in text
 
 
 def test_stage_4_says_prototype() -> None:
@@ -153,6 +167,25 @@ def test_stage_4_says_prototype() -> None:
         "/bull:prototype"
         in step(app(4, cps=("outline-approved", "setup", "skeleton"))).text
     )
+
+
+def test_stage_4_says_build_once_ui_approved_is_recorded() -> None:
+    text = step(app(4, cps=APP_CPS)).text
+    assert "/bull:build" in text
+    assert "/bull:prototype" not in text
+
+
+def test_paused_wins_over_the_next_stage_command() -> None:
+    status = app(
+        2, cps=("outline-approved", "setup"), pause=Pause("u", SAMPLE_TIME, None)
+    )
+    assert step(status).text == "paused (u): run /bull:resume"
+
+
+def test_switch_prefix_applies_before_the_next_stage_command() -> None:
+    text = step(app(4, cps=APP_CPS), "module/Other").text
+    assert text.startswith("switch to main, then")
+    assert "/bull:build" in text
 
 
 def test_stage_6_says_verify_before_acceptance() -> None:
@@ -299,8 +332,10 @@ def test_prefix_on_the_wrong_branch_with_no_module_in_progress_names_the_base() 
 # --- feature and adopt modes -------------------------------------------------------------
 
 
-def feature_status(stage: int, mods: tuple[ModuleStatus, ...] = ()) -> Status:
-    feature = ActiveFeature("dark-mode", Track(stage, ()), ())
+def feature_status(
+    stage: int, mods: tuple[ModuleStatus, ...] = (), cps: tuple[str, ...] = ()
+) -> Status:
+    feature = ActiveFeature("dark-mode", Track(stage, cps), ())
     return app(6, mods, cps=(*APP_CPS, "app-accepted"), feature=feature)
 
 
@@ -310,8 +345,10 @@ def feature_step(status: Status, branch: str | None = None) -> NextStep:
     )
 
 
-def adopt_status(stage: int, mods: tuple[ModuleStatus, ...] = ()) -> Status:
-    return replace(EMPTY, modules=mods, adoption=Track(stage, ()))
+def adopt_status(
+    stage: int, mods: tuple[ModuleStatus, ...] = (), cps: tuple[str, ...] = ()
+) -> Status:
+    return replace(EMPTY, modules=mods, adoption=Track(stage, cps))
 
 
 def adopt_step(status: Status, branch: str | None = None) -> NextStep:
@@ -391,6 +428,40 @@ def test_adopt_stages_use_the_adopt_command(stage: int) -> None:
         "/bull:prototype",
         "/bull:verify",
     ):
+        assert other not in text
+
+
+@pytest.mark.parametrize(
+    ("stage", "cps"),
+    [
+        (2, ("outline-approved", "setup")),
+        (3, ("outline-approved", "setup", "skeleton")),
+        (4, ("outline-approved", "setup", "skeleton", "ui-approved")),
+    ],
+)
+def test_adopt_keeps_the_adopt_command_with_checkpoints_recorded(
+    stage: int, cps: tuple[str, ...]
+) -> None:
+    text = adopt_step(adopt_status(stage, cps=cps)).text
+    assert "/bull:adopt" in text
+    for other in ("/bull:skeleton", "/bull:prototype", "/bull:build"):
+        assert other not in text
+
+
+@pytest.mark.parametrize(
+    ("stage", "cps"),
+    [
+        (2, ("outline-approved", "setup")),
+        (3, ("outline-approved", "setup", "skeleton")),
+        (4, ("outline-approved", "setup", "skeleton", "ui-approved")),
+    ],
+)
+def test_feature_keeps_the_feature_command_with_checkpoints_recorded(
+    stage: int, cps: tuple[str, ...]
+) -> None:
+    text = feature_step(feature_status(stage, cps=cps)).text
+    assert "/bull:feature" in text
+    for other in ("/bull:skeleton", "/bull:prototype", "/bull:build"):
         assert other not in text
 
 
