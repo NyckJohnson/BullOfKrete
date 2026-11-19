@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from bull.Modules.events.Contracts import EventKind, EventLog
@@ -349,12 +350,59 @@ class MergeGuard:
                 f"no recorded full gate pass for {ref} at {sha}: "
                 f"run `{gates}` on {ref} first"
             )
-        if module is not None and self._needs_scan(module):
+        if module is not None and self._needs_scan(app, sha, module):
             return f"record the reference-test scan for {module} first"
         return None
 
-    def _needs_scan(self, module: str) -> bool:
+    def _needs_scan(self, app: AppLayout, sha: str, module: str) -> bool:
+        """Whether `module` has reference tests and no recorded scan.
+
+        Read from the `.bull/status.json` committed at `sha` (the scan is recorded on the
+        module branch and reaches the base only with the merge); when that file is missing
+        or isn't valid status JSON, the working tree's status decides.
+        """
+        text = self._git.show_file(app.root, sha, _STATUS_PATH)
+        branch = _branch_scan_state(text, module) if text is not None else None
+        if branch is not None:
+            return branch
         for entry in self._status.load().modules:
             if entry.name == module:
                 return entry.reference_tests and entry.scan is None
         return False
+
+
+_STATUS_PATH = ".bull/status.json"
+
+
+def _branch_scan_state(text: str, module: str) -> bool | None:
+    """Whether `module` needs a scan per this status.json text; None if the text is invalid.
+
+    Only the fields the guard needs are checked: `modules` is a list of objects, each with a
+    string `name`, a boolean `reference_tests` and a `scan` that is null or an object. A
+    valid file that doesn't list the module means no scan is needed.
+    """
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    modules = data.get("modules")
+    if not isinstance(modules, list):
+        return None
+    needs: bool | None = None
+    for entry in modules:
+        if not isinstance(entry, dict):
+            return None
+        name = entry.get("name")
+        reference_tests = entry.get("reference_tests")
+        scan = entry.get("scan")
+        if (
+            not isinstance(name, str)
+            or not isinstance(reference_tests, bool)
+            or not (scan is None or isinstance(scan, dict))
+        ):
+            return None
+        if name == module and needs is None:
+            needs = reference_tests and scan is None
+    return bool(needs)

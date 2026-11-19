@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -153,6 +154,49 @@ def _needs_scan(rig: Rig, scan: ScanRecord | None) -> None:
     rig.store.status = dataclasses.replace(status, modules=modules)
 
 
+STATUS_PATH = ".bull/status.json"
+SCAN_JSON = {
+    "time": "2026-11-07T00:00:00+00:00",
+    "covered": 3,
+    "missed": 1,
+    "contradicts": 0,
+    "not_in_spec": 0,
+}
+
+
+def _branch_status(
+    rig: Rig, sha: str, *, reference_tests: bool, scan: bool, text: str | None = None
+) -> None:
+    """Put a `.bull/status.json` at `sha` as the module branch committed it."""
+    if text is None:
+        text = json.dumps(
+            {
+                "format": 1,
+                "kind": "app",
+                "stage": 5,
+                "checkpoints": [],
+                "modules": [
+                    {
+                        "name": "Counter",
+                        "part": "app",
+                        "depends": [],
+                        "state": "in_progress",
+                        "reference_tests": reference_tests,
+                        "scan": SCAN_JSON if scan else None,
+                        "units": [],
+                    }
+                ],
+                "pause": None,
+                "waiting": None,
+                "approvals": [],
+                "plan": None,
+                "feature": None,
+                "adoption": None,
+            }
+        )
+    rig.git.files_at[(sha, STATUS_PATH)] = text
+
+
 def _blocks(rig: Rig) -> list[str]:
     return [e.kind.value for e in rig.events.events if e.kind is EventKind.HOOK_BLOCK]
 
@@ -202,7 +246,7 @@ def test_module_branch_with_reference_tests_and_no_scan_is_blocked(
 ) -> None:
     rig = _rig(tmp_path)
     _record(rig, SHA_A, "module/Counter")
-    _needs_scan(rig, None)
+    _branch_status(rig, SHA_A, reference_tests=True, scan=False)
     decision = rig.guard.check(rig.app, "git merge --no-ff module/Counter")
     assert not decision.allow
     assert "record the reference-test scan for Counter first" in decision.message
@@ -213,9 +257,127 @@ def test_module_branch_with_reference_tests_and_a_scan_is_allowed(
 ) -> None:
     rig = _rig(tmp_path)
     _record(rig, SHA_A, "module/Counter")
-    scan = ScanRecord(datetime(2026, 11, 7, tzinfo=UTC), 3, 1, 0, 0)
-    _needs_scan(rig, scan)
+    _branch_status(rig, SHA_A, reference_tests=True, scan=True)
     assert rig.guard.check(rig.app, "git merge --no-ff module/Counter").allow
+
+
+def test_scan_recorded_only_on_the_branch_head_allows_the_merge(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _needs_scan(rig, None)
+    _branch_status(rig, SHA_A, reference_tests=True, scan=True)
+    assert rig.guard.check(rig.app, "git merge --no-ff module/Counter").allow
+
+
+def test_branch_without_a_scan_blocks_even_when_the_working_tree_has_one(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _needs_scan(rig, ScanRecord(datetime(2026, 11, 7, tzinfo=UTC), 3, 1, 0, 0))
+    _branch_status(rig, SHA_A, reference_tests=True, scan=False)
+    decision = rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    assert not decision.allow
+    assert "record the reference-test scan for Counter first" in decision.message
+
+
+def test_branch_status_is_read_at_the_head_sha_of_the_target(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _branch_status(rig, SHA_A, reference_tests=True, scan=True)
+    rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    asked = [c for c in rig.git.calls if c[0] == "show_file"]
+    assert asked
+    assert all(c[1][1] == SHA_A and c[1][2] == STATUS_PATH for c in asked)
+
+
+def test_status_file_at_another_sha_is_not_used(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _needs_scan(rig, None)
+    _branch_status(rig, SHA_B, reference_tests=True, scan=True)
+    decision = rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    assert not decision.allow
+
+
+@pytest.mark.parametrize("scan_in_working_tree", [True, False])
+def test_branch_without_a_status_file_falls_back_to_the_working_tree(
+    tmp_path: Path, scan_in_working_tree: bool
+) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    scan = (
+        ScanRecord(datetime(2026, 11, 7, tzinfo=UTC), 3, 1, 0, 0)
+        if scan_in_working_tree
+        else None
+    )
+    _needs_scan(rig, scan)
+    decision = rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    assert decision.allow is scan_in_working_tree
+
+
+def _one_module(**overrides: object) -> str:
+    module: dict[str, object] = {
+        "name": "Counter",
+        "part": "app",
+        "depends": [],
+        "state": "in_progress",
+        "reference_tests": True,
+        "scan": None,
+        "units": [],
+    }
+    module.update(overrides)
+    return json.dumps({"format": 1, "modules": [module]})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "not json {",
+        "[1, 2]",
+        '{"unrelated": true}',
+        json.dumps({"format": 1, "modules": [1]}),
+        _one_module(name=5),
+        _one_module(reference_tests="yes"),
+        _one_module(scan=5),
+    ],
+)
+@pytest.mark.parametrize("scan_in_working_tree", [True, False])
+def test_branch_status_that_is_not_valid_status_json_falls_back_to_the_working_tree(
+    tmp_path: Path, text: str, scan_in_working_tree: bool
+) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    scan = (
+        ScanRecord(datetime(2026, 11, 7, tzinfo=UTC), 3, 1, 0, 0)
+        if scan_in_working_tree
+        else None
+    )
+    _needs_scan(rig, scan)
+    _branch_status(rig, SHA_A, reference_tests=True, scan=False, text=text)
+    decision = rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    assert decision.allow is scan_in_working_tree
+
+
+def test_branch_without_reference_tests_needs_no_scan_even_if_working_tree_does(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _needs_scan(rig, None)
+    _branch_status(rig, SHA_A, reference_tests=False, scan=False)
+    assert rig.guard.check(rig.app, "git merge --no-ff module/Counter").allow
+
+
+def test_branch_status_blocking_leaves_a_hook_block_event(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _branch_status(rig, SHA_A, reference_tests=True, scan=False)
+    rig.guard.check(rig.app, "git merge --no-ff module/Counter")
+    assert len(_blocks(rig)) == 1
 
 
 def test_module_branch_without_reference_tests_needs_no_scan(tmp_path: Path) -> None:
