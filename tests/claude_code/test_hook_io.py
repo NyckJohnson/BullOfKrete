@@ -156,13 +156,30 @@ def test_hook_output_block_exits_2_for_every_kind(kind: HookKind) -> None:
     assert out.stderr == "stop"
 
 
-@pytest.mark.parametrize(
-    "kind",
-    [k for k in HookKind if k is not HookKind.SESSION_START],
-)
-def test_hook_output_allow_exits_0_and_prints_nothing(kind: HookKind) -> None:
+_NON_SESSION_KINDS = [k for k in HookKind if k is not HookKind.SESSION_START]
+
+
+@pytest.mark.parametrize("kind", _NON_SESSION_KINDS)
+def test_hook_output_allow_with_empty_message_prints_nothing(kind: HookKind) -> None:
     out = _provider().hook_output(kind, HookDecision(allow=True, message=""))
     assert out == HookOutput(stdout="", stderr="", exit_code=0)
+
+
+@pytest.mark.parametrize("kind", _NON_SESSION_KINDS)
+def test_hook_output_allow_with_message_prints_it_on_stderr_and_exits_0(
+    kind: HookKind,
+) -> None:
+    out = _provider().hook_output(
+        kind, HookDecision(allow=True, message="unknown usage: proceeding")
+    )
+    assert out == HookOutput(stdout="", stderr="unknown usage: proceeding", exit_code=0)
+
+
+@pytest.mark.parametrize("kind", [HookKind.BEFORE_AGENT, HookKind.BEFORE_SHELL])
+def test_hook_output_allow_message_leaves_stdout_empty(kind: HookKind) -> None:
+    out = _provider().hook_output(kind, HookDecision(allow=True, message="warn"))
+    assert out.stdout == ""
+    assert out.exit_code == 0
 
 
 def test_hook_output_session_start_prints_message_on_stdout() -> None:
