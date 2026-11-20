@@ -31,6 +31,20 @@ def test_sample_holds_its_fields() -> None:
     )
 
 
+def test_sample_context_defaults_to_none() -> None:
+    assert UsageSample(T, 1.0, 2.0, None, None).context is None
+
+
+def test_sample_holds_a_context() -> None:
+    assert UsageSample(T, 1.0, 2.0, None, None, context=38.0).context == 38.0
+    assert UsageSample(T, None, None, None, None, 12.5).context == 12.5
+
+
+def test_sample_with_a_different_context_is_not_equal() -> None:
+    a = UsageSample(T, 1.0, 2.0, None, None, context=1.0)
+    assert a != UsageSample(T, 1.0, 2.0, None, None)
+
+
 def test_sample_is_frozen() -> None:
     s = UsageSample(T, 1.0, 2.0, None, None)
     with pytest.raises(FrozenInstanceError):
