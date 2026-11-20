@@ -14,4 +14,8 @@ the GUI itself is built (see "Stack for the GUI").
 
 ## Discussion notes
 
+- 2026-11-20: the GUI should give each session a "Clear and resume" button that sends `/clear` and
+  then `/bull:resume` to the tmux-backed session (the follow-on feature
+  `clear-and-resume-in-one-command` builds it). Keep the session-input path general enough to allow it.
+
 ## Agreed scope

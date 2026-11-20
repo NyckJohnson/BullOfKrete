@@ -11,14 +11,6 @@
     },
     {
       "added": "2026-11-20T05:17:17Z",
-      "brief": "docs/features/clear-and-resume-in-one-command.md",
-      "description": "A single command that does `/clear` and then `/bull:resume`, so starting a fresh session at a\nhandoff point is one step. The lightweight forerunner of \"Automatic orchestrator restarts\".\nOpen: whether a plugin command can clear the conversation itself, or this needs bull to restart the\nsession from outside.",
-      "slug": "clear-and-resume-in-one-command",
-      "state": "queued",
-      "title": "Clear and resume in one command"
-    },
-    {
-      "added": "2026-11-20T05:17:17Z",
       "brief": "docs/features/accept-tests-for-defensive-error.md",
       "description": "When code-writer adds defensive error handling the memo never mentions (bad input, I/O errors,\nunreadable files), coverage triage no longer stops to ask. The behavior is added to the spec, tested,\nand each case is listed in the decisions log for the human to review afterwards. Anything that\nchanges visible behavior still asks. Changes the coverage-triage rule that `not-in-spec` always goes\nto the human (decided 2026-11-19: auto-accept, logged).",
       "slug": "accept-tests-for-defensive-error",
@@ -40,6 +32,14 @@
       "slug": "gui",
       "state": "queued",
       "title": "GUI"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/clear-and-resume-in-one-command.md",
+      "description": "A single command that does `/clear` and then `/bull:resume`, so starting a fresh session at a\nhandoff point is one step. The lightweight forerunner of \"Automatic orchestrator restarts\".\nOpen: whether a plugin command can clear the conversation itself, or this needs bull to restart the\nsession from outside.",
+      "slug": "clear-and-resume-in-one-command",
+      "state": "queued",
+      "title": "Clear and resume in one command"
     },
     {
       "added": "2026-11-20T05:17:17Z",
