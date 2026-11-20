@@ -14,9 +14,6 @@
       "Bash(git merge *)",
       "Bash(git tag *)",
       "Bash(git stash *)",
-      "Bash(xcodebuild *)",
-      "Bash(xcrun *)",
-      "Bash(swiftlint *)",
       "Bash(bull:*)",
       "Bash(git:*)"
     ],
