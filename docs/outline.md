@@ -51,7 +51,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    - Failure path: a unit's 4th attempt (`bull status attempt Counter 1` after three) is refused and
      the unit is `blocked` until `bull status unblock Counter 1`.
 3. **Pause on usage and resume** — mid-build the status line (`bull statusline`, fed Claude Code's
-   status JSON) records 5-hour usage at 92%. `bull status usage-check` prints `PAUSE` with the reset
+   status JSON) records 5-hour usage at 92% and shows the session's context use (`ctx 38%`; an input
+   without a context figure shows `ctx –`). `bull status usage-check` prints `PAUSE` with the reset
    time; `bull hook before-agent` blocks the next subagent launch with the same reason. Dana commits
    and runs `bull status pause "usage"`. In a fresh session, `bull hook session-start` prints the
    stage, the paused unit and "run `/bull:resume`"; usage is back at 10%, `usage-check` prints `OK`,
@@ -320,7 +321,8 @@ Layer order (later wins): bull default → stack → user (`$XDG_CONFIG_HOME/bul
 
 ### usage.json
 `{format: 1, time, five_hour: float|null, weekly: float|null, five_hour_resets: time|null,
-weekly_resets: time|null}` (percentages 0–100).
+weekly_resets: time|null, context: float|null}` (percentages 0–100; `context` is the session's
+context-window use and may be absent, which reads as null).
 
 ### events.jsonl
 One JSON object per line: `{time, kind, ...data}`; kinds `status`, `gate_step`, `agent_start`,
@@ -811,6 +813,9 @@ when `readers.py` defines `detect`.
 - Purpose: record plan usage samples and decide OK / PAUSE / UNKNOWN.
 - Depends on: foundation, settings
 - Files: Contracts/__init__.py, mocks/__init__.py, usage.py
+- Changes (context-use-in-the-status-line): Contracts/__init__.py, usage.py
+- Contract changes (context-use-in-the-status-line): `UsageSample` gains a last field
+  `context: float | None = None` (the session's context-window use, 0–100).
 - Protocol (draft; lives in `Contracts/`):
   ```python
   class UsageVerdict(Enum): OK = "OK"; PAUSE = "PAUSE"; UNKNOWN = "UNKNOWN"
@@ -819,6 +824,7 @@ when `readers.py` defines `detect`.
   class UsageSample:
       time: datetime; five_hour: float | None; weekly: float | None
       five_hour_resets: datetime | None; weekly_resets: datetime | None
+      context: float | None = None
 
   @dataclass(frozen=True)
   class UsageCheck:
@@ -830,10 +836,11 @@ when `readers.py` defines `detect`.
       def check(self) -> UsageCheck: ...
   ```
 - Behavior spec:
-  - record: writes `usage.json` (format 1) atomically.
-  - latest: missing or unreadable file → None.
-  - check: no sample, or both percentages None → UNKNOWN "no usage data yet". A window whose reset
-    time has passed counts as 0%. 5-hour ≥ `usage.pause_5h` → PAUSE "5-hour usage 92% ≥ 85%",
+  - record: writes `usage.json` (format 1) atomically, `context` included.
+  - latest: missing or unreadable file → None. A file without a `context` key (written before the
+    field existed), or with an unreadable one, → `context` None.
+  - check: no sample, or both percentages None → UNKNOWN "no usage data yet" (`context` is
+    ignored). A window whose reset time has passed counts as 0%. 5-hour ≥ `usage.pause_5h` → PAUSE "5-hour usage 92% ≥ 85%",
     `resets_at` = its reset; else weekly ≥ `usage.pause_weekly` → PAUSE likewise; else OK with both
     percentages in `reason`.
 - Reference tests: none.
@@ -2099,6 +2106,7 @@ when `readers.py` defines `detect`.
 - Purpose: the provider seam's one implementation: everything specific to Claude Code.
 - Depends on: foundation, settings, usage, stacks, hooks, plugin_text (stacks: contract only, for `CheckItem`)
 - Files: Contracts/__init__.py, mocks/__init__.py | plugin.py, hooks_json.py, launch.py | hook_io.py, app_files.py
+- Changes (context-use-in-the-status-line): hook_io.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   @dataclass(frozen=True)
@@ -2144,8 +2152,10 @@ when `readers.py` defines `detect`.
   - parse_statusline: reads `cwd` (or `workspace.current_dir`) and the rate-limit fields (5-hour and
     7-day used percentage and reset time) when present → UsageSample; absent → usage None. The
     fields are `rate_limits.five_hour` and `rate_limits.seven_day`, each with `used_percentage` and
-    `resets_at` (epoch seconds, or an ISO 8601 time); a sample exists when either window has a
-    `used_percentage`; an unreadable `resets_at` → that reset None; `time` is the clock's now.
+    `resets_at` (epoch seconds, or an ISO 8601 time); it also reads the session's context use from
+    `context_window.used_percentage` into the sample's `context` (null, absent or not a number →
+    None; nothing is worked out from token counts); a sample exists when either window or the
+    context has a percentage; an unreadable `resets_at` → that reset None; `time` is the clock's now.
     Malformed JSON → cwd `.`, usage None. (Building and printing the line is cli's job.)
   - app_files: `.claude/settings.json` (statusLine command `bull statusline`, permissions allowing
     `Bash(bull:*)` and `Bash(git:*)`, env `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`) merged into an
@@ -2226,6 +2236,7 @@ when `readers.py` defines `detect`.
 - Purpose: the composition root, the argument parser and `main`.
 - Depends on: foundation, gitrepo, events, settings, formats, memo, usage, stacks, parts, status, features, coverage, api, interfaces, adoption, gates, stacktest, stackflow, hooks, plugin_text, claude_code, appinit
 - Files: Contracts/__init__.py | wiring.py, main.py, help.py, statusline.py
+- Changes (context-use-in-the-status-line): statusline.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   # Contracts/__init__.py declares nothing: no module depends on cli.
@@ -2243,9 +2254,13 @@ when `readers.py` defines `detect`.
   - statusline (the `bull statusline` command): reads stdin through `Provider.parse_statusline`; in
     the app found from its `cwd` (`Layouts.find`; none outside an app) records the sample with
     `Usage.record` when there is one, and prints one line: `bull · stage N[ · feature <slug>] ·
-    units d/t[ · <plan label> i/n] · 5h x% · wk y%` from the status module's progress (missing
-    parts omitted; outside an app just `bull`). statusline.py holds it; wiring builds its
-    collaborators.
+    units d/t[ · <plan label> i/n] · 5h x% · wk y% · ctx z%` from the status module's progress
+    (missing parts omitted; outside an app just `bull`). 5h and wk come from the input's sample,
+    else from `Usage.latest()`. An input sample with no 5-hour or weekly figure (context only) is
+    recorded with the saved sample's 5-hour, weekly and reset values, so it never erases them. ctx
+    comes only from the input (never from the saved sample), rounded like 5h and wk; with no
+    context figure in the input the part reads `ctx –` (inside an app it is never omitted).
+    statusline.py holds it; wiring builds its collaborators.
   - `--json` output goes to stdout only; nothing else is printed to stdout with it.
   - Neutrality test: no file under `src/bull/` outside `Modules/stack_*/` contains the banned words
     (case-insensitive, whole words): Xcode, Swift, SwiftUI, UIKit, iOS, iPhone, simulator, XCUITest,
@@ -2531,3 +2546,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-19: /verify device test finished (1 item, fixed); `reference/` deleted as the brief requires at the end of Stage 6; bull accepted — approved by Nicholas Johnson
 - 2026-11-19: moved from ios-pipeline (v1) to bull: state in `.bull/` (status, backlog, `config.toml`, which replaces `.pipeline/config.sh`), commands are `bull …` and the `/bull:*` skills. `reference/` is gone, so the memo's `Reference tests:` lines are historical; a feature that reopens one of those modules has no reference tests to scan. Leftover v1 notes removed from `CLAUDE.md`; `.bull/events.jsonl` untracked — approved by Nicholas Johnson
 - 2026-11-19: first `bull gates --all` after the move to bull — (1) all 26 contract snapshots in `docs/api/` rewritten in bull's layout (grouped by file, source order, defaults shown); compared declaration by declaration with the v1 snapshots, none added, removed or changed (`stacktest` `Case.then` loses its string quotes, same type); (2) `pytest-cov` added to the dev dependencies, since the python_cli stack runs `pytest --cov`; (3) ruff 0.17.4's import-sort and quoted-annotation fixes applied by `ruff check --fix` to foundation, interfaces and stacktest, no behavior change — approved by Nicholas Johnson
+- 2026-11-19: feature context-use-in-the-status-line — the status line shows the session's context-window use (`ctx N%`, from Claude Code's `context_window.used_percentage`; `ctx –` when the input has none; never taken from the saved sample) and records it in usage.json as an optional `context` field (format stays 1). usage contract: `UsageSample.context: float | None = None`; claude_code hook_io.py and cli statusline.py change behavior only. A context-only input never erases the saved 5h/wk figures.
