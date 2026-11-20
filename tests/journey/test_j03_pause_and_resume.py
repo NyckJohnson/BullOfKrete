@@ -9,11 +9,24 @@ from pathlib import Path
 from tests.journey.conftest import BullRunner, bull_ok, commit_all, git, new_tally_app
 
 
-def _statusline_json(app: Path, five_hour: float, weekly: float = 20.0) -> str:
-    """The status JSON Claude Code would send to the status line, with rate limits."""
+def _statusline_json(
+    app: Path,
+    five_hour: float,
+    weekly: float = 20.0,
+    context: float | None | str = "absent",
+) -> str:
+    """The status JSON Claude Code would send to the status line, with rate limits.
+
+    `context` is the context window's used percentage; None sends null, "absent" omits
+    the `context_window` key.
+    """
     now = int(time.time())
+    extra: dict[str, object] = {}
+    if context != "absent":
+        extra["context_window"] = {"used_percentage": context}
     return json.dumps(
         {
+            **extra,
             "cwd": str(app),
             "workspace": {"current_dir": str(app)},
             "model": {"display_name": "Sonnet"},
@@ -69,11 +82,22 @@ def test_pause_on_usage_and_resume_ends_at_the_same_next_unit(
     assert "unit 1" in next_before
 
     # The status line records 5-hour usage at 92%.
-    line = bull("statusline", cwd=app, stdin=_statusline_json(app, 92.0))
+    line = bull("statusline", cwd=app, stdin=_statusline_json(app, 92.0, context=38.0))
     assert line.returncode == 0, line.stdout + line.stderr
+    assert line.stdout.strip().endswith("ctx 38%"), line.stdout
     usage = json.loads((app / ".bull" / "usage.json").read_text())
     assert usage["five_hour"] == 92.0
     assert usage["weekly"] == 20.0
+
+    # An input with no context figure shows `ctx –`, never the saved 38%.
+    for ctx in (None, "absent"):
+        bare = bull(
+            "statusline", cwd=app, stdin=_statusline_json(app, 92.0, context=ctx)
+        )
+        assert bare.returncode == 0, bare.stdout + bare.stderr
+        assert bare.stdout.strip().endswith("ctx –"), bare.stdout
+        assert "38%" not in bare.stdout
+    assert json.loads((app / ".bull" / "usage.json").read_text())["five_hour"] == 92.0
 
     check = bull_ok(bull, "status", "usage-check", cwd=app)
     assert check.stdout.startswith("PAUSE")

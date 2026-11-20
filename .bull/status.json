@@ -8,12 +8,7 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": {
-    "applied_contracts": [],
-    "checkpoints": [],
-    "slug": "context-use-in-the-status-line",
-    "stage": 1
-  },
+  "feature": null,
   "format": 1,
   "kind": "app",
   "modules": [
@@ -101,7 +96,7 @@
       ],
       "name": "settings",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -169,7 +164,7 @@
       ],
       "name": "memo",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -219,7 +214,7 @@
       "state": "done",
       "units": [
         {
-          "attempts": 2,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
@@ -238,7 +233,7 @@
       ],
       "name": "stacks",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -284,7 +279,7 @@
       ],
       "name": "parts",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -317,11 +312,12 @@
         "events",
         "settings",
         "memo",
-        "parts"
+        "parts",
+        "usage"
       ],
       "name": "status",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -378,7 +374,7 @@
       ],
       "name": "features",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -422,7 +418,7 @@
       ],
       "name": "coverage",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -450,7 +446,7 @@
       ],
       "name": "api",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -518,7 +514,7 @@
       ],
       "name": "adoption",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -562,7 +558,7 @@
       ],
       "name": "gates",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -618,7 +614,7 @@
       ],
       "name": "stacktest",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -663,7 +659,7 @@
       ],
       "name": "stackflow",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -716,7 +712,7 @@
       ],
       "name": "hooks",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -759,7 +755,7 @@
       ],
       "name": "plugin_text",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -891,7 +887,7 @@
           "state": "done"
         },
         {
-          "attempts": 1,
+          "attempts": 2,
           "files": [
             "hook_io.py",
             "app_files.py"
@@ -916,7 +912,7 @@
       ],
       "name": "appinit",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [
@@ -984,7 +980,7 @@
           "state": "done"
         },
         {
-          "attempts": 2,
+          "attempts": 1,
           "files": [
             "wiring.py",
             "main.py",
@@ -1125,7 +1121,7 @@
       ],
       "name": "stack_ios",
       "part": "app",
-      "reference_tests": false,
+      "reference_tests": true,
       "scan": null,
       "state": "done",
       "units": [

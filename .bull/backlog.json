@@ -6,7 +6,7 @@
       "brief": "docs/features/context-use-in-the-status-line.md",
       "description": "The bull status line shows 5-hour and weekly usage but not the session's context-window use, which v1's status line showed. Add it (e.g. ctx 38%), read from the status-line input Claude Code passes (claude_code parse_statusline, cli statusline.py). Also record it in usage.json so the GUI header and show-subagents-context-use can read it later. Open: which status-line input fields carry context use in the installed Claude Code, and what to show when they are missing.",
       "slug": "context-use-in-the-status-line",
-      "state": "active",
+      "state": "accepted",
       "title": "Context use in the status line"
     },
     {
@@ -184,6 +184,14 @@
       "slug": "quieter-ios-test-runs",
       "state": "queued",
       "title": "Quieter iOS test runs"
+    },
+    {
+      "added": "2026-11-20T10:45:32Z",
+      "brief": "docs/features/journey-gate-test-count.md",
+      "description": "bull gates --journeys prints '0 tests run' although it runs and passes every journey test (seen on python_cli, 42 tests); pass/fail is right, only the count shown is wrong",
+      "slug": "journey-gate-test-count",
+      "state": "queued",
+      "title": "Journey gate test count"
     }
   ]
 }
