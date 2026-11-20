@@ -4,3 +4,7 @@
   reference/ in a test-writer or code-writer brief.
 - Reference tests: after each module's last unit and before coverage triage, run
   legacy-test-scanner on the module's `Reference tests:` line, as described in the brief.
+
+<!-- bull:begin -->
+@.bull/plugin/orchestrator.md
+<!-- bull:end -->

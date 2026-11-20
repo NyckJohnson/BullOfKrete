@@ -16,3 +16,9 @@ dist/
 xcuserdata/
 *.xcuserstate
 DerivedData/
+.bull/usage.json
+.bull/events.jsonl
+.bull/passes/
+.bull/results/
+.bull/plugin/
+.bull/run/

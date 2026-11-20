@@ -16,7 +16,9 @@
       "Bash(git stash *)",
       "Bash(xcodebuild *)",
       "Bash(xcrun *)",
-      "Bash(swiftlint *)"
+      "Bash(swiftlint *)",
+      "Bash(bull:*)",
+      "Bash(git:*)"
     ],
     "deny": [
       "Bash(git push --force *)",
@@ -25,5 +27,9 @@
       "Bash(git branch -D *)",
       "Bash(git clean *)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bull statusline"
   }
 }
