@@ -875,7 +875,7 @@
       "part": "app",
       "reference_tests": false,
       "scan": null,
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
@@ -899,14 +899,14 @@
           "state": "done"
         },
         {
-          "attempts": 1,
+          "attempts": 2,
           "files": [
             "hook_io.py",
             "app_files.py"
           ],
           "kind": "code",
           "number": 3,
-          "state": "done"
+          "state": "tests"
         }
       ]
     },

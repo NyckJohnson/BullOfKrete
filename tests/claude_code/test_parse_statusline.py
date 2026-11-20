@@ -289,3 +289,57 @@ def test_token_counts_are_not_used_to_work_out_context() -> None:
     usage = _provider().parse_statusline(with_limits).usage
     assert usage is not None
     assert usage.context is None
+
+
+# --- non-finite used_percentage is unreadable (feature: context-use-in-the-status-line) ---
+
+NON_FINITE = ["NaN", "Infinity", "-Infinity", "1" + "0" * 400]
+FIVE_RESET = 1_800_000_000
+
+
+@pytest.mark.parametrize("token", NON_FINITE)
+def test_non_finite_context_is_none_when_five_hour_is_readable(token: str) -> None:
+    raw = (
+        '{"cwd": "/w", "context_window": {"used_percentage": ' + token + "},"
+        ' "rate_limits": {"five_hour": {"used_percentage": 30}}}'
+    )
+    usage = _provider().parse_statusline(raw).usage
+    assert usage is not None
+    assert usage.context is None
+    assert usage.five_hour == 30
+
+
+@pytest.mark.parametrize("token", NON_FINITE)
+def test_non_finite_context_alone_gives_no_usage(token: str) -> None:
+    raw = '{"cwd": "/w", "context_window": {"used_percentage": ' + token + "}}"
+    assert _provider().parse_statusline(raw).usage is None
+
+
+@pytest.mark.parametrize("token", NON_FINITE)
+def test_non_finite_five_hour_percentage_is_none_but_reset_is_read(token: str) -> None:
+    raw = (
+        '{"cwd": "/w", "rate_limits": {"five_hour": {"used_percentage": '
+        + token
+        + f', "resets_at": {FIVE_RESET}}}'
+        ', "seven_day": {"used_percentage": 20}}}'
+    )
+    usage = _provider().parse_statusline(raw).usage
+    assert usage is not None
+    assert usage.five_hour is None
+    assert usage.five_hour_resets == datetime.fromtimestamp(FIVE_RESET, tz=UTC)
+    assert usage.weekly == 20
+
+
+@pytest.mark.parametrize("token", NON_FINITE)
+def test_non_finite_seven_day_percentage_is_none_but_reset_is_read(token: str) -> None:
+    raw = (
+        '{"cwd": "/w", "rate_limits": {"five_hour": {"used_percentage": 10},'
+        ' "seven_day": {"used_percentage": '
+        + token
+        + f', "resets_at": {FIVE_RESET}}}}}}}'
+    )
+    usage = _provider().parse_statusline(raw).usage
+    assert usage is not None
+    assert usage.weekly is None
+    assert usage.weekly_resets == datetime.fromtimestamp(FIVE_RESET, tz=UTC)
+    assert usage.five_hour == 10
