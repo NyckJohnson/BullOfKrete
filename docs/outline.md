@@ -2156,7 +2156,9 @@ when `readers.py` defines `detect`.
     `resets_at` (epoch seconds, or an ISO 8601 time); it also reads the session's context use from
     `context_window.used_percentage` into the sample's `context` (null, absent or not a number →
     None; nothing is worked out from token counts); a sample exists when either window or the
-    context has a percentage; an unreadable `resets_at` → that reset None; `time` is the clock's now.
+    context has a percentage; an unreadable `resets_at` → that reset None; a `used_percentage`
+    that is not a finite number (a string, a boolean, `NaN`, `Infinity`) is unreadable → None, for
+    5-hour, 7-day and context alike; `time` is the clock's now.
     Malformed JSON → cwd `.`, usage None. (Building and printing the line is cli's job.)
   - app_files: `.claude/settings.json` (statusLine command `bull statusline`, permissions allowing
     `Bash(bull:*)` and `Bash(git:*)`, env `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`) merged into an
@@ -2549,3 +2551,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-19: first `bull gates --all` after the move to bull — (1) all 26 contract snapshots in `docs/api/` rewritten in bull's layout (grouped by file, source order, defaults shown); compared declaration by declaration with the v1 snapshots, none added, removed or changed (`stacktest` `Case.then` loses its string quotes, same type); (2) `pytest-cov` added to the dev dependencies, since the python_cli stack runs `pytest --cov`; (3) ruff 0.17.4's import-sort and quoted-annotation fixes applied by `ruff check --fix` to foundation, interfaces and stacktest, no behavior change — approved by Nicholas Johnson
 - 2026-11-19: feature context-use-in-the-status-line — the status line shows the session's context-window use (`ctx N%`, from Claude Code's `context_window.used_percentage`; `ctx –` when the input has none; never taken from the saved sample) and records it in usage.json as an optional `context` field (format stays 1). usage contract: `UsageSample.context: float | None = None`; claude_code hook_io.py and cli statusline.py change behavior only. A context-only input never erases the saved 5h/wk figures — approved by Nicholas Johnson
 - 2026-11-19: memo consistency, found by `bull feature plan` — the build order's status line now lists `usage` (status/cli.py already uses it), and claude_code's note on stacks (contract only, for `CheckItem`) moves off its `Depends on:` line. Memo text only; no code or contract change.
+- 2026-11-20: feature context-use-in-the-status-line, verify review — a non-finite `used_percentage` (JSON `NaN`/`Infinity`) counts as unreadable (None) for 5-hour, 7-day and context, so the line shows `ctx –` instead of falling back to just `bull`. claude_code hook_io.py behavior only; no contract change — approved by Nicholas Johnson

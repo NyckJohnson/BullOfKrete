@@ -875,7 +875,7 @@
       "part": "app",
       "reference_tests": false,
       "scan": null,
-      "state": "done",
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
