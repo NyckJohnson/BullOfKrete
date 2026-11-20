@@ -293,7 +293,7 @@ def test_token_counts_are_not_used_to_work_out_context() -> None:
 
 # --- non-finite used_percentage is unreadable (feature: context-use-in-the-status-line) ---
 
-NON_FINITE = ["NaN", "Infinity", "-Infinity"]
+NON_FINITE = ["NaN", "Infinity", "-Infinity", "1" + "0" * 400]
 FIVE_RESET = 1_800_000_000
 
 
