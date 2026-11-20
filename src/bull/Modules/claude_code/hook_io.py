@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -67,7 +68,7 @@ def parse_statusline(raw: str, now: datetime) -> StatusLineInput:
     """Claude Code's status-line JSON as the cwd and, when present, a usage sample at `now`.
 
     A sample exists when `rate_limits.five_hour`, `rate_limits.seven_day` or
-    `context_window` has a numeric `used_percentage`; the context figure goes into the
+    `context_window` has a finite numeric `used_percentage`; the context figure goes into the
     sample's `context`. Malformed input gives cwd `.` and no usage.
     """
     data = _object(raw)
@@ -106,13 +107,18 @@ def _window(value: object) -> tuple[float | None, datetime | None]:
     """A rate-limit window's used percentage and reset time, each None when unreadable."""
     if not isinstance(value, dict):
         return None, None
-    used = value.get("used_percentage")
-    percent = (
-        float(used)
-        if isinstance(used, int | float) and not isinstance(used, bool)
-        else None
-    )
-    return percent, _time(value.get("resets_at"))
+    return _percent(value.get("used_percentage")), _time(value.get("resets_at"))
+
+
+def _percent(value: object) -> float | None:
+    """A percentage as a float, or None unless it is a finite number (booleans excluded)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        percent = float(value)
+    except OverflowError:
+        return None
+    return percent if math.isfinite(percent) else None
 
 
 def _time(value: object) -> datetime | None:
