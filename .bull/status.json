@@ -1,277 +1,312 @@
 {
-  "stage": 6,
-  "paused": false,
-  "pauseReason": null,
-  "checkpoints": {
-    "outline-approved": "2026-11-07T23:20:19-08:00",
-    "setup": "2026-11-07T23:31:13-08:00",
-    "skeleton": "2026-11-07T23:48:57-08:00",
-    "ui-approved": "2026-11-07T23:54:01-08:00",
-    "app-accepted": "2026-11-19T18:12:32-08:00"
-  },
+  "adoption": null,
+  "approvals": [],
+  "checkpoints": [
+    "outline-approved",
+    "setup",
+    "skeleton",
+    "ui-approved",
+    "app-accepted"
+  ],
+  "feature": null,
+  "format": 1,
+  "kind": "app",
   "modules": [
     {
+      "depends": [],
       "name": "foundation",
-      "path": "src/bull/Modules/foundation",
-      "dependsOn": [],
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 3,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 2
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "layout.py",
             "files.py",
             "runner.py",
             "clock.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "gitrepo",
-      "path": "src/bull/Modules/gitrepo",
-      "dependsOn": [
+      "depends": [
         "foundation"
       ],
+      "name": "gitrepo",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "git.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "events",
-      "path": "src/bull/Modules/events",
-      "dependsOn": [
+      "depends": [
         "foundation"
       ],
+      "name": "events",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "event_log.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "settings",
-      "path": "src/bull/Modules/settings",
-      "dependsOn": [
+      "depends": [
         "foundation"
       ],
+      "name": "settings",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "schema.py",
             "toml_edit.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "loader.py",
             "settings.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "formats",
-      "path": "src/bull/Modules/formats",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo"
       ],
+      "name": "formats",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "formats.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "memo",
-      "path": "src/bull/Modules/memo",
-      "dependsOn": [
+      "depends": [
         "foundation"
       ],
+      "name": "memo",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "parser.py",
             "problems.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "templates.py",
             "templates/outline.md",
             "templates/backlog.md",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "usage",
-      "path": "src/bull/Modules/usage",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "settings"
       ],
+      "name": "usage",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "usage.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stacks",
-      "path": "src/bull/Modules/stacks",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "settings"
       ],
+      "name": "stacks",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "manifest.py",
             "loader.py",
             "registry.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 2,
           "files": [
             "select.py",
             "docs.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "parts",
-      "path": "src/bull/Modules/parts",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "settings",
         "stacks"
       ],
+      "name": "parts",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "parts.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "status",
-      "path": "src/bull/Modules/status",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "events",
@@ -279,148 +314,166 @@
         "memo",
         "parts"
       ],
+      "name": "status",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "model.py",
             "store.py",
             "refs.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "transitions.py",
             "modules.py",
             "next_step.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 1,
           "files": [
             "summary.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "features",
-      "path": "src/bull/Modules/features",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "memo",
         "status"
       ],
+      "name": "features",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "backlog.py",
             "ideas.py",
             "briefs.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "cycle.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "coverage",
-      "path": "src/bull/Modules/coverage",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "stacks"
       ],
+      "name": "coverage",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "markers.py",
             "triage.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "api",
-      "path": "src/bull/Modules/api",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "memo",
         "stacks",
         "parts",
         "status"
       ],
+      "name": "api",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "snapshots.py",
             "approval.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "interfaces",
-      "path": "src/bull/Modules/interfaces",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "settings",
         "memo",
@@ -428,24 +481,27 @@
         "parts",
         "api"
       ],
+      "name": "interfaces",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "interfaces.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "adoption",
-      "path": "src/bull/Modules/adoption",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "settings",
@@ -455,34 +511,38 @@
         "status",
         "features"
       ],
+      "name": "adoption",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "detect.py",
             "adopt.py",
             "legacy.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "gates",
-      "path": "src/bull/Modules/gates",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "events",
@@ -495,133 +555,149 @@
         "api",
         "interfaces"
       ],
+      "name": "gates",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "steps.py",
             "passes.py",
             "failed.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "driver.py",
             "after_merge.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 1,
           "files": [
             "journeys.py",
             "report.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stacktest",
-      "path": "src/bull/Modules/stacktest",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "stacks"
       ],
+      "name": "stacktest",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "cases.py",
             "static.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "runner.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stackflow",
-      "path": "src/bull/Modules/stackflow",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "stacks",
         "stacktest"
       ],
+      "name": "stackflow",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 2,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "workflow.py",
             "template/DESIGN.md",
             "template/stack.toml",
             "template/cases.json"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 2,
           "files": [
             "install.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "hooks",
-      "path": "src/bull/Modules/hooks",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "events",
@@ -633,133 +709,148 @@
         "status",
         "gates"
       ],
+      "name": "hooks",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "merge_guard.py",
             "protection.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 2,
           "files": [
             "usage_guard.py",
             "session.py",
             "dispatch.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "plugin_text",
-      "path": "src/bull/Modules/plugin_text",
-      "dependsOn": [
+      "depends": [
         "foundation"
       ],
+      "name": "plugin_text",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py",
             "plugin_files.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "orchestrator.md"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 2,
           "files": [
             "commands/discuss.md",
             "commands/outline.md",
             "commands/setup.md",
             "commands/skeleton.md"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 2,
           "files": [
             "commands/prototype.md",
             "commands/build.md",
             "commands/verify.md",
             "commands/feature.md"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         },
         {
-          "number": 5,
+          "attempts": 2,
           "files": [
             "commands/adopt.md",
             "commands/resume.md",
             "commands/status.md",
             "commands/stack.md"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 5,
+          "state": "done"
         },
         {
-          "number": 6,
+          "attempts": 2,
           "files": [
             "agents/skeleton-builder.md",
             "agents/screen-builder.md",
             "agents/test-writer.md",
             "agents/code-writer.md"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 6,
+          "state": "done"
         },
         {
-          "number": 7,
+          "attempts": 1,
           "files": [
             "agents/reviewer.md",
             "agents/coverage-analyst.md",
             "agents/journey-test-writer.md"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 7,
+          "state": "done"
         },
         {
-          "number": 8,
+          "attempts": 1,
           "files": [
             "agents/surveyor.md",
             "agents/legacy-test-scanner.md"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 8,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "claude_code",
-      "path": "src/bull/Modules/claude_code",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "settings",
         "usage",
@@ -767,42 +858,47 @@
         "hooks",
         "plugin_text"
       ],
+      "name": "claude_code",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "plugin.py",
             "hooks_json.py",
             "launch.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "hook_io.py",
             "app_files.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "appinit",
-      "path": "src/bull/Modules/appinit",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "settings",
@@ -813,33 +909,37 @@
         "stackflow",
         "claude_code"
       ],
+      "name": "appinit",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "mocks/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "init.py",
             "doctor.py",
             "cli.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "cli",
-      "path": "src/bull/Modules/cli",
-      "dependsOn": [
+      "depends": [
         "foundation",
         "gitrepo",
         "events",
@@ -863,208 +963,236 @@
         "claude_code",
         "appinit"
       ],
+      "name": "cli",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "wiring.py",
             "main.py",
             "help.py",
             "statusline.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stack_fixture",
-      "path": "src/bull/Modules/stack_fixture",
-      "dependsOn": [
+      "depends": [
         "stacks"
       ],
+      "name": "stack_fixture",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py",
             "tool.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 1,
           "files": [
             "fixture/stack.toml",
             "fixture/readers.py",
             "fixture/rules.md",
             "fixture/setup.md"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "fixture/cases.json",
             "fixture/fixture/"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 2,
           "files": [
             "fixture_service/stack.toml",
             "fixture_service/readers.py",
             "fixture_service/serve.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         },
         {
-          "number": 5,
+          "attempts": 1,
           "files": [
             "fixture_service/rules.md",
             "fixture_service/setup.md",
             "fixture_service/cases.json",
             "fixture_service/fixture/"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 5,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stack_python_cli",
-      "path": "src/bull/Modules/stack_python_cli",
-      "dependsOn": [
+      "depends": [
         "stacks"
       ],
+      "name": "stack_python_cli",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 2,
           "files": [
             "python_cli/stack.toml",
             "python_cli/readers.py",
             "python_cli/gates.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 1,
           "files": [
             "python_cli/schema_check.py",
             "python_cli/rules.md",
             "python_cli/setup.md",
             "python_cli/lint/ruff.toml"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 1,
           "files": [
             "python_cli/DESIGN.md",
             "python_cli/cases.json",
             "python_cli/fixture/"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         }
       ]
     },
     {
-      "name": "stack_ios",
-      "path": "src/bull/Modules/stack_ios",
-      "dependsOn": [
+      "depends": [
         "stacks"
       ],
+      "name": "stack_ios",
+      "part": "app",
+      "reference_tests": false,
+      "scan": null,
       "state": "done",
       "units": [
         {
-          "number": 1,
+          "attempts": 1,
           "files": [
             "Contracts/__init__.py"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 1,
+          "state": "done"
         },
         {
-          "number": 2,
+          "attempts": 3,
           "files": [
             "ios/stack.toml",
             "ios/readers.py",
             "ios/swift_scan.py",
             "ios/pbxproj.py"
           ],
-          "state": "done",
-          "attempts": 2
+          "kind": "code",
+          "number": 2,
+          "state": "done"
         },
         {
-          "number": 3,
+          "attempts": 2,
           "files": [
             "ios/xcresults.py",
             "ios/gates.py",
             "ios/simulator.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 3,
+          "state": "done"
         },
         {
-          "number": 4,
+          "attempts": 2,
           "files": [
             "ios/detect.py",
             "ios/inventory.py"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 4,
+          "state": "done"
         },
         {
-          "number": 5,
+          "attempts": 1,
           "files": [
             "ios/rules.md",
             "ios/setup.md",
             "ios/lint/swiftlint.yml",
             "ios/lint/swift-format.json"
           ],
-          "state": "done",
-          "attempts": 0
+          "kind": "code",
+          "number": 5,
+          "state": "done"
         },
         {
-          "number": 6,
+          "attempts": 2,
           "files": [
             "ios/cases.json",
             "ios/fixture/"
           ],
-          "state": "done",
-          "attempts": 1
+          "kind": "code",
+          "number": 6,
+          "state": "done"
         }
       ]
     }
   ],
-  "updatedAt": "2026-11-19T18:16:09-08:00",
-  "features": [],
-  "activeFeature": null
+  "pause": null,
+  "plan": null,
+  "stage": 6,
+  "waiting": null
 }

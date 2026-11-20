@@ -2,21 +2,8 @@
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"
   },
-  "statusLine": {
-    "type": "command",
-    "command": "python3 \"/Users/nicholasjohnson/Documents/Programs/ios-agent-pipeline/workflow/statusline.py\""
-  },
   "permissions": {
     "allow": [
-      "Bash(ios-pipeline gates *)",
-      "Bash(ios-pipeline status *)",
-      "Bash(ios-pipeline feature *)",
-      "Bash(ios-pipeline stack *)",
-      "Bash(ios-pipeline stacks)",
-      "Bash(ios-pipeline part *)",
-      "Bash(ios-pipeline api *)",
-      "Bash(ios-pipeline coverage *)",
-      "Bash(ios-pipeline template *)",
       "Bash(git status *)",
       "Bash(git status)",
       "Bash(git diff *)",

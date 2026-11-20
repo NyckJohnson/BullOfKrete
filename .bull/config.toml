@@ -1,0 +1,6 @@
+format = 1
+stack = "python_cli"
+package = "bull"
+test_dir = "tests"
+source_dir = "src/bull"
+coverage.exclude_extra = ["*/Modules/stack_*/*/fixture/*", "*/Modules/stack_*/*/app/*"]

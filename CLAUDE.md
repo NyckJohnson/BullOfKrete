@@ -1,7 +1,3 @@
-<!-- ios-pipeline:begin (managed by `ios-pipeline init`; do not edit this block) -->
-@/Users/nicholasjohnson/Documents/Programs/ios-agent-pipeline/orchestrator.md
-<!-- ios-pipeline:end -->
-
 ## App notes (BullOfKrete)
 - Read docs/bull-v2-brief.md before /discuss and /outline; its decisions are settled.
 - reference/ is read-only. Only legacy-test-scanner reads reference/v1-tests/; never list
