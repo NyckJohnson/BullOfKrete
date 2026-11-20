@@ -1,4 +1,181 @@
 {
   "format": 1,
-  "items": []
+  "items": [
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/clear-and-resume-in-one-command.md",
+      "description": "A single command that does `/clear` and then `/bull:resume`, so starting a fresh session at a\nhandoff point is one step. The lightweight forerunner of \"Automatic orchestrator restarts\".\nOpen: whether a plugin command can clear the conversation itself, or this needs bull to restart the\nsession from outside.",
+      "slug": "clear-and-resume-in-one-command",
+      "state": "queued",
+      "title": "Clear and resume in one command"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/accept-tests-for-defensive-error.md",
+      "description": "When code-writer adds defensive error handling the memo never mentions (bad input, I/O errors,\nunreadable files), coverage triage no longer stops to ask. The behavior is added to the spec, tested,\nand each case is listed in the decisions log for the human to review afterwards. Anything that\nchanges visible behavior still asks. Changes the coverage-triage rule that `not-in-spec` always goes\nto the human (decided 2026-11-19: auto-accept, logged).",
+      "slug": "accept-tests-for-defensive-error",
+      "state": "queued",
+      "title": "Accept tests for defensive error handling"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/faster-gates-for-low-risk-changes.md",
+      "description": "Only test what changed until the end, e.g. stop running the full suite for visual changes. Conflicts\nwith today's rule that every module merge needs a recorded full-suite pass on a clean tree (the\nmerge guard). Discuss how far that relaxes, e.g. the full suite once per feature or before\nacceptance instead of once per module (decided 2026-11-19: decide at this feature's discuss).",
+      "slug": "faster-gates-for-low-risk-changes",
+      "state": "queued",
+      "title": "Faster gates for low-risk changes"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/gui.md",
+      "description": "A local GUI across all registered apps: the real coding-agent session in a terminal, each app's\nprogress at a glance, and doc review where feedback becomes change sets the orchestrator applies.\nNo approvals in the GUI. Design: `docs/gui.md` (agreed 2026-10-24/27 for v1; restate in bull terms).\nIt settles the memo's open question as a local web app (Python backend, plain HTML/JS, 127.0.0.1,\ntoken and Origin checks, tmux-backed sessions, xterm.js). Prerequisites from gui.md not yet in bull:\nan app registry (`bull apps`), a general \"waiting for the human\" state (today `status wait` covers\ncontract changes only), context use in `usage.json`, and the pending-edits queue with its\nstep-boundary check. gui.md plans six PRs; discuss may split this into several features. Open: how\nthe GUI itself is built (see \"Stack for the GUI\").",
+      "slug": "gui",
+      "state": "queued",
+      "title": "GUI"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/show-subagents-context-use.md",
+      "description": "Show how much of its context window each subagent used, alongside the orchestrator session's context\nuse (gui.md's header shows the session's). Shown in the GUI and in `bull status`.",
+      "slug": "show-subagents-context-use",
+      "state": "queued",
+      "title": "Show subagents' context use"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/stack-for-the-gui.md",
+      "description": "New stacks needed to build the GUI through bull itself: a web/service stack (Python HTTP backend,\nHTML/JS frontend). Absorbs the memo's \"Service stack\" idea: a stack whose part runs as a service,\ngiving OpenAPI interfaces and running parts together their first real stack. If the GUI is built\nthrough bull, this comes before the GUI.",
+      "slug": "stack-for-the-gui",
+      "state": "queued",
+      "title": "Stack for the GUI"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/settings-page.md",
+      "description": "One place to see and change settings instead of `bull config set`: every layer (bull defaults \u2192\nstack \u2192 user \u2192 app \u2192 part), showing which layer each value comes from, validated on write. Exposes\nusage pause thresholds, max attempts, max files per unit, review mode, coverage exclusions, each\nagent's model and the simulator. No AI-provider choice yet: that arrives with \"Other AI providers\"\n(decided 2026-11-19). Open: a GUI page or its own screen.",
+      "slug": "settings-page",
+      "state": "queued",
+      "title": "Settings page"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/phone-notifications.md",
+      "description": "Send pipeline updates to the user's phone when a session stops (waiting for the human, blocked,\npaused with reset time, finished), naming the app and the reason, from the agent's Stop and\nNotification hooks. Replies: plain text, `/clear`, `/bull:resume` or `/bull:status` only, typed into\nthe app's tmux session by a relay on the Mac. Security: outbound polling only, owner's account only,\ninput only while the session is idle. bull's first network service. Shares the waiting state and\ntmux sessions with the GUI. Details: `docs/gui.md` \u00a7 Related. Open: channel (Telegram bot preferred,\nemail the alternative); whether finished long steps also notify.",
+      "slug": "phone-notifications",
+      "state": "queued",
+      "title": "Phone notifications"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/log-everything.md",
+      "description": "Extend the event log (`.bull/events.jsonl`) so it records everything the reports need: time paused\nfor usage, time waiting on the human, simulator-busy retries, and subagent end events. Reading the\nlog must survive a torn non-UTF-8 write by skipping the damaged line; today `EventLog.read` fails on\nthe whole file (found in events review, 2026-11-08).",
+      "slug": "log-everything",
+      "state": "queued",
+      "title": "Log everything"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/time-report.md",
+      "description": "`bull status time` totals by stage, module, unit (by step and attempt), agent and gate step, plus\nthe slowest items and where retries cost time; `--feature <slug>` scopes it; `/bull:status` shows a\none-line total. From the event log. Open (ROADMAP item 4): wall-clock or active time (overnight gaps\nand pauses as their own lines); human wait time in totals or separate; backfill from git timestamps\nor start fresh; usage per step alongside time; build on LangSmith or Claude Code's OpenTelemetry for\nthe agent side, or emit bull's events as OpenTelemetry (trade-off: dependency and lock-in to one\ncoding agent vs. building it).",
+      "slug": "time-report",
+      "state": "queued",
+      "title": "Time report"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/token-report.md",
+      "description": "Tokens used per stage, module, unit and agent.",
+      "slug": "token-report",
+      "state": "queued",
+      "title": "Token report"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/kaizen-review.md",
+      "description": "A review that reads the logs, time and token reports to find efficiency improvements in the\npipeline itself, e.g. slow gate steps, units that often need retries, agents that use the most\ncontext.",
+      "slug": "kaizen-review",
+      "state": "queued",
+      "title": "Kaizen review"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/other-ai-providers.md",
+      "description": "Run bull on other coding agents behind the existing provider seam, Claude Code on a Claude plan\nstaying the default; adds the provider choice to the settings page. What's Claude Code-specific:\nlaunching, plugin format (commands, agents with model/tools frontmatter, hooks), the hooks the\nsafeguards rely on, the instruction files and settings, usage pausing from the status line, model\nnames. Open (ROADMAP item 6): which providers first and whether they have subagents; keeping the\nsafeguards without hooks (git hooks, checks in gates); usage pausing where usage is reported\ndifferently; mixed setups (a different model for reviewers).",
+      "slug": "other-ai-providers",
+      "state": "queued",
+      "title": "Other AI providers"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/store-readiness.md",
+      "description": "Check that an accepted app is ready for its store. Generic: an optional stack release hook, run\nafter acceptance and at the end of each feature; stacks without it skip. iOS checks: privacy\nmanifest with required-reason APIs found in the source, data types and tracking domains; the 1024\napp icon (and dark/tinted variants); a specific usage-description string for every permission used.\nA reviewer \"store guidelines\" category (account deletion, Sign in with Apple, in-app purchase,\nplaceholder content, dead buttons, unexplained permissions). A manual checklist (privacy labels, age\nrating, screenshots, support and privacy URLs, export compliance). Open (ROADMAP item 7): blocking or\nadvisory; its own command or part of verify; keep the iOS checklist dated and recheck it against\nApple's current guidelines.",
+      "slug": "store-readiness",
+      "state": "queued",
+      "title": "Store readiness"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/automatic-orchestrator-restarts.md",
+      "description": "Restart the orchestrator session automatically at module boundaries so context stays small: bull\ndrives the coding agent from outside. Needs its own design.",
+      "slug": "automatic-orchestrator-restarts",
+      "state": "queued",
+      "title": "Automatic orchestrator restarts"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/windows-support.md",
+      "description": "Hooks, paths and git behave differently on Windows. v2.0 avoided needless POSIX-only assumptions.",
+      "slug": "windows-support",
+      "state": "queued",
+      "title": "Windows support"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/detect-when-an-app-should-be-split.md",
+      "description": "Tell when an app has grown large enough that it should be separated into several apps.",
+      "slug": "detect-when-an-app-should-be-split",
+      "state": "queued",
+      "title": "Detect when an app should be split"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/spin-modules-off-into-their-own-apps.md",
+      "description": "Move a module (or a part) into its own app. Was out of scope for v2.0 (\"splitting a part into its\nown app\"), together with interfaces shared between apps, which this likely needs.",
+      "slug": "spin-modules-off-into-their-own-apps",
+      "state": "queued",
+      "title": "Spin modules off into their own apps"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/adopt-and-translate.md",
+      "description": "Adopt an existing app while moving it to another stack (e.g. rewrite it in another language),\nusing its legacy tests as reference tests, as the v2 rewrite did.",
+      "slug": "adopt-and-translate",
+      "state": "queued",
+      "title": "Adopt and translate"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/python-cli-adoption-support.md",
+      "description": "`detect` and `inventory` for the python_cli stack, so existing Python apps can be adopted (journey 5\nuses the fixture stack today).",
+      "slug": "python-cli-adoption-support",
+      "state": "queued",
+      "title": "python_cli adoption support"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/bash-shell-stack.md",
+      "description": "Rebuild the bash_shell stack through the stack workflow.",
+      "slug": "bash-shell-stack",
+      "state": "queued",
+      "title": "bash_shell stack"
+    },
+    {
+      "added": "2026-11-20T05:17:17Z",
+      "brief": "docs/features/quieter-ios-test-runs.md",
+      "description": "In limbo: the simulator audio crackling went away before the planned experiments ran. Remaining\nexperiments: shut down simulators after every run (conflicts with reusing one booted simulator),\nreport orphaned simulators at the start of a run, keep screenshots out of Photos and Spotlight\n(Spotlight Privacy as a manual setup step), `XCTAttachment.lifetime = .deleteOnSuccess` in the UI\ntest rules. Open: whether reusing one booted simulator conflicts with clean-state launches; the\nspeed cost of no parallel testing for large suites.",
+      "slug": "quieter-ios-test-runs",
+      "state": "queued",
+      "title": "Quieter iOS test runs"
+    }
+  ]
 }
