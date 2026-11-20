@@ -6,4 +6,14 @@ The bull status line shows 5-hour and weekly usage but not the session's context
 
 ## Discussion notes
 
+- 2026-11-19, the open question is answered. Claude Code's status-line docs (code.claude.com/docs/en/statusline,
+  installed CLI 2.1.329) list `context_window` with `used_percentage` (0–100, input tokens only),
+  `remaining_percentage`, `context_window_size`, `total_input_tokens`/`total_output_tokens` (0 before
+  the first response) and `current_usage` (null before the first call and right after `/compact`).
+  `used_percentage` "may be null early in the session".
+- Today `parse_statusline` makes a UsageSample only when a rate-limit window has a percentage. The
+  line falls back to `Usage.latest()` when the input has no sample.
+- The change touches the claude_code contract (`parse_statusline`, `StatusLineInput`/`UsageSample`)
+  and the usage contract (`UsageSample`, usage.json), plus the cli line (statusline.py).
+
 ## Agreed scope
