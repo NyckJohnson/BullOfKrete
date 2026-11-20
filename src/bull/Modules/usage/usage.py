@@ -30,7 +30,10 @@ class LiveUsage(Usage):
         self._clock = clock
 
     def record(self, sample: UsageSample) -> None:
-        """Overwrite `usage.json` (format 1) with `sample`, atomically."""
+        """Overwrite `usage.json` (format 1) with `sample`, atomically.
+
+        `context` is an optional key of format 1; it is written as null when unknown.
+        """
         data = {
             "format": _FORMAT,
             "time": _time_text(sample.time),
@@ -38,6 +41,7 @@ class LiveUsage(Usage):
             "weekly": sample.weekly,
             "five_hour_resets": _optional_time_text(sample.five_hour_resets),
             "weekly_resets": _optional_time_text(sample.weekly_resets),
+            "context": sample.context,
         }
         self._files.write_atomic(
             self._path, json.dumps(data, indent=2, sort_keys=True) + "\n"
@@ -144,6 +148,7 @@ def _parse(data: object) -> UsageSample | None:
             weekly=_opt_percent(data.get("weekly")),
             five_hour_resets=_opt_time(data.get("five_hour_resets")),
             weekly_resets=_opt_time(data.get("weekly_resets")),
+            context=_lenient_percent(data.get("context")),
         )
     except _Malformed:
         return None  # unreadable file means "no sample" per spec
@@ -174,3 +179,13 @@ def _opt_percent(value: object) -> float | None:
     if not math.isfinite(percent):  # json.loads accepts NaN / Infinity
         raise _Malformed
     return percent
+
+
+def _lenient_percent(value: object) -> float | None:
+    """The optional `context` value: anything unreadable reads as None, not as a bad file."""
+    try:
+        return _opt_percent(value)
+    except _Malformed:
+        return (
+            None  # spec: an unreadable context leaves the rest of the sample readable
+        )

@@ -88,7 +88,9 @@ def test_live_usage_satisfies_the_protocol(rig: Rig) -> None:
 def test_record_writes_usage_json_format_1(rig: Rig) -> None:
     rig.usage.record(sample(92.0, 31.5, SOON, LATER))
     text = rig.files.texts[APP.usage_file]
-    assert json.loads(text) == {
+    data = json.loads(text)
+    data.pop("context", None)  # covered by the context tests below
+    assert data == {
         "format": 1,
         "time": "2026-11-07T12:00:00Z",
         "five_hour": 92.0,
@@ -181,6 +183,106 @@ def test_latest_of_missing_file_is_none(rig: Rig) -> None:
 def test_latest_of_unreadable_file_is_none(rig: Rig, text: str) -> None:
     rig.files.texts[APP.usage_file] = text
     assert rig.usage.latest() is None
+
+
+# --- context ---------------------------------------------------------------
+
+
+def _file_body(**extra: object) -> str:
+    data: dict[str, object] = {
+        "format": 1,
+        "time": "2026-11-07T12:00:00Z",
+        "five_hour": 3.0,
+        "weekly": 4.0,
+        "five_hour_resets": "2026-11-07T14:00:00Z",
+        "weekly_resets": None,
+    }
+    data.update(extra)
+    return json.dumps(data)
+
+
+def test_record_writes_context_into_usage_json_format_1(rig: Rig) -> None:
+    rig.usage.record(replace(sample(), context=38.0))
+    data = json.loads(rig.files.texts[APP.usage_file])
+    assert data["context"] == 38.0
+    assert data["format"] == 1
+
+
+def test_latest_round_trips_context(rig: Rig) -> None:
+    s = replace(sample(92.0, 31.5), context=38.5)
+    rig.usage.record(s)
+    assert rig.usage.latest() == s
+    latest = rig.usage.latest()
+    assert latest is not None and latest.context == 38.5
+
+
+def test_latest_round_trips_a_sample_without_context(rig: Rig) -> None:
+    rig.usage.record(sample())
+    latest = rig.usage.latest()
+    assert latest is not None and latest.context is None
+
+
+def test_latest_reads_context_from_a_file_written_elsewhere(rig: Rig) -> None:
+    rig.files.texts[APP.usage_file] = _file_body(context=12.5)
+    latest = rig.usage.latest()
+    assert latest is not None and latest.context == 12.5
+
+
+def test_file_without_a_context_key_reads_context_as_none(rig: Rig) -> None:
+    rig.files.texts[APP.usage_file] = _file_body()
+    latest = rig.usage.latest()
+    assert latest == sample(3.0, 4.0, SOON, None)
+    assert latest is not None and latest.context is None
+
+
+@pytest.mark.parametrize(
+    "bad", ["high", "38", True, [], {}, None], ids=lambda b: repr(b)
+)
+def test_unreadable_context_reads_as_none_and_keeps_the_rest(
+    rig: Rig, bad: object
+) -> None:
+    rig.files.texts[APP.usage_file] = _file_body(context=bad)
+    latest = rig.usage.latest()
+    assert latest == sample(3.0, 4.0, SOON, None)
+    assert latest is not None and latest.context is None
+
+
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_context_reads_as_none_and_keeps_the_rest(
+    rig: Rig, bad: str
+) -> None:
+    rig.files.texts[APP.usage_file] = (
+        '{"format": 1, "time": "2026-11-07T12:00:00Z", "five_hour": 3.0, '
+        f'"weekly": 4.0, "five_hour_resets": null, "weekly_resets": null, "context": {bad}}}'
+    )
+    latest = rig.usage.latest()
+    assert latest is not None
+    assert latest.context is None
+    assert (latest.five_hour, latest.weekly) == (3.0, 4.0)
+
+
+def test_check_with_only_context_is_unknown(rig: Rig) -> None:
+    check = rig.check(replace(sample(None, None), context=99.0))
+    assert check.verdict is UsageVerdict.UNKNOWN
+    assert check.reason == "no usage data yet"
+    assert check.resets_at is None
+
+
+def test_a_high_context_never_causes_a_pause(rig: Rig) -> None:
+    check = rig.check(replace(sample(10.0, 10.0), context=100.0))
+    assert check.verdict is UsageVerdict.OK
+
+
+def test_context_does_not_change_the_pause_decision(rig: Rig) -> None:
+    low = rig.check(replace(sample(92.0, 10.0), context=0.0))
+    high = rig.check(replace(sample(92.0, 10.0), context=99.0))
+    assert low == high == UsageCheck(UsageVerdict.PAUSE, "5-hour usage 92% ≥ 85%", SOON)
+
+
+def test_ok_reason_is_the_same_whatever_the_context(rig: Rig) -> None:
+    a = rig.check(replace(sample(42.0, 31.5), context=None))
+    b = rig.check(replace(sample(42.0, 31.5), context=77.0))
+    assert a == b
 
 
 # --- check: unknown --------------------------------------------------------

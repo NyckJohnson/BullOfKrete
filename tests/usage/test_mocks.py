@@ -137,3 +137,21 @@ def test_sample_usage_constant_is_a_complete_sample() -> None:
     assert isinstance(SAMPLE_USAGE, UsageSample)
     assert SAMPLE_USAGE.five_hour is not None and SAMPLE_USAGE.weekly is not None
     assert SAMPLE_USAGE.time.tzinfo is not None
+
+
+def test_record_carries_context_through_to_latest() -> None:
+    mock = MockUsage()
+    new = replace(SAMPLE_USAGE, context=38.0)
+    mock.record(new)
+    latest = mock.latest()
+    assert latest is not None and latest.context == 38.0
+
+
+def test_context_is_ignored_by_check() -> None:
+    mock = MockUsage()
+    mock.sample = replace(SAMPLE_USAGE, five_hour=None, weekly=None, context=99.0)
+    check = mock.check()
+    assert check.verdict is UsageVerdict.UNKNOWN
+    assert check.reason == "no usage data yet"
+    mock.sample = replace(SAMPLE_USAGE, context=100.0)
+    assert mock.check().verdict is UsageVerdict.OK
