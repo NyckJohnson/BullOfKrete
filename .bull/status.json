@@ -8,7 +8,12 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": null,
+  "feature": {
+    "applied_contracts": [],
+    "checkpoints": [],
+    "slug": "context-use-in-the-status-line",
+    "stage": 1
+  },
   "format": 1,
   "kind": "app",
   "modules": [
