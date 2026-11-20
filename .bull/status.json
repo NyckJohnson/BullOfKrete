@@ -9,13 +9,16 @@
     "app-accepted"
   ],
   "feature": {
-    "applied_contracts": [],
+    "applied_contracts": [
+      "usage"
+    ],
     "checkpoints": [
       "outline-approved",
-      "setup"
+      "setup",
+      "skeleton"
     ],
     "slug": "context-use-in-the-status-line",
-    "stage": 2
+    "stage": 3
   },
   "format": 1,
   "kind": "app",

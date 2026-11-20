@@ -21,6 +21,7 @@ class UsageSample:
     weekly: float | None
     five_hour_resets: datetime | None
     weekly_resets: datetime | None
+    context: float | None = None  # the session's context-window use, 0-100
 
 
 @dataclass(frozen=True)

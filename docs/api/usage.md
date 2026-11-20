@@ -14,6 +14,7 @@ UsageSample.five_hour: float | None
 UsageSample.weekly: float | None
 UsageSample.five_hour_resets: datetime | None
 UsageSample.weekly_resets: datetime | None
+UsageSample.context: float | None
 @dataclass(frozen=True) class UsageCheck
 UsageCheck.verdict: UsageVerdict
 UsageCheck.reason: str
