@@ -238,6 +238,11 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
 - python_cli adoption support: `detect`/`inventory` for adopting existing Python apps (journey 5 uses the fixture stack).
 - bash_shell stack: rebuilt through the stack workflow after Stage 6 (see Decisions log); moves here for good if it isn't done when the rest of v2.0 is.
 
+## Features
+- context-use-in-the-status-line (accepted 2026-11-20): the status line ends with `· ctx N%`, the
+  session's context-window use from Claude Code's `context_window.used_percentage`, or `ctx –` when
+  the input has none; recorded in usage.json as an optional `context` field (format stays 1).
+
 ## Data models
 In-memory types are `@dataclass(frozen=True)` and enums in each module's `Contracts` (see the
 protocol drafts under **Modules**). This section fixes the **file formats** bull reads and writes;

@@ -8,19 +8,7 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": {
-    "applied_contracts": [
-      "usage"
-    ],
-    "checkpoints": [
-      "outline-approved",
-      "setup",
-      "skeleton",
-      "ui-approved"
-    ],
-    "slug": "context-use-in-the-status-line",
-    "stage": 6
-  },
+  "feature": null,
   "format": 1,
   "kind": "app",
   "modules": [
@@ -1205,75 +1193,7 @@
     }
   ],
   "pause": null,
-  "plan": {
-    "items": [
-      {
-        "done": true,
-        "name": "mocks-check"
-      },
-      {
-        "done": true,
-        "name": "j1"
-      },
-      {
-        "done": true,
-        "name": "j2"
-      },
-      {
-        "done": true,
-        "name": "j3"
-      },
-      {
-        "done": true,
-        "name": "j4"
-      },
-      {
-        "done": true,
-        "name": "j5"
-      },
-      {
-        "done": true,
-        "name": "j6"
-      },
-      {
-        "done": true,
-        "name": "j7"
-      },
-      {
-        "done": true,
-        "name": "j8"
-      },
-      {
-        "done": true,
-        "name": "j9"
-      },
-      {
-        "done": true,
-        "name": "j10"
-      },
-      {
-        "done": true,
-        "name": "j11"
-      },
-      {
-        "done": true,
-        "name": "j12"
-      },
-      {
-        "done": true,
-        "name": "app-review"
-      },
-      {
-        "done": true,
-        "name": "fixes"
-      },
-      {
-        "done": false,
-        "name": "hands-on"
-      }
-    ],
-    "label": "verify"
-  },
+  "plan": null,
   "stage": 6,
   "waiting": null
 }
