@@ -6,7 +6,7 @@ from bull.Modules.foundation.Contracts import AppLayout, BullError
 from bull.Modules.interfaces.Contracts import InterfaceResult, Interfaces
 from bull.Modules.memo.Contracts import InterfaceEntry, Memo, SideRef
 from bull.Modules.parts.Contracts import Parts
-from bull.Modules.settings.Contracts import SettingValue, Settings
+from bull.Modules.settings.Contracts import Settings, SettingValue
 from bull.Modules.stacks.Contracts import CheckItem, Role, Stack, StackRegistry
 
 

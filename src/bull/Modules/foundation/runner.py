@@ -10,7 +10,7 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from bull.Modules.foundation.Contracts import RunResult, Runner, Spawned, ToolMissing
+from bull.Modules.foundation.Contracts import Runner, RunResult, Spawned, ToolMissing
 
 # Exit code reported for a run that hit its timeout (the `timeout(1)` convention).
 _TIMEOUT_RETURNCODE = 124

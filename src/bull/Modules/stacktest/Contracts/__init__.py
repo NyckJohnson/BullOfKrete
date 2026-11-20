@@ -22,7 +22,7 @@ class Case:
     change: Mapping[str, object]
     run: tuple[str, ...]
     expect: Mapping[str, object]
-    then: "Case | None"
+    then: Case | None
 
 
 @dataclass(frozen=True)
