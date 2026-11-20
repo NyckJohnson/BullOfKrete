@@ -980,7 +980,7 @@
       "part": "app",
       "reference_tests": false,
       "scan": null,
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
@@ -1204,7 +1204,11 @@
       ]
     }
   ],
-  "pause": null,
+  "pause": {
+    "reason": "usage: 5-hour 86%",
+    "since": "2026-11-20T06:19:45.743229Z",
+    "unit": "cli unit 2"
+  },
   "plan": null,
   "stage": 6,
   "waiting": null
