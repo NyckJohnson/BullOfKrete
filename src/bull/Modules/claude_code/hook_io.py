@@ -66,8 +66,9 @@ def hook_output(kind: HookKind, decision: HookDecision) -> HookOutput:
 def parse_statusline(raw: str, now: datetime) -> StatusLineInput:
     """Claude Code's status-line JSON as the cwd and, when present, a usage sample at `now`.
 
-    A sample exists when either `rate_limits.five_hour` or `rate_limits.seven_day` has a
-    numeric `used_percentage`. Malformed input gives cwd `.` and no usage.
+    A sample exists when `rate_limits.five_hour`, `rate_limits.seven_day` or
+    `context_window` has a numeric `used_percentage`; the context figure goes into the
+    sample's `context`. Malformed input gives cwd `.` and no usage.
     """
     data = _object(raw)
     if data is None:
@@ -77,15 +78,19 @@ def parse_statusline(raw: str, now: datetime) -> StatusLineInput:
         workspace = data.get("workspace")
         if isinstance(workspace, dict):
             cwd = _string(workspace.get("current_dir"))
-    limits = data.get("rate_limits")
-    usage = _usage(limits, now) if isinstance(limits, dict) else None
+    usage = _usage(data, now)
     return StatusLineInput(cwd=Path(cwd or "."), usage=usage)
 
 
-def _usage(limits: dict[str, object], now: datetime) -> UsageSample | None:
+def _usage(data: dict[str, object], now: datetime) -> UsageSample | None:
+    """The rate-limit windows and context figure as a sample, or None when none is readable."""
+    limits = data.get("rate_limits")
+    if not isinstance(limits, dict):
+        limits = {}
     five_used, five_resets = _window(limits.get("five_hour"))
     week_used, week_resets = _window(limits.get("seven_day"))
-    if five_used is None and week_used is None:
+    context, _ = _window(data.get("context_window"))
+    if five_used is None and week_used is None and context is None:
         return None
     return UsageSample(
         time=now,
@@ -93,6 +98,7 @@ def _usage(limits: dict[str, object], now: datetime) -> UsageSample | None:
         weekly=week_used,
         five_hour_resets=five_resets,
         weekly_resets=week_resets,
+        context=context,
     )
 
 
