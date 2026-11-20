@@ -19,13 +19,16 @@ from bull.Modules.usage.mocks import MockUsage
 _NOW = datetime(2026, 11, 7, 12, 0, 0, tzinfo=UTC)
 
 
-def _sample(five: float | None, weekly: float | None) -> UsageSample:
+def _sample(
+    five: float | None, weekly: float | None, context: float | None = None
+) -> UsageSample:
     return UsageSample(
         time=_NOW,
         five_hour=five,
         weekly=weekly,
         five_hour_resets=None,
         weekly_resets=None,
+        context=context,
     )
 
 
@@ -144,7 +147,9 @@ class _Run:
 def test_statusline_prints_every_part_in_order() -> None:
     run = _Run(progress=_Progress(_status(plan=("build", 2, 4))))
 
-    assert run.line == "bull · stage 5 · units 1/3 · build 2/4 · 5h 92% · wk 40%\n"
+    assert (
+        run.line == "bull · stage 5 · units 1/3 · build 2/4 · 5h 92% · wk 40% · ctx –\n"
+    )
     assert run.code == 0
 
 
@@ -152,7 +157,8 @@ def test_statusline_shows_the_active_feature_between_stage_and_units() -> None:
     run = _Run(progress=_Progress(_status(feature="dark-mode")))
 
     assert (
-        run.line == "bull · stage 5 · feature dark-mode · units 1/3 · 5h 92% · wk 40%\n"
+        run.line
+        == "bull · stage 5 · feature dark-mode · units 1/3 · 5h 92% · wk 40% · ctx –\n"
     )
 
 
@@ -160,7 +166,7 @@ def test_statusline_without_plan_or_feature_omits_them() -> None:
     run = _Run()
 
     assert "feature" not in run.line
-    assert run.line.count("·") == 4
+    assert run.line.count("·") == 5
 
 
 def test_statusline_shows_plan_progress_as_done_over_total_items() -> None:
@@ -172,13 +178,13 @@ def test_statusline_shows_plan_progress_as_done_over_total_items() -> None:
 def test_statusline_omits_weekly_when_the_sample_has_none() -> None:
     run = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(10, None)))
 
-    assert run.line == "bull · stage 5 · units 1/3 · 5h 10%\n"
+    assert run.line == "bull · stage 5 · units 1/3 · 5h 10% · ctx –\n"
 
 
 def test_statusline_omits_five_hour_when_the_sample_has_none() -> None:
     run = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(None, 25)))
 
-    assert run.line == "bull · stage 5 · units 1/3 · wk 25%\n"
+    assert run.line == "bull · stage 5 · units 1/3 · wk 25% · ctx –\n"
 
 
 def test_statusline_without_any_usage_omits_both_usage_parts() -> None:
@@ -187,7 +193,7 @@ def test_statusline_without_any_usage_omits_both_usage_parts() -> None:
 
     run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=usage)
 
-    assert run.line == "bull · stage 5 · units 1/3\n"
+    assert run.line == "bull · stage 5 · units 1/3 · ctx –\n"
 
 
 def test_statusline_records_the_sample_from_the_input() -> None:
@@ -214,7 +220,7 @@ def test_statusline_falls_back_to_the_latest_recorded_sample() -> None:
 
     run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=usage)
 
-    assert run.line.endswith("5h 61% · wk 12%\n")
+    assert run.line.endswith("5h 61% · wk 12% · ctx –\n")
 
 
 def test_statusline_passes_the_raw_input_to_the_provider() -> None:
@@ -355,7 +361,7 @@ def test_statusline_with_unbuildable_usage_store_reports_and_keeps_input_usage()
     line, err, code = _run_with_usage_factory(_UnbuildableUsage(), _sample(92, 40))
 
     assert code == 0
-    assert line == "bull · stage 5 · units 1/3 · 5h 92% · wk 40%\n"
+    assert line == "bull · stage 5 · units 1/3 · 5h 92% · wk 40% · ctx –\n"
     assert "usage dir unreadable" in err
 
 
@@ -365,7 +371,7 @@ def test_statusline_with_unbuildable_usage_store_and_no_input_usage_omits_usage(
     line, err, code = _run_with_usage_factory(_UnbuildableUsage(), None)
 
     assert code == 0
-    assert line == "bull · stage 5 · units 1/3\n"
+    assert line == "bull · stage 5 · units 1/3 · ctx –\n"
     assert "usage dir unreadable" in err
 
 
@@ -376,6 +382,131 @@ def test_statusline_when_latest_raises_reports_and_omits_usage_parts() -> None:
 
     run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=_LatestBroken())
 
-    assert run.line == "bull · stage 5 · units 1/3\n"
+    assert run.line == "bull · stage 5 · units 1/3 · ctx –\n"
     assert "corrupt usage file" in run.err.getvalue()
     assert run.code == 0
+
+
+def _ctx_part(line: str) -> str:
+    return line.rstrip("\n").split(" · ")[-1]
+
+
+def test_statusline_ends_with_the_context_part_after_weekly() -> None:
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(92, 40, 38)))
+
+    assert run.line == "bull · stage 5 · units 1/3 · 5h 92% · wk 40% · ctx 38%\n"
+
+
+def test_statusline_context_is_rounded_like_five_hour_and_weekly() -> None:
+    both = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(91.6, 39.6, 37.6)))
+    low = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(10.2, 20.2, 37.2)))
+
+    assert both.line.endswith("5h 92% · wk 40% · ctx 38%\n")
+    assert low.line.endswith("5h 10% · wk 20% · ctx 37%\n")
+
+
+def test_statusline_shows_en_dash_context_when_the_input_has_no_sample() -> None:
+    usage = MockUsage()
+    usage.sample = None
+
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=usage)
+
+    assert _ctx_part(run.line) == "ctx –"
+
+
+def test_statusline_shows_en_dash_context_when_the_sample_context_is_none() -> None:
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), _sample(92, 40, None)))
+
+    assert _ctx_part(run.line) == "ctx –"
+
+
+def test_statusline_context_never_falls_back_to_the_saved_sample() -> None:
+    usage = MockUsage()
+    usage.sample = _sample(61, 12, 77)
+
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), None), usage=usage)
+
+    assert run.line.endswith("5h 61% · wk 12% · ctx –\n")
+    assert "77" not in run.line
+
+
+def test_statusline_context_ignores_the_saved_context_when_input_lacks_one() -> None:
+    usage = MockUsage()
+    usage.sample = _sample(61, 12, 77)
+
+    run = _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), _sample(5, 6, None)), usage=usage
+    )
+
+    assert run.line.endswith("5h 5% · wk 6% · ctx –\n")
+
+
+def test_statusline_context_only_input_still_shows_saved_five_hour_and_weekly() -> None:
+    usage = MockUsage()
+    usage.sample = _sample(61, 12, 77)
+
+    run = _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), _sample(None, None, 38)),
+        usage=usage,
+    )
+
+    assert run.line == "bull · stage 5 · units 1/3 · 5h 61% · wk 12% · ctx 38%\n"
+
+
+def test_statusline_context_only_without_saved_usage_shows_context_alone() -> None:
+    usage = MockUsage()
+    usage.sample = None
+
+    run = _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), _sample(None, None, 38)),
+        usage=usage,
+    )
+
+    assert run.line == "bull · stage 5 · units 1/3 · ctx 38%\n"
+
+
+def test_statusline_records_a_context_only_sample_merged_with_the_saved_one() -> None:
+    usage = MockUsage()
+    five_resets = datetime(2026, 11, 7, 15, 0, 0, tzinfo=UTC)
+    week_resets = datetime(2026, 11, 12, 9, 0, 0, tzinfo=UTC)
+    usage.sample = UsageSample(
+        time=datetime(2026, 11, 7, 11, 0, 0, tzinfo=UTC),
+        five_hour=61.0,
+        weekly=12.0,
+        five_hour_resets=five_resets,
+        weekly_resets=week_resets,
+        context=77.0,
+    )
+
+    _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), _sample(None, None, 38)),
+        usage=usage,
+    )
+
+    recorded = [c[1][0] for c in usage.calls if c[0] == "record"]
+    assert len(recorded) == 1
+    sample = recorded[0]
+    assert isinstance(sample, UsageSample)
+    assert sample.five_hour == 61.0
+    assert sample.weekly == 12.0
+    assert sample.five_hour_resets == five_resets
+    assert sample.weekly_resets == week_resets
+    assert sample.context == 38
+
+
+def test_statusline_records_a_context_only_sample_as_is_when_nothing_is_saved() -> None:
+    usage = MockUsage()
+    usage.sample = None
+    sample = _sample(None, None, 38)
+
+    _Run(provider=_Provider(Path("/tmp/apps/tally"), sample), usage=usage)
+
+    assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
+
+
+def test_statusline_outside_an_app_has_no_context_part() -> None:
+    run = _Run(
+        provider=_Provider(Path("/tmp/apps/tally"), _sample(92, 40, 38)), in_app=False
+    )
+
+    assert run.line == "bull\n"
