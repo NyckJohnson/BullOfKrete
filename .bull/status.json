@@ -11,7 +11,8 @@
   "feature": {
     "applied_contracts": [],
     "checkpoints": [
-      "outline-approved"
+      "outline-approved",
+      "setup"
     ],
     "slug": "context-use-in-the-status-line",
     "stage": 2
