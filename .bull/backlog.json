@@ -2,6 +2,14 @@
   "format": 1,
   "items": [
     {
+      "added": "2026-11-20T05:19:49Z",
+      "brief": "docs/features/context-use-in-the-status-line.md",
+      "description": "The bull status line shows 5-hour and weekly usage but not the session's context-window use, which v1's status line showed. Add it (e.g. ctx 38%), read from the status-line input Claude Code passes (claude_code parse_statusline, cli statusline.py). Also record it in usage.json so the GUI header and show-subagents-context-use can read it later. Open: which status-line input fields carry context use in the installed Claude Code, and what to show when they are missing.",
+      "slug": "context-use-in-the-status-line",
+      "state": "queued",
+      "title": "Context use in the status line"
+    },
+    {
       "added": "2026-11-20T05:17:17Z",
       "brief": "docs/features/clear-and-resume-in-one-command.md",
       "description": "A single command that does `/clear` and then `/bull:resume`, so starting a fresh session at a\nhandoff point is one step. The lightweight forerunner of \"Automatic orchestrator restarts\".\nOpen: whether a plugin command can clear the conversation itself, or this needs bull to restart the\nsession from outside.",
