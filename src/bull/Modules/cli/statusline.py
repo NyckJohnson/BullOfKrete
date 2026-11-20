@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import TextIO
 
 from bull.Modules.claude_code.Contracts import Provider
@@ -12,6 +13,7 @@ from bull.Modules.usage.Contracts import Usage, UsageSample
 
 _SEPARATOR = " · "
 _PLAIN = "bull"
+_NO_CONTEXT = "ctx \u2013"
 
 
 def run_statusline(
@@ -28,7 +30,10 @@ def run_statusline(
 
     `raw` is the provider's status-line input (stdin). The app is found from the input's
     `cwd`; outside an app the line is just `bull`. The input's usage sample is recorded with
-    `Usage.record`; the line shows it, or the latest recorded sample when the input has none.
+    `Usage.record`; the line shows its 5-hour and weekly figures, or the latest recorded
+    sample's when the input has none. A context-only input sample is merged with the saved
+    sample's 5-hour, weekly and reset values before it is recorded. The final `ctx` part comes
+    only from the input's sample (`ctx –` when it has no context figure).
     Anything that goes wrong prints `bull` (or the line without the failed part, when only
     recording failed) with the details on `err`: the status line must never break the session.
     """
@@ -57,7 +62,10 @@ def _line(
     # The sample is recorded first, so a broken status still stores it.
     sample = _sample(usage, app, given.usage, err)
     data = progress(app).as_json()
-    return _SEPARATOR.join([_PLAIN, *_status_parts(data), *_usage_parts(sample)])
+    context = given.usage.context if given.usage is not None else None
+    return _SEPARATOR.join(
+        [_PLAIN, *_status_parts(data), *_usage_parts(sample), _context_part(context)]
+    )
 
 
 def _sample(
@@ -69,7 +77,9 @@ def _sample(
     """Record `given` (if any) and return the sample to show.
 
     A failed record or read (or a usage store that cannot be built) is reported on `err`;
-    the line is still printed.
+    the line is still printed. A `given` sample with neither a 5-hour nor a weekly figure takes
+    those figures and their resets from the latest saved sample (when there is one), so
+    recording it never erases them.
     """
     try:
         store = usage(app)
@@ -77,6 +87,8 @@ def _sample(
         _report(err, error)
         return given
     if given is not None:
+        if given.five_hour is None and given.weekly is None:
+            given = _merged(store, given, err)
         try:
             store.record(given)
         except Exception as error:  # noqa: BLE001 - recording is best effort; the line still shows
@@ -87,6 +99,21 @@ def _sample(
     except Exception as error:  # noqa: BLE001 - no readable sample: the usage parts are omitted
         _report(err, error)
         return None
+
+
+def _merged(store: Usage, given: UsageSample, err: TextIO) -> UsageSample:
+    """`given` with the saved sample's 5-hour, weekly and reset values; `given` when none.
+
+    A failed read is reported on `err` and `given` is kept as it is.
+    """
+    try:
+        saved = store.latest()
+    except Exception as error:  # noqa: BLE001 - no readable sample: record the input as is
+        _report(err, error)
+        return given
+    if saved is None:
+        return given
+    return replace(saved, time=given.time, context=given.context)
 
 
 def _status_parts(data: Mapping[str, object]) -> list[str]:
@@ -126,6 +153,13 @@ def _usage_parts(sample: UsageSample | None) -> list[str]:
     if sample.weekly is not None:
         parts.append(f"wk {round(sample.weekly)}%")
     return parts
+
+
+def _context_part(context: float | None) -> str:
+    """`ctx z%` from the input's context figure, or `ctx –` when there is none."""
+    if context is None:
+        return _NO_CONTEXT
+    return f"ctx {round(context)}%"
 
 
 def _report(err: TextIO, error: Exception) -> None:
