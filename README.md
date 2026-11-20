@@ -44,7 +44,7 @@ You need Python 3.11+, [uv](https://docs.astral.sh/uv/), git and Claude Code. bu
 Linux.
 
 ```
-uv tool install git+https://github.com/NyckJohnson/bull@v2.0.0
+uv tool install git+https://github.com/NyckJohnson/BullOfKrete@v2.0.0
 bull doctor
 ```
 
@@ -66,7 +66,7 @@ picks up where you left off.
 ## Development
 
 ```
-git clone https://github.com/NyckJohnson/bull && cd bull
+git clone https://github.com/NyckJohnson/BullOfKrete && cd BullOfKrete
 uv sync
 uv run pytest
 ```
