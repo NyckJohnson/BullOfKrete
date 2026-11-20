@@ -427,7 +427,7 @@ when `readers.py` defines `detect`.
 7. usage (depends on: foundation, settings)
 8. stacks (depends on: foundation, settings)
 9. parts (depends on: foundation, settings, stacks)
-10. status (depends on: foundation, gitrepo, events, settings, memo, parts)
+10. status (depends on: foundation, gitrepo, events, settings, memo, parts, usage)
 11. features (depends on: foundation, gitrepo, memo, status)
 12. coverage (depends on: foundation, stacks)
 13. api (depends on: foundation, memo, stacks, parts, status)
@@ -2104,7 +2104,8 @@ when `readers.py` defines `detect`.
 
 ### claude_code
 - Purpose: the provider seam's one implementation: everything specific to Claude Code.
-- Depends on: foundation, settings, usage, stacks, hooks, plugin_text (stacks: contract only, for `CheckItem`)
+- Depends on: foundation, settings, usage, stacks, hooks, plugin_text
+- Note: stacks is used for its contract only, for `CheckItem`.
 - Files: Contracts/__init__.py, mocks/__init__.py | plugin.py, hooks_json.py, launch.py | hook_io.py, app_files.py
 - Changes (context-use-in-the-status-line): hook_io.py
 - Protocol (draft; lives in `Contracts/`):
@@ -2546,4 +2547,5 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-19: /verify device test finished (1 item, fixed); `reference/` deleted as the brief requires at the end of Stage 6; bull accepted — approved by Nicholas Johnson
 - 2026-11-19: moved from ios-pipeline (v1) to bull: state in `.bull/` (status, backlog, `config.toml`, which replaces `.pipeline/config.sh`), commands are `bull …` and the `/bull:*` skills. `reference/` is gone, so the memo's `Reference tests:` lines are historical; a feature that reopens one of those modules has no reference tests to scan. Leftover v1 notes removed from `CLAUDE.md`; `.bull/events.jsonl` untracked — approved by Nicholas Johnson
 - 2026-11-19: first `bull gates --all` after the move to bull — (1) all 26 contract snapshots in `docs/api/` rewritten in bull's layout (grouped by file, source order, defaults shown); compared declaration by declaration with the v1 snapshots, none added, removed or changed (`stacktest` `Case.then` loses its string quotes, same type); (2) `pytest-cov` added to the dev dependencies, since the python_cli stack runs `pytest --cov`; (3) ruff 0.17.4's import-sort and quoted-annotation fixes applied by `ruff check --fix` to foundation, interfaces and stacktest, no behavior change — approved by Nicholas Johnson
-- 2026-11-19: feature context-use-in-the-status-line — the status line shows the session's context-window use (`ctx N%`, from Claude Code's `context_window.used_percentage`; `ctx –` when the input has none; never taken from the saved sample) and records it in usage.json as an optional `context` field (format stays 1). usage contract: `UsageSample.context: float | None = None`; claude_code hook_io.py and cli statusline.py change behavior only. A context-only input never erases the saved 5h/wk figures.
+- 2026-11-19: feature context-use-in-the-status-line — the status line shows the session's context-window use (`ctx N%`, from Claude Code's `context_window.used_percentage`; `ctx –` when the input has none; never taken from the saved sample) and records it in usage.json as an optional `context` field (format stays 1). usage contract: `UsageSample.context: float | None = None`; claude_code hook_io.py and cli statusline.py change behavior only. A context-only input never erases the saved 5h/wk figures — approved by Nicholas Johnson
+- 2026-11-19: memo consistency, found by `bull feature plan` — the build order's status line now lists `usage` (status/cli.py already uses it), and claude_code's note on stacks (contract only, for `CheckItem`) moves off its `Depends on:` line. Memo text only; no code or contract change.
