@@ -1260,7 +1260,7 @@
         "name": "j12"
       },
       {
-        "done": false,
+        "done": true,
         "name": "app-review"
       },
       {
