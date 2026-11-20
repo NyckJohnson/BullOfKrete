@@ -184,6 +184,14 @@
       "slug": "quieter-ios-test-runs",
       "state": "queued",
       "title": "Quieter iOS test runs"
+    },
+    {
+      "added": "2026-11-20T10:45:32Z",
+      "brief": "docs/features/journey-gate-test-count.md",
+      "description": "bull gates --journeys prints '0 tests run' although it runs and passes every journey test (seen on python_cli, 42 tests); pass/fail is right, only the count shown is wrong",
+      "slug": "journey-gate-test-count",
+      "state": "queued",
+      "title": "Journey gate test count"
     }
   ]
 }
