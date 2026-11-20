@@ -504,6 +504,24 @@ def test_statusline_records_a_context_only_sample_as_is_when_nothing_is_saved() 
     assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
 
 
+def test_statusline_context_only_when_latest_raises_records_as_given_and_shows_ctx() -> (
+    None
+):
+    class _LatestBroken(MockUsage):
+        def latest(self) -> UsageSample | None:
+            raise RuntimeError("corrupt usage file")
+
+    usage = _LatestBroken()
+    sample = _sample(None, None, 38)
+
+    run = _Run(provider=_Provider(Path("/tmp/apps/tally"), sample), usage=usage)
+
+    assert run.code == 0
+    assert "corrupt usage file" in run.err.getvalue()
+    assert [c for c in usage.calls if c[0] == "record"] == [("record", (sample,))]
+    assert run.line.endswith("ctx 38%\n")
+
+
 def test_statusline_outside_an_app_has_no_context_part() -> None:
     run = _Run(
         provider=_Provider(Path("/tmp/apps/tally"), _sample(92, 40, 38)), in_app=False
