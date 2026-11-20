@@ -69,7 +69,7 @@ class LiveHooks(Hooks):
             if self._is_stack_repo(app):
                 return _ALLOW
             return self._route(app, event)
-        except Exception as error:  # fail closed: any safeguard failure is reported
+        except Exception as error:  # noqa: BLE001 - fail closed: any safeguard failure is reported
             return HookDecision(event.kind not in _FAIL_CLOSED, _failure_message(error))
 
     def _is_stack_repo(self, app: AppLayout) -> bool:
