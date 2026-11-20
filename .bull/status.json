@@ -875,7 +875,7 @@
       "part": "app",
       "reference_tests": false,
       "scan": null,
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
@@ -906,7 +906,7 @@
           ],
           "kind": "code",
           "number": 3,
-          "state": "pending"
+          "state": "tests"
         }
       ]
     },
