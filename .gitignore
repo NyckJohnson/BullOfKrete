@@ -1,4 +1,4 @@
-# iOS Agent Pipeline
+# bull
 .DS_Store
 .claude/settings.local.json
 
@@ -13,9 +13,13 @@ __pycache__/
 htmlcov/
 dist/
 *.egg-info/
+
+# Xcode (stack_ios fixture project)
 xcuserdata/
 *.xcuserstate
 DerivedData/
+
+# bull state
 .bull/usage.json
 .bull/events.jsonl
 .bull/passes/
