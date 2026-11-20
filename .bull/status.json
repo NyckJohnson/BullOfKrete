@@ -15,10 +15,11 @@
     "checkpoints": [
       "outline-approved",
       "setup",
-      "skeleton"
+      "skeleton",
+      "ui-approved"
     ],
     "slug": "context-use-in-the-status-line",
-    "stage": 3
+    "stage": 4
   },
   "format": 1,
   "kind": "app",
