@@ -1,6 +1,6 @@
-# bull
+# The Bull
 
-bull lets [Claude Code](https://claude.com/claude-code) build and extend apps through a
+The Bull lets [Claude Code](https://claude.com/claude-code) build and extend apps through a
 disciplined, test-first, staged process. It is a Python command (`bull`) plus a Claude Code plugin
 (`/bull:*` commands, specialized subagents and hooks).
 
@@ -53,8 +53,8 @@ bull doctor
 ## Quick start
 
 ```
-bull init ~/apps/tally      # new app folder, git repo and bull files
-bull open ~/apps/tally      # launches Claude Code with the bull plugin
+bull init ~/apps/example      # new app folder, git repo and bull files
+bull open ~/apps/example      # launches Claude Code with the bull plugin
 ```
 
 In Claude Code, run `/bull:discuss`. bull tells you the next step at every point:
