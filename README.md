@@ -32,7 +32,7 @@ You need Python 3.11+, [uv](https://docs.astral.sh/uv/), git and Claude Code. bu
 Linux.
 
 ```
-uv tool install git+https://github.com/NyckJohnson/BullOfKrete@v2.0.0
+uv tool install git+https://github.com/NyckJohnson/BullOfKrete
 bull doctor
 ```
 
