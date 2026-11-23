@@ -779,7 +779,7 @@
         "not_in_spec": 0,
         "time": "2026-11-23T21:43:12.502406Z"
       },
-      "state": "in_progress",
+      "state": "done",
       "units": [
         {
           "attempts": 1,
@@ -1226,11 +1226,11 @@
         "name": "journey-10"
       },
       {
-        "done": false,
+        "done": true,
         "name": "app-review"
       },
       {
-        "done": false,
+        "done": true,
         "name": "fixes"
       },
       {
