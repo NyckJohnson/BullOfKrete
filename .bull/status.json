@@ -11,7 +11,8 @@
   "feature": {
     "applied_contracts": [],
     "checkpoints": [
-      "outline-approved"
+      "outline-approved",
+      "setup"
     ],
     "slug": "accept-tests-for-defensive-error",
     "stage": 2
