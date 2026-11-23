@@ -620,15 +620,38 @@ def test_triage_does_not_ask_the_human_for_an_approved_defensive_case() -> None:
     )
 
 
+def _defensive_bullet() -> str:
+    """Normalized text of the `defensive` bullet alone (up to the `not-in-spec` bullet)."""
+    lines = section(r"stage 5 loop").split("\n")
+    bullet = re.compile(r"^\s*[-*]\s+[*_]*`?{}`?")
+    start = next(
+        i
+        for i, ln in enumerate(lines)
+        if re.match(bullet.pattern.format("defensive"), ln)
+    )
+    end = next(
+        i
+        for i in range(start + 1, len(lines))
+        if re.match(bullet.pattern.format("not-in-spec"), lines[i])
+    )
+    return _norm("\n".join(lines[start:end]))
+
+
 def test_triage_reviewer_confirms_the_five_rules_for_defensive_cases() -> None:
-    has_all(_triage_step(), "reviewer", "five", "rules")
+    has_all(_defensive_bullet(), "reviewer", "five", "rules")
+
+
+def test_triage_reviewer_confirms_before_spec_test_and_log() -> None:
+    bullet = _defensive_bullet()
+    in_order(
+        bullet, "reviewer", "behavior spec", "test-writer", "auto-approved (defensive)"
+    )
 
 
 def test_triage_sends_rejected_or_setting_off_defensive_cases_to_the_human() -> None:
-    step = _triage_step()
-    has_all(step, "false", "ask the human")
-    assert re.search(r"(fails|rejects|rejected|does not meet)", step)
-    in_order(step, "defensive", "false", "not-in-spec")
+    bullet = _defensive_bullet()
+    has_all(bullet, "false", "goes to the human", "not-in-spec")
+    assert re.search(r"(fails|rejects|rejected|does not meet)", bullet)
 
 
 def test_triage_not_in_spec_still_asks_the_human() -> None:
