@@ -772,7 +772,13 @@
       "name": "plugin_text",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-23T21:43:12.502406Z"
+      },
       "state": "in_progress",
       "units": [
         {
