@@ -30,6 +30,9 @@ to the human (decided 2026-11-19: auto-accept, logged).
   4. it changes no contract;
   5. it is cheap (human's addition): no retry loops, waits or timeouts, no extra programs or network
      calls, no re-reading or scanning large files.
+- 2026-11-23, agreed: each case gets a decisions-log line marked "auto-approved". At acceptance (the
+  app's in verify, or a feature's), bull lists every auto-approved case since the last acceptance,
+  and the human can ask for any of them to be removed before accepting. No mention in module reports.
 - First proposal (superseded where the agreed points differ):
   - coverage-analyst gets a fourth class, `defensive`: code reached only when an input or the
     environment is bad (malformed or unreadable file, I/O or subprocess failure, an argument of the
