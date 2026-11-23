@@ -12,10 +12,11 @@
     "applied_contracts": [],
     "checkpoints": [
       "outline-approved",
-      "setup"
+      "setup",
+      "skeleton"
     ],
     "slug": "accept-tests-for-defensive-error",
-    "stage": 2
+    "stage": 3
   },
   "format": 1,
   "kind": "app",
