@@ -18,7 +18,19 @@ to the human (decided 2026-11-19: auto-accept, logged).
 - Precedent: every coverage-triage decisions-log entry since 2026-11-08 kept and specified the
   not-in-spec code (damaged files → `FileFormatError`, failing tool → not ok, unreadable inputs…);
   none was removed.
-- Proposal (to confirm with the human):
+- 2026-11-23, human: the goal — the most common stop is "code-writer added error handling the spec
+  doesn't mention and no test covers it; recommend adding it to the spec and testing it". These
+  should be auto-approved as long as there is no downside.
+- 2026-11-23, agreed: "no downside" means all five hold, otherwise bull asks as today:
+  1. it runs only when something is already wrong (damaged or unreadable file, failing command, bad
+     argument); normal input behaves exactly as before;
+  2. it fails cleanly: raises an error type the module already uses (a new message is fine), or
+     skips the broken item;
+  3. it never writes, deletes or overwrites anything;
+  4. it changes no contract;
+  5. it is cheap (human's addition): no retry loops, waits or timeouts, no extra programs or network
+     calls, no re-reading or scanning large files.
+- First proposal (superseded where the agreed points differ):
   - coverage-analyst gets a fourth class, `defensive`: code reached only when an input or the
     environment is bad (malformed or unreadable file, I/O or subprocess failure, an argument of the
     wrong shape), whose only effect is to fail cleanly through an error the module already uses, or
