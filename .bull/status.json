@@ -10,7 +10,9 @@
   ],
   "feature": {
     "applied_contracts": [],
-    "checkpoints": [],
+    "checkpoints": [
+      "outline-approved"
+    ],
     "slug": "accept-tests-for-defensive-error",
     "stage": 2
   },
@@ -103,7 +105,7 @@
       "part": "app",
       "reference_tests": true,
       "scan": null,
-      "state": "done",
+      "state": "pending",
       "units": [
         {
           "attempts": 2,
@@ -123,7 +125,7 @@
           ],
           "kind": "code",
           "number": 2,
-          "state": "done"
+          "state": "pending"
         },
         {
           "attempts": 1,
@@ -762,7 +764,7 @@
       "part": "app",
       "reference_tests": true,
       "scan": null,
-      "state": "done",
+      "state": "pending",
       "units": [
         {
           "attempts": 1,
@@ -782,7 +784,7 @@
           ],
           "kind": "code",
           "number": 2,
-          "state": "done"
+          "state": "pending"
         },
         {
           "attempts": 2,
@@ -797,7 +799,7 @@
           "state": "done"
         },
         {
-          "attempts": 2,
+          "attempts": 1,
           "files": [
             "commands/prototype.md",
             "commands/build.md",
@@ -806,7 +808,7 @@
           ],
           "kind": "code",
           "number": 4,
-          "state": "done"
+          "state": "pending"
         },
         {
           "attempts": 2,
@@ -841,7 +843,7 @@
           ],
           "kind": "code",
           "number": 7,
-          "state": "done"
+          "state": "pending"
         },
         {
           "attempts": 1,
