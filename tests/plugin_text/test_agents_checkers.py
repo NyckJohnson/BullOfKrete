@@ -395,7 +395,7 @@ def test_coverage_analyst_defensive_rule_2_fails_cleanly_through_an_existing_err
     None
 ):
     has_all("coverage-analyst", "error type", "module already uses")
-    has_any("coverage-analyst", "new message", "skips the broken item", "skip")
+    has_all("coverage-analyst", "new message", "skips the broken item")
 
 
 def test_coverage_analyst_defensive_rule_3_never_writes_deletes_or_overwrites() -> None:
@@ -416,16 +416,35 @@ def test_coverage_analyst_defensive_report_line_names_the_condition_and_the_erro
     None
 ):
     has_all("coverage-analyst", "bad condition")
-    has_any(
-        "coverage-analyst",
-        "error or skip",
-        "error or the skip",
-        "error or the item skipped",
-    )
+    has_all("coverage-analyst", "the error or the item skipped")
 
 
-def test_coverage_analyst_anything_else_is_not_in_spec() -> None:
-    has_all("coverage-analyst", "anything else", "not-in-spec")
+def _defensive_entry() -> str:
+    norm = _norm(_body("coverage-analyst"))
+    start = norm.find("**defensive**")
+    end = norm.find("**not-in-spec**", start)
+    assert start >= 0 and end > start, "defensive entry not found"
+    return norm[start:end]
+
+
+def test_coverage_analyst_unspecified_error_handling_that_breaks_a_rule_is_not_in_spec() -> (
+    None
+):
+    entry = _defensive_entry()
+    assert "breaks any rule" in entry
+    assert "not-in-spec" in entry
+    assert entry.find("breaks any rule") < entry.rfind("not-in-spec")
+
+
+def test_coverage_analyst_tie_break_test_could_reach_is_defensive_none_is_exempt() -> (
+    None
+):
+    norm = _norm(_body("coverage-analyst"))
+    has_all("coverage-analyst", "could reach", "no test could reach")
+    idx = norm.find("no test could reach")
+    window = norm[max(0, idx - 250) : idx + 250]
+    assert "defensive" in window
+    assert "exempt" in window
 
 
 def test_coverage_analyst_defensive_adds_no_marker_and_writes_no_test() -> None:
@@ -453,6 +472,18 @@ def test_reviewer_failing_defensive_case_is_a_blocker_naming_the_rule() -> None:
     tail = norm[idx:]
     assert "blocker" in tail
     assert "names the rule" in tail or "naming the rule" in tail
+
+
+def test_reviewer_failing_defensive_blocker_is_about_the_spec_and_goes_to_the_human() -> (
+    None
+):
+    section = _norm(_section("reviewer", "Defensive cases"))
+    assert "not the code" in section
+    assert "spec" in section
+    assert "orchestrator" in section
+    assert "human" in section
+    assert "no code-writer retry" in section or "no retry" in section
+    assert "no attempt" in section
 
 
 # --- journey-test-writer -----------------------------------------------------------------
