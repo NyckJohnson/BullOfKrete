@@ -654,6 +654,21 @@ def test_triage_sends_rejected_or_setting_off_defensive_cases_to_the_human() -> 
     assert re.search(r"(fails|rejects|rejected|does not meet)", bullet)
 
 
+def test_triage_reviewer_brief_lists_the_defensive_cases_and_scope() -> None:
+    bullet = _defensive_bullet()
+    has_all(bullet, "brief", "scope:")
+    assert re.search(
+        r"(lists|listing|names|naming) (the |each )?(defensive )?cases", bullet
+    )
+
+
+def test_triage_a_rejection_uses_no_attempt() -> None:
+    assert re.search(
+        r"(uses no attempt|no attempt|not an attempt|does not use an attempt)",
+        _defensive_bullet(),
+    )
+
+
 def test_triage_not_in_spec_still_asks_the_human() -> None:
     has_all(_triage_step(), "not-in-spec", "ask the human", "remove the code")
 
