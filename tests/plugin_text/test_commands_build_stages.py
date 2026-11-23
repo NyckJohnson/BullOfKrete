@@ -786,3 +786,84 @@ def test_feature_no_setup_needed_puts_the_note_in_the_commit_message() -> None:
 def test_feature_no_skeleton_needed_puts_the_note_in_the_commit_message() -> None:
     norm = _norm(_body("feature"))
     assert re.search(r"chore\(<slug>\):[^.]*no skeleton", norm)
+
+
+# --- defensive error handling in coverage triage (accept-tests-for-defensive-error) -----
+
+
+def test_build_stop_list_still_names_not_in_spec_and_contradicts() -> None:
+    has_all("build", "contradicts", "not-in-spec")
+
+
+def test_build_defensive_case_is_not_a_stop() -> None:
+    assert any(
+        "defensive" in x and ("not a stop" in x or "not stop" in x or "no stop" in x)
+        for x in sentences("build")
+    )
+
+
+def test_build_defensive_stops_when_setting_false_or_reviewer_rejects() -> None:
+    has_all("build", "coverage.auto_approve_defensive", "reviewer")
+    assert any(
+        "defensive" in x and "false" in x and "reject" in x for x in sentences("build")
+    )
+
+
+def test_verify_lists_auto_approved_defensive_lines_since_app_accepted() -> None:
+    has_all("verify", "auto-approved (defensive)", "decisions log", "since")
+    assert any(
+        "auto-approved (defensive)" in x and "app-accepted" in x
+        for x in sentences("verify")
+    )
+
+
+def test_verify_asks_whether_to_remove_any_defensive_case() -> None:
+    assert any(
+        "auto-approved (defensive)" in x and "remove" in x for x in sentences("verify")
+    )
+
+
+def test_verify_defensive_removal_goes_through_the_owning_module() -> None:
+    has_all("verify", "owning module", "spec line", "code", "test")
+    assert any(
+        "removal" in x and "owning module" in x for x in sentences("verify")
+    ) or any("remove" in x and "owning module" in x for x in sentences("verify"))
+
+
+def test_verify_defensive_listing_comes_before_acceptance() -> None:
+    in_order(
+        "verify",
+        "hands-on",
+        "auto-approved (defensive)",
+        "ask them to accept the app",
+        "on acceptance",
+        "bull status checkpoint app-accepted",
+    )
+
+
+def test_feature_lists_auto_approved_defensive_lines_since_the_trunk() -> None:
+    has_all("feature", "auto-approved (defensive)", "decisions log")
+    assert any(
+        "auto-approved (defensive)" in x and ("trunk" in x or "feature's start" in x)
+        for x in sentences("feature")
+    )
+
+
+def test_feature_asks_whether_to_remove_any_defensive_case() -> None:
+    assert any(
+        "auto-approved (defensive)" in x and "remove" in x for x in sentences("feature")
+    )
+
+
+def test_feature_defensive_removal_goes_through_the_owning_module() -> None:
+    has_all("feature", "owning module")
+    assert any("owning module" in x and ("remov" in x) for x in sentences("feature"))
+
+
+def test_feature_defensive_listing_comes_before_acceptance() -> None:
+    in_order(
+        "feature",
+        "auto-approved (defensive)",
+        "on acceptance",
+        "bull status checkpoint accepted",
+    )

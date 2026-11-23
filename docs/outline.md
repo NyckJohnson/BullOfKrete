@@ -2096,16 +2096,20 @@ when `readers.py` defines `detect`.
       module already uses (a new message is fine) or skips the broken item; (3) it never writes,
       deletes or overwrites anything; (4) it changes no contract; (5) it is cheap: no retry loops,
       waits or timeouts, no extra programs or network calls, no re-reading or scanning large files.
-      Its report line names the bad condition and the error or skip. Anything else is `not-in-spec`.
+      Its report line names the bad condition and the error or skip. Unspecified error handling that
+      breaks any rule is `not-in-spec`. Tie-break with `exempt`: handling a test could reach is
+      `defensive` (it gets a test); handling no test could reach stays `exempt`.
     - orchestrator, Stage 5 loop's coverage triage: when `coverage.auto_approve_defensive` is true
-      (the default; read with `bull config show`), each `defensive` case is added to the module's
-      behavior spec, tested by test-writer from the spec, and logged in the decisions log marked
-      "auto-approved (defensive)"; no question to the human. The reviewer confirms each case meets
-      the five rules; one that fails, and every case when the setting is false, goes to the human as
-      `not-in-spec` does today. Reference-test and adoption legacy-test scans are unchanged: their
+      (the default; read with `bull config show`), the reviewer first confirms each `defensive` case
+      meets the five rules; each confirmed case is then added to the module's behavior spec, tested
+      by test-writer from the spec, and logged in the decisions log marked "auto-approved
+      (defensive)"; no question to the human. A case the reviewer rejects, and every case when the
+      setting is false, goes to the human as `not-in-spec` does today (nothing specified, tested or
+      logged before the answer). Reference-test and adoption legacy-test scans are unchanged: their
       `not-in-spec` still asks.
     - reviewer: when its brief lists defensive cases, it checks each against the five rules and
-      reports a failing one as a blocker naming the rule.
+      reports a failing one as a blocker naming the rule. Such a blocker is about the spec addition,
+      not the code: the orchestrator takes the case to the human (no code-writer retry, no attempt).
     - build: a `defensive` case is not a stop (unless the setting is false or the reviewer rejects it).
     - verify and feature: before asking for acceptance, the orchestrator lists every
       "auto-approved (defensive)" decisions-log line since the last acceptance (the

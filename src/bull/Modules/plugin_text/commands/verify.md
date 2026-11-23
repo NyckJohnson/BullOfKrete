@@ -41,7 +41,14 @@ changes), and take the feature's acceptance and next step from `/bull:feature`, 
    - **later**: queue it with `bull feature add "<Title>: <what they said>"`;
    - **drop**: note it and move on.
 
-   Retest each fix with the human. Repeat until the list is empty, then ask them to accept the app.
+   Retest each fix with the human. Repeat until the list is empty.
+
+   Then list every line in the decisions log marked "auto-approved (defensive)" since the
+   `app-accepted` tag (on the first build, since the start), with its module and what the code
+   does. These are the error-handling cases coverage triage added without asking. Ask the human
+   whether to remove any auto-approved (defensive) case. Route each removal to the owning module's
+   unit as in step 7: delete its spec line, and remove its code and test. Then ask them to accept
+   the app.
 9. On acceptance:
    1. Tick `hands-on`.
    2. Run `bull status checkpoint app-accepted`.
