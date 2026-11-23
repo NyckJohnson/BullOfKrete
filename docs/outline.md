@@ -243,6 +243,11 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
 - context-use-in-the-status-line (accepted 2026-11-20): the status line ends with `· ctx N%`, the
   session's context-window use from Claude Code's `context_window.used_percentage`, or `ctx –` when
   the input has none; recorded in usage.json as an optional `context` field (format stays 1).
+- accept-tests-for-defensive-error (accepted 2026-11-23): coverage triage auto-approves defensive
+  error handling that meets five no-downside rules (coverage-analyst class `defensive`, confirmed by
+  the reviewer first); each case is specified, tested and logged "auto-approved (defensive)", and
+  listed for review at acceptance. Setting `coverage.auto_approve_defensive` (default true) turns
+  it off.
 
 ## Data models
 In-memory types are `@dataclass(frozen=True)` and enums in each module's `Contracts` (see the

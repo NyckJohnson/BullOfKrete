@@ -8,17 +8,7 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": {
-    "applied_contracts": [],
-    "checkpoints": [
-      "outline-approved",
-      "setup",
-      "skeleton",
-      "ui-approved"
-    ],
-    "slug": "accept-tests-for-defensive-error",
-    "stage": 6
-  },
+  "feature": null,
   "format": 1,
   "kind": "app",
   "modules": [
@@ -1215,31 +1205,7 @@
     }
   ],
   "pause": null,
-  "plan": {
-    "items": [
-      {
-        "done": true,
-        "name": "mocks-check"
-      },
-      {
-        "done": true,
-        "name": "journey-10"
-      },
-      {
-        "done": true,
-        "name": "app-review"
-      },
-      {
-        "done": true,
-        "name": "fixes"
-      },
-      {
-        "done": false,
-        "name": "hands-on"
-      }
-    ],
-    "label": "verify"
-  },
+  "plan": null,
   "stage": 6,
   "waiting": null
 }
