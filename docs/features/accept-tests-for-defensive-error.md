@@ -10,4 +10,24 @@ to the human (decided 2026-11-19: auto-accept, logged).
 
 ## Discussion notes
 
+- 2026-11-23: where the rule lives today: `orchestrator.md` Stage 5 loop step 4 ("`not-in-spec`:
+  ask the human…"), `agents/coverage-analyst.md` (classes missed / exempt / not-in-spec),
+  `commands/build.md` step 7 (coverage findings that need the human). All in module plugin_text;
+  `PluginText` contract unchanged (Markdown only). Tests pinning the wording:
+  `tests/plugin_text/test_orchestrator.py`, `tests/plugin_text/test_agents_checkers.py`.
+- Precedent: every coverage-triage decisions-log entry since 2026-11-08 kept and specified the
+  not-in-spec code (damaged files → `FileFormatError`, failing tool → not ok, unreadable inputs…);
+  none was removed.
+- Proposal (to confirm with the human):
+  - coverage-analyst gets a fourth class, `defensive`: code reached only when an input or the
+    environment is bad (malformed or unreadable file, I/O or subprocess failure, an argument of the
+    wrong shape), whose only effect is to fail cleanly through an error the module already uses, or
+    to skip the bad item. Everything else stays `not-in-spec`.
+  - The orchestrator adds each `defensive` case to the module's behavior spec as a "Guards
+    (defensive, auto-accepted)" line, briefs test-writer from the spec, and logs it.
+  - Still asks: new or changed output on a success path, a new error the caller can't already get,
+    a contract change, anything that writes, deletes or overwrites, refusing an input that used to
+    work.
+  - Scope: coverage triage only. Reference-scan and adoption-scan `not-in-spec` still ask.
+
 ## Agreed scope
