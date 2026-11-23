@@ -108,6 +108,30 @@ def test_coverage_exclude_extra_is_an_empty_list_for_app_and_part() -> None:
     assert _file_layers(s) == {Layer.APP, Layer.PART}
 
 
+def test_coverage_auto_approve_defensive_is_a_bool_defaulting_to_true() -> None:
+    s = _get("coverage.auto_approve_defensive")
+    assert s.type is SettingType.BOOL
+    assert s.default is True
+
+
+def test_coverage_auto_approve_defensive_is_set_by_bull_user_and_app_only() -> None:
+    s = _get("coverage.auto_approve_defensive")
+    assert s.layers == {Layer.BULL, Layer.USER, Layer.APP}
+
+
+def test_coverage_auto_approve_defensive_has_its_description() -> None:
+    assert _get("coverage.auto_approve_defensive").description == (
+        "Coverage triage auto-approves defensive error handling "
+        "(logged, listed at acceptance)"
+    )
+
+
+def test_parse_coverage_auto_approve_defensive_accepts_true_and_false() -> None:
+    s = _get("coverage.auto_approve_defensive")
+    assert parse_value(s, "true") is True
+    assert parse_value(s, "false") is False
+
+
 def test_reference_dir_defaults_to_reference_for_app_only() -> None:
     s = _get("reference_dir")
     assert s.type is SettingType.STR

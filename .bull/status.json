@@ -107,8 +107,14 @@
       "name": "settings",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
-      "state": "pending",
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-23T21:27:49.843480Z"
+      },
+      "state": "in_progress",
       "units": [
         {
           "attempts": 2,
@@ -128,7 +134,7 @@
           ],
           "kind": "code",
           "number": 2,
-          "state": "pending"
+          "state": "done"
         },
         {
           "attempts": 1,
