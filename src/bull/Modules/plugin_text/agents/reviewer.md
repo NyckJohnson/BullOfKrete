@@ -106,6 +106,23 @@ Check every `coverage-exempt` marker in your scope:
 
 A marker that does not hold is a blocker.
 
+## Defensive cases
+
+A brief may list `defensive` cases from the coverage-analyst: error handling the spec doesn't
+mention, which the orchestrator wants to add to the spec without asking the human. Check each case
+against the analyst's five no-downside rules:
+
+1. It runs only when something is already wrong, and normal input behaves as before.
+2. It fails cleanly through an error type the module already uses, or skips the broken item.
+3. It never writes, deletes or overwrites anything.
+4. It changes no contract.
+5. It is cheap: no retry loops, waits or timeouts, no extra programs or network calls, no
+   re-reading or scanning large files.
+
+A case that fails any rule is a blocker naming the rule it breaks. Such a blocker is about the
+spec addition, not the code: the orchestrator takes the case to the human, with no code-writer
+retry and no attempt used.
+
 ## `SCOPE: stack`
 
 You are in a stack repo, not an app. Review the whole stack folder against `DESIGN.md` and the Stack
