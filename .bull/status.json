@@ -1222,7 +1222,7 @@
         "name": "mocks-check"
       },
       {
-        "done": false,
+        "done": true,
         "name": "journey-10"
       },
       {

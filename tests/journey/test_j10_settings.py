@@ -41,6 +41,7 @@ def test_settings_set_in_the_app_and_user_layers_allow_a_fourth_attempt(
     assert "max_attempts = 5 (app)" in shown
     assert "review_mode = combined (bull default)" in shown
     assert "models.reviewer = opus (user)" in shown
+    assert "coverage.auto_approve_defensive = true (bull default)" in shown
 
     as_json = json.loads(bull_ok(bull, "config", "show", "--json", cwd=app).stdout)
     assert "max_attempts" in json.dumps(as_json)
