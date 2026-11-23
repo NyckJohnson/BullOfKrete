@@ -84,7 +84,8 @@ pytest, mypy, ruff, xcodebuild. Also drop v1's platform-flavoured phrases:
 ### 1.5 Settings named in the text
 Only real keys: `max_attempts`, `max_files_per_unit`, `review_mode` (`combined`|`split`),
 `base_branch`, `reference_dir`, `models.<agent>` (where `<agent>` is one of the nine agents),
-`usage.pause_5h`, `usage.pause_weekly`. `bull config show` lists them; `bull config set` changes them.
+`usage.pause_5h`, `usage.pause_weekly`, `coverage.auto_approve_defensive` (feature
+accept-tests-for-defensive-error). `bull config show` lists them; `bull config set` changes them.
 
 ### 1.6 Never in any file
 `ios-pipeline`, `.pipeline/`, `pipeline-resume`, `pipeline-status`, `ui-test-writer`, `config.sh`,
