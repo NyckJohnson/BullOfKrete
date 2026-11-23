@@ -1215,7 +1215,31 @@
     }
   ],
   "pause": null,
-  "plan": null,
+  "plan": {
+    "items": [
+      {
+        "done": true,
+        "name": "mocks-check"
+      },
+      {
+        "done": false,
+        "name": "journey-10"
+      },
+      {
+        "done": false,
+        "name": "app-review"
+      },
+      {
+        "done": false,
+        "name": "fixes"
+      },
+      {
+        "done": false,
+        "name": "hands-on"
+      }
+    ],
+    "label": "verify"
+  },
   "stage": 6,
   "waiting": null
 }
