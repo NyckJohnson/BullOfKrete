@@ -573,6 +573,79 @@ def test_coverage_triage_classifications() -> None:
     )
 
 
+def _triage_step() -> str:
+    """Normalized text of the loop's coverage-triage step (up to the full-gates step)."""
+    norm = _norm(section(r"stage 5 loop"))
+    start = norm.index("coverage triage.")
+    end = norm.index("bull gates <m>` without".replace("`", ""), start)
+    return norm[start:end]
+
+
+def _refscan_step() -> str:
+    norm = _norm(section(r"stage 5 loop"))
+    start = norm.index("reference-test scan.")
+    return norm[start : norm.index("coverage triage.", start)]
+
+
+def test_triage_names_defensive_as_a_coverage_analyst_class() -> None:
+    step = _triage_step()
+    has_all(step, "coverage-analyst", "missed", "exempt", "defensive", "not-in-spec")
+
+
+def test_triage_reads_the_auto_approve_setting_with_config_show() -> None:
+    has_all(
+        _triage_step(),
+        "coverage.auto_approve_defensive",
+        "bull config show",
+        "true",
+    )
+
+
+def test_triage_adds_defensive_case_to_spec_tests_it_and_logs_it() -> None:
+    step = _triage_step()
+    has_all(
+        step,
+        "behavior spec",
+        "test-writer",
+        "from the spec",
+        "decisions log",
+        "auto-approved (defensive)",
+    )
+    in_order(step, "defensive", "behavior spec", "test-writer", "decisions log")
+
+
+def test_triage_does_not_ask_the_human_for_an_approved_defensive_case() -> None:
+    assert re.search(
+        r"(without asking|no question|not ask|without a question)", _triage_step()
+    )
+
+
+def test_triage_reviewer_confirms_the_five_rules_for_defensive_cases() -> None:
+    has_all(_triage_step(), "reviewer", "five", "rules")
+
+
+def test_triage_sends_rejected_or_setting_off_defensive_cases_to_the_human() -> None:
+    step = _triage_step()
+    has_all(step, "false", "ask the human")
+    assert re.search(r"(fails|rejects|rejected|does not meet)", step)
+    in_order(step, "defensive", "false", "not-in-spec")
+
+
+def test_triage_not_in_spec_still_asks_the_human() -> None:
+    has_all(_triage_step(), "not-in-spec", "ask the human", "remove the code")
+
+
+def test_defensive_rule_lives_in_triage_not_in_the_reference_scan() -> None:
+    scan = _refscan_step()
+    assert "defensive" not in scan
+    assert "auto_approve_defensive" not in scan
+    assert "auto-approved" not in scan
+
+
+def test_reference_scan_not_in_spec_still_goes_to_the_human() -> None:
+    has_all(_refscan_step(), "contradicts", "not-in-spec", "ask the human")
+
+
 def test_full_gates_run_sits_between_coverage_triage_and_the_merge() -> None:
     norm = _norm(section(r"stage 5 loop"))
     start = norm.index("--coverage-report") + len("--coverage-report")
