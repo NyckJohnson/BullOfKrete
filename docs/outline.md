@@ -2098,11 +2098,12 @@ when `readers.py` defines `detect`.
       waits or timeouts, no extra programs or network calls, no re-reading or scanning large files.
       Its report line names the bad condition and the error or skip. Anything else is `not-in-spec`.
     - orchestrator, Stage 5 loop's coverage triage: when `coverage.auto_approve_defensive` is true
-      (the default; read with `bull config show`), each `defensive` case is added to the module's
-      behavior spec, tested by test-writer from the spec, and logged in the decisions log marked
-      "auto-approved (defensive)"; no question to the human. The reviewer confirms each case meets
-      the five rules; one that fails, and every case when the setting is false, goes to the human as
-      `not-in-spec` does today. Reference-test and adoption legacy-test scans are unchanged: their
+      (the default; read with `bull config show`), the reviewer first confirms each `defensive` case
+      meets the five rules; each confirmed case is then added to the module's behavior spec, tested
+      by test-writer from the spec, and logged in the decisions log marked "auto-approved
+      (defensive)"; no question to the human. A case the reviewer rejects, and every case when the
+      setting is false, goes to the human as `not-in-spec` does today (nothing specified, tested or
+      logged before the answer). Reference-test and adoption legacy-test scans are unchanged: their
       `not-in-spec` still asks.
     - reviewer: when its brief lists defensive cases, it checks each against the five rules and
       reports a failing one as a blocker naming the rule.
