@@ -124,7 +124,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
      why.
 10. **Settings** — Dana runs `bull config set max_attempts 5` in her app; `bull config show` lists
     `max_attempts = 5 (app)`, `review_mode = combined (bull default)`,
-    `coverage.auto_approve_defensive = true (bull default)` and `models.reviewer` from her user layer (`~/.config/bull/config.toml`). Ends when `bull status attempt` allows a 4th attempt.
+    `coverage.auto_approve_defensive = true (bull default)` and `models.reviewer` from her user layer
+    (`~/.config/bull/config.toml`). Ends when `bull status attempt` allows a 4th attempt.
     - Failure path: `bull config set max_attempts many` is refused with the expected type; a
       hand-edited `config.toml` with an unknown key makes `bull status` fail naming the file, line and
       key.
