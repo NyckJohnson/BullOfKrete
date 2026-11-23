@@ -674,7 +674,7 @@ design, nothing that only works on the author's machine).
 
 ### agents/coverage-analyst.md
 `description: Stage 5. Explains why each uncovered block of a module is uncovered and classifies it
-as missed, exempt or not-in-spec.` `tools: Read, Grep, Glob, Bash, Edit`. v1's content unchanged
+as missed, exempt, defensive or not-in-spec.` `tools: Read, Grep, Glob, Bash, Edit`. v1's content unchanged
 except commands and §1.4 (marker syntax "as the stack rules show": `<comment> coverage-exempt:
 <reason>`, `coverage-exempt-begin: <reason>` … `coverage-exempt-end`, `coverage-exempt-file:
 <reason>` within the first 10 lines).
