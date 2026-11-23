@@ -1197,11 +1197,7 @@
       ]
     }
   ],
-  "pause": {
-    "reason": "weekly usage 95%; feature accept-tests-for-defensive-error at stage 1 (discuss), not begun",
-    "since": "2026-11-20T21:37:09.973058Z",
-    "unit": null
-  },
+  "pause": null,
   "plan": null,
   "stage": 6,
   "waiting": null
