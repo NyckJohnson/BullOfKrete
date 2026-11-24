@@ -32,7 +32,7 @@ _CHECKPOINTS = frozenset(
         "adopted",
     }
 )
-_TAG_PATTERNS = ("module/*", "feature/*", "adopt/*")
+_TAG_PATTERNS = ("done/*", "module/*", "feature/*", "adopt/*")
 
 
 def _is_pipeline_tag(name: str) -> bool:
