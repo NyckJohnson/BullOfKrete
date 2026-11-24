@@ -619,7 +619,7 @@
           ],
           "kind": "code",
           "number": 3,
-          "state": "pending"
+          "state": "tests"
         },
         {
           "attempts": 1,

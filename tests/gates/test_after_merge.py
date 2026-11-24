@@ -101,6 +101,67 @@ def test_skip_for_a_missing_branch_is_refused() -> None:
     assert exc.value.message == "no branch no/such"
 
 
+def test_skip_refuses_a_name_that_is_both_a_branch_and_a_tag() -> None:
+    git, passes = setup([])
+    git.branches.add("module/Counter")
+    git.tag_names.append("module/Counter")
+    with pytest.raises(BullError) as exc:
+        after_merge_module.after_merge_skip(
+            APP, "module/Counter", git, passes, BOOKKEEPING
+        )
+    assert exc.value.message == "module/Counter names both a branch and a tag"
+    assert exc.value.fix == "use `refs/heads/module/Counter`"
+
+
+def test_skip_refusal_for_a_shared_name_reads_nothing_more() -> None:
+    git, passes = setup([])
+    git.branches.add("module/Counter")
+    git.tag_names.append("module/Counter")
+    with pytest.raises(BullError):
+        after_merge_module.after_merge_skip(
+            APP, "module/Counter", git, passes, BOOKKEEPING
+        )
+    assert not [c for c in git.calls if c[0] == "changed_paths"]
+    assert passes.recorded == []
+
+
+def test_skip_accepts_a_branch_whose_name_is_only_a_tag_prefix() -> None:
+    git, passes = setup([])
+    git.branches.add("module/Counter")
+    git.tag_names.append("module/Counter-v2")
+    assert (
+        after_merge_module.after_merge_skip(
+            APP, "module/Counter", git, passes, BOOKKEEPING
+        )
+        == RECORD
+    )
+
+
+def test_skip_accepts_a_branch_with_no_tag_of_that_name() -> None:
+    git, passes = setup([])
+    git.branches.add("module/Counter")
+    assert (
+        after_merge_module.after_merge_skip(
+            APP, "module/Counter", git, passes, BOOKKEEPING
+        )
+        == RECORD
+    )
+
+
+def test_skip_accepts_refs_heads_even_when_the_name_is_also_a_tag() -> None:
+    git, passes = setup([])
+    git.heads["refs/heads/module/Counter"] = BRANCH_SHA
+    git.branches.add("module/Counter")
+    git.tag_names.append("module/Counter")
+    assert (
+        after_merge_module.after_merge_skip(
+            APP, "refs/heads/module/Counter", git, passes, BOOKKEEPING
+        )
+        == RECORD
+    )
+    assert ("head", (ROOT, "refs/heads/module/Counter")) in git.calls
+
+
 @pytest.mark.parametrize(
     ("entry", "path", "matches"),
     [
@@ -245,4 +306,29 @@ def test_after_merge_with_a_missing_branch_is_refused(tmp_path: Path) -> None:
     rig = merged_rig(tmp_path, [])
     with pytest.raises(BullError):
         rig.run(GateMode.AFTER_MERGE, branch="no/such")
+    assert rig.runner.calls == []
+
+
+def test_after_merge_refuses_a_name_that_is_both_a_branch_and_a_tag(
+    tmp_path: Path,
+) -> None:
+    rig = merged_rig(tmp_path, [])
+    rig.git.branches.add("feature/x")
+    rig.git.tag_names.append("feature/x")
+    with pytest.raises(BullError) as exc:
+        after_merge(rig)
+    assert exc.value.message == "feature/x names both a branch and a tag"
+    assert exc.value.fix == "use `refs/heads/feature/x`"
+    assert rig.runner.calls == []
+    assert rig.passes.recorded == []
+
+
+def test_after_merge_accepts_refs_heads_for_a_shared_name(tmp_path: Path) -> None:
+    rig = merged_rig(tmp_path, ["docs/api/Counter.md"])
+    rig.git.heads["refs/heads/feature/x"] = BRANCH_SHA
+    rig.git.branches.add("feature/x")
+    rig.git.tag_names.append("feature/x")
+    run = rig.run(GateMode.AFTER_MERGE, branch="refs/heads/feature/x")
+    assert run.verdict is Verdict.PASS
+    assert run.note == "merge holds the gated code"
     assert rig.runner.calls == []
