@@ -17,7 +17,7 @@
       "ui-approved"
     ],
     "slug": "module-tag-and-branch-share-a-name",
-    "stage": 5
+    "stage": 6
   },
   "format": 1,
   "kind": "app",
@@ -1239,7 +1239,75 @@
     }
   ],
   "pause": null,
-  "plan": null,
+  "plan": {
+    "items": [
+      {
+        "done": true,
+        "name": "mocks-check"
+      },
+      {
+        "done": true,
+        "name": "j1"
+      },
+      {
+        "done": true,
+        "name": "j2"
+      },
+      {
+        "done": true,
+        "name": "j3"
+      },
+      {
+        "done": true,
+        "name": "j4"
+      },
+      {
+        "done": true,
+        "name": "j5"
+      },
+      {
+        "done": true,
+        "name": "j6"
+      },
+      {
+        "done": true,
+        "name": "j7"
+      },
+      {
+        "done": true,
+        "name": "j8"
+      },
+      {
+        "done": true,
+        "name": "j9"
+      },
+      {
+        "done": true,
+        "name": "j10"
+      },
+      {
+        "done": true,
+        "name": "j11"
+      },
+      {
+        "done": true,
+        "name": "j12"
+      },
+      {
+        "done": false,
+        "name": "app-review"
+      },
+      {
+        "done": false,
+        "name": "fixes"
+      },
+      {
+        "done": false,
+        "name": "hands-on"
+      }
+    ],
+    "label": "verify"
+  },
   "stage": 6,
   "waiting": null
 }

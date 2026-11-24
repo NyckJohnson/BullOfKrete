@@ -119,3 +119,51 @@ def test_a_dirty_working_tree_passes_the_gates_without_recording_and_says_why(
     refused = bull("hook", "before-shell", cwd=app, stdin=_shell_call(app, MERGE))
     assert refused.returncode == 2
     assert "no recorded full gate pass" in refused.stdout + refused.stderr
+
+
+def test_a_module_name_that_is_both_a_branch_and_a_tag_is_refused_until_spelled_in_full(
+    bull: BullRunner, tmp_path: Path, journey_env: dict[str, str]
+) -> None:
+    env = journey_env
+    app = _counter_branch_after_fast_gates(bull, tmp_path, env)
+    head = git_out(app, env, "rev-parse", "module/Counter")
+    # Record the full pass for the branch head, then add the clashing tag.
+    git(app, env, "switch", "module/Counter")
+    bull_ok(bull, "gates", "Counter", cwd=app)
+    assert (app / ".bull" / "passes" / f"{head}.json").is_file()
+    git(app, env, "switch", "main")
+    git(app, env, "tag", "module/Counter", "main")
+
+    # The guard refuses the ambiguous name, naming both and suggesting the full ref.
+    refused = bull("hook", "before-shell", cwd=app, stdin=_shell_call(app, MERGE))
+    assert refused.returncode == 2
+    message = refused.stdout + refused.stderr
+    assert "module/Counter" in message
+    assert "branch" in message
+    assert "tag" in message
+    assert "refs/heads/module/Counter" in message
+
+    # After-merge refuses it the same way (exit 1).
+    ambiguous = bull("gates", "--after-merge", "module/Counter", cwd=app)
+    assert ambiguous.returncode == 1
+    after = ambiguous.stdout + ambiguous.stderr
+    assert "branch" in after
+    assert "tag" in after
+    assert "refs/heads/module/Counter" in after
+
+    # The full ref is allowed, and the merge goes through the branch, not the tag.
+    full_ref = "git merge --no-ff refs/heads/module/Counter"
+    allowed = bull("hook", "before-shell", cwd=app, stdin=_shell_call(app, full_ref))
+    assert allowed.returncode == 0, allowed.stdout + allowed.stderr
+    merged = run_cmd(
+        ["git", "merge", "--no-ff", "-m", "Merge Counter", "refs/heads/module/Counter"],
+        app,
+        env,
+    )
+    assert merged.returncode == 0, merged.stdout + merged.stderr
+    parents = git_out(app, env, "rev-list", "--parents", "-n", "1", "HEAD").split()
+    assert head in parents[1:]
+    assert (app / "src/Modules/Counter/counter.fx").is_file()
+
+    ok = bull("gates", "--after-merge", "refs/heads/module/Counter", cwd=app)
+    assert ok.returncode == 0, ok.stdout + ok.stderr

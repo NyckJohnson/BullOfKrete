@@ -77,7 +77,7 @@ def _build_module(
     bull_ok(bull, "api", module, "--write", cwd=app)
     bull_ok(bull, "status", "module", module, "done", cwd=app)
     commit_all(app, env, f"chore: {module} done")
-    tag_checkpoint(bull, app, env, f"module/{module}")
+    tag_checkpoint(bull, app, env, f"done/{module}")
 
 
 def test_build_a_small_app_end_to_end_ends_with_every_unit_done_and_every_tag(
@@ -164,11 +164,23 @@ def test_build_a_small_app_end_to_end_ends_with_every_unit_done_and_every_tag(
         "setup",
         "skeleton",
         "ui-approved",
-        "module/Store",
-        "module/Counter",
+        "done/Store",
+        "done/Counter",
         "app-accepted",
     ):
         assert expected in tags
+    # A finished module's tag never shares its branch's name.
+    for module in ("Store", "Counter"):
+        tag = bull_ok(
+            bull, "status", "ref", "tag", f"done/{module}", cwd=app
+        ).stdout.strip()
+        branch_name = bull_ok(
+            bull, "status", "ref", "module", module, cwd=app
+        ).stdout.strip()
+        assert tag == f"done/{module}"
+        assert tag != branch_name
+        assert git(app, env, "tag", "--list", tag).stdout.strip() == tag
+        assert git(app, env, "tag", "--list", branch_name).stdout.strip() == ""
     assert git_out(app, env, "status", "--porcelain") == ""
 
 

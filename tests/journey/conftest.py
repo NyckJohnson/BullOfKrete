@@ -325,7 +325,7 @@ def build_tally_module(
     bull_ok(bull, "api", module, "--write", cwd=app)
     bull_ok(bull, "status", "module", module, "done", cwd=app)
     commit_all(app, env, f"chore: {module} done")
-    tag_checkpoint(bull, app, env, f"module/{module}")
+    tag_checkpoint(bull, app, env, f"done/{module}")
 
 
 def new_accepted_tally_app(
