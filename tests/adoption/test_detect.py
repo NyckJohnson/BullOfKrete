@@ -483,7 +483,26 @@ def test_detect_asks_for_tags_matching_each_bull_prefix(rig: Rig) -> None:
     rig.add_stack("alpha", _detection(0.9))
     rig.adoption.detect(rig.root)
     patterns = {args[1] for name, args in rig.git.calls if name == "tags"}
-    assert patterns == {"module/*", "feature/*", "adopt/*"}
+    assert patterns == {"done/*", "module/*", "feature/*", "adopt/*"}
+
+
+def test_detect_lists_a_done_tag_as_clashing_in_prefix_order(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    rig.git.tag_names = ["v1.0", "done", "adopt/setup", "module/A", "done/Counter"]
+    report = rig.adoption.detect(rig.root)
+    fix = "rename or delete it"
+    assert report.issues == (
+        Issue(IssueLevel.FIX, "tag done/Counter clashes with bull's tag names", fix),
+        Issue(IssueLevel.FIX, "tag module/A clashes with bull's tag names", fix),
+        Issue(IssueLevel.FIX, "tag adopt/setup clashes with bull's tag names", fix),
+    )
+    assert not report.blocked
+
+
+def test_detect_does_not_flag_a_tag_named_done_without_a_slash(rig: Rig) -> None:
+    rig.add_stack("alpha", _detection(0.9))
+    rig.git.tag_names = ["done", "v1.0"]
+    assert rig.adoption.detect(rig.root).issues == ()
 
 
 def test_detect_notes_each_active_git_hook(rig: Rig) -> None:
