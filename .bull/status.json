@@ -13,10 +13,11 @@
     "checkpoints": [
       "outline-approved",
       "setup",
-      "skeleton"
+      "skeleton",
+      "ui-approved"
     ],
     "slug": "module-tag-and-branch-share-a-name",
-    "stage": 3
+    "stage": 4
   },
   "format": 1,
   "kind": "app",
