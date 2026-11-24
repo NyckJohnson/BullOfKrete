@@ -747,8 +747,14 @@
       "name": "hooks",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
-      "state": "pending",
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T01:09:05.152704Z"
+      },
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
@@ -768,7 +774,7 @@
           ],
           "kind": "code",
           "number": 2,
-          "state": "pending"
+          "state": "done"
         },
         {
           "attempts": 2,

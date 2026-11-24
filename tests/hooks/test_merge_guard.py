@@ -490,3 +490,154 @@ def test_module_branch_absent_from_status_with_a_pass_is_allowed(
     rig.git.heads["module/Ghost"] = SHA_A
     _record(rig, SHA_A, "module/Ghost")
     assert rig.guard.check(rig.app, "git merge --no-ff module/Ghost").allow
+
+
+# --- a name that is both a branch and a tag; explicit refs/heads/<name>
+
+
+def _branch_and_tag(rig: Rig, name: str) -> None:
+    """Make `name` both a branch and (exactly) a tag, with a pass recorded for its head."""
+    rig.git.branches.add(name)
+    rig.git.tag_names.append(name)
+    _record(rig, rig.git.heads[name], name)
+
+
+@pytest.mark.parametrize("name", ["feature/x", "module/Counter"])
+def test_name_that_is_both_a_branch_and_a_tag_is_blocked(
+    tmp_path: Path, name: str
+) -> None:
+    rig = _rig(tmp_path)
+    _branch_and_tag(rig, name)
+    decision = rig.guard.check(rig.app, f"git merge --no-ff {name}")
+    assert not decision.allow
+    assert (
+        f"{name} names both a branch and a tag; git would merge the tag: "
+        f"use `git merge refs/heads/{name}`"
+    ) in decision.message
+
+
+def test_ambiguous_name_block_leaves_a_hook_block_event(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    _branch_and_tag(rig, "feature/x")
+    rig.guard.check(rig.app, "git merge feature/x")
+    assert len(_blocks(rig)) == 1
+
+
+def test_ambiguous_name_is_blocked_without_a_pass_record_lookup_deciding(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("feature/x")
+    rig.git.tag_names.append("feature/x")
+    decision = rig.guard.check(rig.app, "git merge feature/x")
+    assert not decision.allow
+    assert "names both a branch and a tag" in decision.message
+    assert "no recorded full gate pass" not in decision.message
+
+
+def test_a_tag_that_only_starts_with_the_name_is_not_ambiguous(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("feature/x")
+    rig.git.tag_names.extend(["feature/x-old", "feature/x/v1"])
+    _record(rig, SHA_B, "feature/x")
+    assert rig.guard.check(rig.app, "git merge feature/x").allow
+
+
+def test_a_branch_with_no_tag_of_its_name_is_not_ambiguous(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("feature/x")
+    _record(rig, SHA_B, "feature/x")
+    assert rig.guard.check(rig.app, "git merge feature/x").allow
+
+
+def test_a_tag_that_is_not_a_branch_is_not_reported_as_ambiguous(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.tag_names.append("feature/x")
+    decision = rig.guard.check(rig.app, "git merge feature/x")
+    assert "names both a branch and a tag" not in decision.message
+
+
+def test_ambiguity_in_a_later_target_blocks_the_whole_command(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    _record(rig, SHA_A, "module/Counter")
+    _branch_and_tag(rig, "feature/x")
+    decision = rig.guard.check(
+        rig.app, "git merge module/Counter && git merge feature/x"
+    )
+    assert not decision.allow
+    assert "feature/x names both a branch and a tag" in decision.message
+
+
+def test_explicit_refs_heads_is_allowed_when_the_name_is_also_a_tag(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    _branch_and_tag(rig, "feature/x")
+    rig.git.heads["refs/heads/feature/x"] = SHA_B
+    rig.git.heads["feature/x"] = SHA_A  # what the tag would resolve to
+    _record(rig, SHA_B, "feature/x")
+    decision = rig.guard.check(rig.app, "git merge --no-ff refs/heads/feature/x")
+    assert decision.allow
+    assert _blocks(rig) == []
+
+
+def test_explicit_refs_heads_resolves_the_head_through_that_ref(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("feature/x")
+    rig.git.heads["refs/heads/feature/x"] = SHA_B
+    rig.git.heads["feature/x"] = SHA_A
+    _record(rig, SHA_A, "feature/x")  # a pass for the tag's sha must not count
+    decision = rig.guard.check(rig.app, "git merge refs/heads/feature/x")
+    assert not decision.allow
+    assert SHA_B in decision.message
+    heads_asked = [c[1][1] for c in rig.git.calls if c[0] == "head"]
+    assert "refs/heads/feature/x" in heads_asked
+
+
+def test_explicit_refs_heads_without_a_pass_record_is_blocked(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("feature/x")
+    rig.git.heads["refs/heads/feature/x"] = SHA_B
+    decision = rig.guard.check(rig.app, "git merge refs/heads/feature/x")
+    assert not decision.allow
+    assert "no recorded full gate pass" in decision.message
+    assert "names both a branch and a tag" not in decision.message
+
+
+def test_explicit_refs_heads_of_an_unknown_branch_is_blocked(tmp_path: Path) -> None:
+    rig = _rig(tmp_path)
+    decision = rig.guard.check(rig.app, "git merge refs/heads/ghost")
+    assert not decision.allow
+    assert "ghost" in decision.message
+
+
+def test_explicit_refs_heads_of_a_module_branch_still_needs_the_scan(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("module/Counter")
+    rig.git.tag_names.append("module/Counter")
+    rig.git.heads["refs/heads/module/Counter"] = SHA_A
+    _record(rig, SHA_A, "module/Counter")
+    _branch_status(rig, SHA_A, reference_tests=True, scan=False)
+    decision = rig.guard.check(rig.app, "git merge --no-ff refs/heads/module/Counter")
+    assert not decision.allow
+    assert "record the reference-test scan for Counter first" in decision.message
+
+
+def test_explicit_refs_heads_of_a_module_branch_with_a_scan_is_allowed(
+    tmp_path: Path,
+) -> None:
+    rig = _rig(tmp_path)
+    rig.git.branches.add("module/Counter")
+    rig.git.tag_names.append("module/Counter")
+    rig.git.heads["refs/heads/module/Counter"] = SHA_A
+    _record(rig, SHA_A, "module/Counter")
+    _branch_status(rig, SHA_A, reference_tests=True, scan=True)
+    assert rig.guard.check(rig.app, "git merge --no-ff refs/heads/module/Counter").allow

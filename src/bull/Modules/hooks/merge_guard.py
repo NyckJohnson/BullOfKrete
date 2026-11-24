@@ -340,10 +340,18 @@ class MergeGuard:
         return HookDecision(True, "")
 
     def _block_reason(self, app: AppLayout, ref: str) -> str | None:
+        # `refs/heads/<name>` is explicitly the branch; a bare name that is both a branch
+        # and a tag would make git merge the tag, so it is refused before anything else.
+        branch = ref.removeprefix(_HEADS_PREFIX)
+        if branch == ref and self._is_branch_and_tag(app, ref):
+            return (
+                f"{ref} names both a branch and a tag; git would merge the tag: "
+                f"use `git merge {_HEADS_PREFIX}{ref}`"
+            )
         sha = self._git.head(app.root, ref)
         if sha is None:
             return f"unknown ref {ref}: nothing to merge"
-        module = self._refs.module_for_branch(ref)
+        module = self._refs.module_for_branch(branch)
         if self._passes.get(app, sha) is None:
             gates = f"bull gates {module}" if module is not None else "bull gates --all"
             return (
@@ -353,6 +361,12 @@ class MergeGuard:
         if module is not None and self._needs_scan(app, sha, module):
             return f"record the reference-test scan for {module} first"
         return None
+
+    def _is_branch_and_tag(self, app: AppLayout, name: str) -> bool:
+        """Whether `name` is a branch and also, exactly, a tag."""
+        return self._git.branch_exists(app.root, name) and name in self._git.tags(
+            app.root, name
+        )
 
     def _needs_scan(self, app: AppLayout, sha: str, module: str) -> bool:
         """Whether `module` has reference tests and no recorded scan.
@@ -372,6 +386,7 @@ class MergeGuard:
 
 
 _STATUS_PATH = ".bull/status.json"
+_HEADS_PREFIX = "refs/heads/"
 
 
 def _branch_scan_state(text: str, module: str) -> bool | None:
