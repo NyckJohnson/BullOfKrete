@@ -1294,11 +1294,11 @@
         "name": "j12"
       },
       {
-        "done": false,
+        "done": true,
         "name": "app-review"
       },
       {
-        "done": false,
+        "done": true,
         "name": "fixes"
       },
       {
