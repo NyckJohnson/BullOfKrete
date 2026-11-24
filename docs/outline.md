@@ -255,6 +255,11 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
   the reviewer first); each case is specified, tested and logged "auto-approved (defensive)", and
   listed for review at acceptance. Setting `coverage.auto_approve_defensive` (default true) turns
   it off.
+- module-tag-and-branch-share-a-name (accepted 2026-11-23): a finished module's tag is `done/<M>`
+  (with the mode prefix, from `bull status ref tag done/<M>`), so it never shares its branch's name;
+  `bull status tags` lists `done/*`. The merge guard and `bull gates --after-merge` refuse a name
+  that is both a branch and a tag and accept `refs/heads/<name>`. Existing `module/<M>` tags are
+  left alone.
 
 ## Data models
 In-memory types are `@dataclass(frozen=True)` and enums in each module's `Contracts` (see the
