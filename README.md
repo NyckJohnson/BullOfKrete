@@ -25,18 +25,6 @@ discuss → outline → setup → skeleton → prototype → modules → verify
 After acceptance, `/bull:feature` adds features through the same stages on their own branch.
 `/bull:adopt` brings an existing app under bull, one module at a time.
 
-## Stacks
-
-Everything language- or platform-specific lives in a **stack**: a folder with a TOML manifest,
-Python readers, rules for each agent, a setup guide and a self-test. Built-in stacks:
-
-| Stack | Kind | Status |
-| --- | --- | --- |
-| `python_cli` | tool | experimental |
-| `ios` | app | experimental (needs macOS and Xcode) |
-
-`bull stacks --all` lists them all, including the test stacks. You can build new stacks with bull
-itself (`bull init --stack`), and an app can have several parts, each on its own stack.
 
 ## Install
 
@@ -44,7 +32,7 @@ You need Python 3.11+, [uv](https://docs.astral.sh/uv/), git and Claude Code. bu
 Linux.
 
 ```
-uv tool install git+https://github.com/NyckJohnson/BullOfKrete@v2.0.0
+uv tool install git+https://github.com/NyckJohnson/BullOfKrete
 bull doctor
 ```
 
@@ -73,6 +61,37 @@ uv run pytest
 
 The spec is `docs/outline.md`. Every module under `src/bull/Modules/` has its tests in `tests/`, and
 `tests/journey/` runs the installed `bull` end to end.
+
+## Stacks
+
+Everything language- or platform-specific lives in a **stack**: a folder with a TOML manifest,
+Python readers, rules for each agent, a setup guide and a self-test. Built-in stacks:
+
+| Stack | Kind | Status |
+| --- | --- | --- |
+| `python_cli` | tool | experimental |
+| `ios` | app | experimental (needs macOS and Xcode) |
+
+`bull stacks --all` lists them all, including the test stacks. You can build new stacks with bull
+itself (`bull init --stack`), and an app can have several parts, each on its own stack.
+
+### Example: adding the Go language as a stack
+```
+mkdir -p ~/bullstacks                    # any parent folder you like
+bull init --stack ~/bullstacks/go_cli    # creates go_cli/ as a stack repo
+bull open ~/bullstacks/go_cli            # launches Claude Code in it
+
+# in Claude Code:
+/bull:stack                              # The Bull walks you through building the stack
+
+# after /bull:stack finishes, back in a terminal:
+bull stack install ~/bullstacks/go_cli   # runs the static self-test, then installs it for you
+bull stacks                              # go_cli is now listed as experimental
+
+# use it in a new app:
+bull init ~/apps/example-go
+bull open ~/apps/example-go              # then /bull:discuss; pick go_cli at setup
+```
 
 ## License
 
