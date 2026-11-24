@@ -41,6 +41,9 @@ the tag.
    - **A decision needs the human**: a blocked unit (the attempt cap reached, or a subagent returned
      `blocked`), a contract change, or a reference-scan or coverage finding that needs the human
      (`contradicts`, `not-in-spec`). Ask, following **Asking the human**, and wait for the answer.
+     A coverage case classed `defensive` is not a stop: the Stage 5 loop specifies, tests and logs
+     it. It goes to the human like `not-in-spec` only if `coverage.auto_approve_defensive` is false
+     or the reviewer rejects the case.
 8. Report to the human only at module boundaries: one short line per module (merged and tagged, or
    where it stopped). Don't narrate each unit.
 

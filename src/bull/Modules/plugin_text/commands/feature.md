@@ -130,6 +130,10 @@ scope".
    - `bull gates --journeys` still runs every journey.
    - Brief the **reviewer** with `SCOPE: feature <slug>`: the feature's diff from the trunk, in the
      context of the whole app.
+   - At hands-on, list the lines in the decisions log marked "auto-approved (defensive)" that were
+     added since the trunk (the feature's start), not since the `app-accepted` tag. Ask whether to
+     remove any auto-approved (defensive) case, and route each removal through the owning module,
+     as `/bull:verify`'s step 8 does.
 
    Do not run `/bull:verify`'s acceptance (the `app-accepted` checkpoint and tag) or its
    first-release backlog step; the feature's own acceptance below replaces them.

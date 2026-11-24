@@ -123,8 +123,9 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    - Failure path: a dirty working tree makes `bull gates Counter` pass without recording, and says
      why.
 10. **Settings** — Dana runs `bull config set max_attempts 5` in her app; `bull config show` lists
-    `max_attempts = 5 (app)`, `review_mode = combined (bull default)` and `models.reviewer` from her
-    user layer (`~/.config/bull/config.toml`). Ends when `bull status attempt` allows a 4th attempt.
+    `max_attempts = 5 (app)`, `review_mode = combined (bull default)`,
+    `coverage.auto_approve_defensive = true (bull default)` and `models.reviewer` from her user layer
+    (`~/.config/bull/config.toml`). Ends when `bull status attempt` allows a 4th attempt.
     - Failure path: `bull config set max_attempts many` is refused with the expected type; a
       hand-edited `config.toml` with an unknown key makes `bull status` fail naming the file, line and
       key.
@@ -242,6 +243,11 @@ the stack workflow (module `stackflow`); other app commands refuse with "this is
 - context-use-in-the-status-line (accepted 2026-11-20): the status line ends with `· ctx N%`, the
   session's context-window use from Claude Code's `context_window.used_percentage`, or `ctx –` when
   the input has none; recorded in usage.json as an optional `context` field (format stays 1).
+- accept-tests-for-defensive-error (accepted 2026-11-23): coverage triage auto-approves defensive
+  error handling that meets five no-downside rules (coverage-analyst class `defensive`, confirmed by
+  the reviewer first); each case is specified, tested and logged "auto-approved (defensive)", and
+  listed for review at acceptance. Setting `coverage.auto_approve_defensive` (default true) turns
+  it off.
 
 ## Data models
 In-memory types are `@dataclass(frozen=True)` and enums in each module's `Contracts` (see the
@@ -314,6 +320,7 @@ Flat keys; dotted keys (`models.reviewer = "sonnet"`) or tables (`[models]`) bot
 | usage.pause_weekly | int 1–100 | 95 | user, app |
 | coverage.exclude | list[str] (globs) | from the stack | stack, app, part |
 | coverage.exclude_extra | list[str] | `[]` | app, part |
+| coverage.auto_approve_defensive | bool | `true` | user, app |
 | reference_dir | str | `reference` | app |
 | bookkeeping_paths | list[str] | `[".bull/", "docs/"]` | app |
 | models.<agent> | str | `sonnet` for test-writer, reviewer, coverage-analyst, journey-test-writer, surveyor, legacy-test-scanner; `inherit` for the rest | user, app |
@@ -617,6 +624,7 @@ when `readers.py` defines `detect`.
 - Purpose: layered, validated TOML settings with an extensible schema; `bull config show/set`.
 - Depends on: foundation
 - Files: Contracts/__init__.py, mocks/__init__.py | schema.py, toml_edit.py | loader.py, settings.py, cli.py
+- Changes (accept-tests-for-defensive-error): schema.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   SettingValue = int | bool | str | tuple[str, ...]
@@ -659,6 +667,9 @@ when `readers.py` defines `detect`.
   ```
 - Behavior spec:
   - schema: bull's keys per the **config.toml** table, plus each loaded stack's `[settings]`.
+    `coverage.auto_approve_defensive` (bool, default true, user and app layers) has the
+    description "Coverage triage auto-approves defensive error handling (logged, listed at
+    acceptance)"; it is read by the orchestrator through `bull config show`, not by bull's code.
   - load: reads user, app and part files; the stack named by `stack` in the app file (one-part) or
     each part file supplies the stack layer through `stack_layer`; any problem in any file → one
     `ConfigError` listing every problem (file, line, key, message).
@@ -2046,6 +2057,7 @@ when `readers.py` defines `detect`.
   stack-neutral and in `bull` terms.
 - Depends on: foundation
 - Files: Contracts/__init__.py, mocks/__init__.py, plugin_files.py | orchestrator.md | commands/discuss.md, commands/outline.md, commands/setup.md, commands/skeleton.md | commands/prototype.md, commands/build.md, commands/verify.md, commands/feature.md | commands/adopt.md, commands/resume.md, commands/status.md, commands/stack.md | agents/skeleton-builder.md, agents/screen-builder.md, agents/test-writer.md, agents/code-writer.md | agents/reviewer.md, agents/coverage-analyst.md, agents/journey-test-writer.md | agents/surveyor.md, agents/legacy-test-scanner.md
+- Changes (accept-tests-for-defensive-error): orchestrator.md, commands/build.md, commands/verify.md, commands/feature.md, agents/reviewer.md, agents/coverage-analyst.md
 - Protocol (draft; lives in `Contracts/`):
   ```python
   @dataclass(frozen=True)
@@ -2081,6 +2093,33 @@ when `readers.py` defines `detect`.
   - test-writer: before it reports, it runs the stack's formatter and lint on the test files it
     wrote or changed and fixes what they find, so a formatting slip never costs a gate attempt
     (stack-neutral wording; the stack's rules name the tools).
+  - Defensive error handling in coverage triage (feature accept-tests-for-defensive-error):
+    - coverage-analyst has four classes: `missed`, `exempt`, `defensive`, `not-in-spec`.
+      `defensive` = code the spec doesn't mention that meets all five no-downside rules: (1) it runs
+      only when something is already wrong (a damaged or unreadable file, a failing command, a bad
+      argument) and normal input behaves as before; (2) it fails cleanly through an error type the
+      module already uses (a new message is fine) or skips the broken item; (3) it never writes,
+      deletes or overwrites anything; (4) it changes no contract; (5) it is cheap: no retry loops,
+      waits or timeouts, no extra programs or network calls, no re-reading or scanning large files.
+      Its report line names the bad condition and the error or skip. Unspecified error handling that
+      breaks any rule is `not-in-spec`. Tie-break with `exempt`: handling a test could reach is
+      `defensive` (it gets a test); handling no test could reach stays `exempt`.
+    - orchestrator, Stage 5 loop's coverage triage: when `coverage.auto_approve_defensive` is true
+      (the default; read with `bull config show`), the reviewer first confirms each `defensive` case
+      meets the five rules (its brief lists the cases, with `SCOPE:` the module's files); each confirmed case is then added to the module's behavior spec, tested
+      by test-writer from the spec, and logged in the decisions log marked "auto-approved
+      (defensive)"; no question to the human. A case the reviewer rejects, and every case when the
+      setting is false, goes to the human as `not-in-spec` does today (nothing specified, tested or
+      logged before the answer); a rejection uses no attempt. Reference-test and adoption legacy-test scans are unchanged: their
+      `not-in-spec` still asks.
+    - reviewer: when its brief lists defensive cases, it checks each against the five rules and
+      reports a failing one as a blocker naming the rule. Such a blocker is about the spec addition,
+      not the code: the orchestrator takes the case to the human (no code-writer retry, no attempt).
+    - build: a `defensive` case is not a stop (unless the setting is false or the reviewer rejects it).
+    - verify and feature: before asking for acceptance, the orchestrator lists every
+      "auto-approved (defensive)" decisions-log line since the last acceptance (the
+      `app-accepted` tag, or the trunk for a feature) and asks whether any should be removed; a
+      removal goes back through the owning module (spec line deleted, code and test removed).
 - Construction (internal; not contracts):
   - plugin_files.py: `LivePluginText(root: Path | None = None)`; `root` defaults to the module's own
     folder (`Path(__file__).parent`). files: `orchestrator.md`, `commands/*.md`, `agents/*.md` under
@@ -2557,3 +2596,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-19: feature context-use-in-the-status-line — the status line shows the session's context-window use (`ctx N%`, from Claude Code's `context_window.used_percentage`; `ctx –` when the input has none; never taken from the saved sample) and records it in usage.json as an optional `context` field (format stays 1). usage contract: `UsageSample.context: float | None = None`; claude_code hook_io.py and cli statusline.py change behavior only. A context-only input never erases the saved 5h/wk figures — approved by Nicholas Johnson
 - 2026-11-19: memo consistency, found by `bull feature plan` — the build order's status line now lists `usage` (status/cli.py already uses it), and claude_code's note on stacks (contract only, for `CheckItem`) moves off its `Depends on:` line. Memo text only; no code or contract change.
 - 2026-11-20: feature context-use-in-the-status-line, verify review — a non-finite `used_percentage` (JSON `NaN`/`Infinity`) counts as unreadable (None) for 5-hour, 7-day and context, so the line shows `ctx –` instead of falling back to just `bull`. claude_code hook_io.py behavior only; no contract change — approved by Nicholas Johnson
+- 2026-11-23: feature accept-tests-for-defensive-error — coverage triage auto-approves defensive error handling (new coverage-analyst class `defensive`, five no-downside rules: runs only on bad input or a failed environment, fails cleanly through an existing error type or skips, never writes or deletes, no contract change, cheap); each case is specified, tested and logged "auto-approved (defensive)", the reviewer confirms the rules, and acceptance lists them for review. Replaces the rule that every coverage `not-in-spec` asks (idea decided 2026-11-19). New setting `coverage.auto_approve_defensive` (bool, default true, user/app) turns it off. Reference and adoption scans unchanged. plugin_text and settings schema.py; no contract change — approved by Nicholas Johnson

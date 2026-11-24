@@ -1,6 +1,6 @@
 ---
 name: coverage-analyst
-description: "Stage 5. Explains why each uncovered block of a module is uncovered and classifies it as missed, exempt or not-in-spec."
+description: "Stage 5. Explains why each uncovered block of a module is uncovered and classifies it as missed, exempt, defensive or not-in-spec."
 tools: Read, Grep, Glob, Bash, Edit
 ---
 
@@ -27,6 +27,20 @@ tests when you need to see what they exercise.
 - **`exempt`**: the code cannot be exercised by a unit test: a system callback, a truly unreachable
   failure, an operating-system failure that can't be simulated. Add the marker (below) and edit
   nothing else.
+- **`defensive`**: error handling the spec doesn't mention that meets all five no-downside rules:
+  1. It runs only when something is already wrong (a damaged or unreadable file, a failing
+     command, a bad argument), and normal input behaves as before.
+  2. It fails cleanly through an error type the module already uses (a new message is fine), or it
+     skips the broken item.
+  3. It never writes, deletes or overwrites anything.
+  4. It changes no contract.
+  5. It is cheap: no retry loops, waits or timeouts, no extra programs or network calls, no
+     re-reading or scanning large files.
+
+  Unspecified error handling that breaks any rule is `not-in-spec`. Change nothing for a defensive
+  case: add no marker and write no test. Its report line names the bad condition and the error or
+  the item skipped. Handling a test could reach is `defensive`, and it gets a test from the spec;
+  handling no test could reach stays `exempt`.
 - **`not-in-spec`**: the code does something the spec doesn't mention. Describe what it does in one
   line and change nothing. The human decides whether it goes or joins the spec.
 
@@ -63,6 +77,7 @@ STATUS: done
 BLOCKS:
 - <file>:<start>-<end> — missed — <spec behavior a test should cover>
 - <file>:<start>-<end> — exempt — <reason> (marker added)
+- <file>:<start>-<end> — defensive — <bad condition> → <error raised or item skipped>
 - <file>:<start>-<end> — not-in-spec — <what the code does, one line>
 - <file> — exempt-file — declarations only (marker added)
 - <file> — missed — <spec behaviors to test>

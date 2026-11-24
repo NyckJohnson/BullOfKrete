@@ -75,6 +75,16 @@ BULL_SCHEMA: tuple[Setting, ...] = (
         layers=frozenset({Layer.BULL, Layer.APP, Layer.PART}),
     ),
     Setting(
+        key="coverage.auto_approve_defensive",
+        type=SettingType.BOOL,
+        default=True,
+        description=(
+            "Coverage triage auto-approves defensive error handling "
+            "(logged, listed at acceptance)"
+        ),
+        layers=_USER_APP,
+    ),
+    Setting(
         key="reference_dir",
         type=SettingType.STR,
         default="reference",

@@ -84,7 +84,8 @@ pytest, mypy, ruff, xcodebuild. Also drop v1's platform-flavoured phrases:
 ### 1.5 Settings named in the text
 Only real keys: `max_attempts`, `max_files_per_unit`, `review_mode` (`combined`|`split`),
 `base_branch`, `reference_dir`, `models.<agent>` (where `<agent>` is one of the nine agents),
-`usage.pause_5h`, `usage.pause_weekly`. `bull config show` lists them; `bull config set` changes them.
+`usage.pause_5h`, `usage.pause_weekly`, `coverage.auto_approve_defensive` (feature
+accept-tests-for-defensive-error). `bull config show` lists them; `bull config set` changes them.
 
 ### 1.6 Never in any file
 `ios-pipeline`, `.pipeline/`, `pipeline-resume`, `pipeline-status`, `ui-test-writer`, `config.sh`,
@@ -673,7 +674,7 @@ design, nothing that only works on the author's machine).
 
 ### agents/coverage-analyst.md
 `description: Stage 5. Explains why each uncovered block of a module is uncovered and classifies it
-as missed, exempt or not-in-spec.` `tools: Read, Grep, Glob, Bash, Edit`. v1's content unchanged
+as missed, exempt, defensive or not-in-spec.` `tools: Read, Grep, Glob, Bash, Edit`. v1's content unchanged
 except commands and §1.4 (marker syntax "as the stack rules show": `<comment> coverage-exempt:
 <reason>`, `coverage-exempt-begin: <reason>` … `coverage-exempt-end`, `coverage-exempt-file:
 <reason>` within the first 10 lines).

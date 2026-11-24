@@ -230,6 +230,17 @@ only on a clean tree.
     - `exempt`: the analyst has added a `coverage-exempt` marker (on a line or a block, or
       `coverage-exempt-file` for a file that only holds declarations). The **reviewer** confirms it
       holds.
+    - `defensive`: error handling the spec doesn't mention that meets the analyst's five
+      no-downside rules (it runs only when something is already wrong; it fails cleanly through an
+      error type the module already uses, or skips the broken item; it never writes, deletes or
+      overwrites; it changes no contract; it is cheap). Read `coverage.auto_approve_defensive` with
+      `bull config show`. When it is true (the default), the **reviewer** first confirms each case
+      meets the five rules: its brief lists the defensive cases, with `SCOPE:` the module's files.
+      Then add each confirmed case to the module's behavior spec, have test-writer write its test
+      from the spec, and log it in the decisions log marked "auto-approved (defensive)", without
+      asking the human. A case the reviewer rejects (a rejection uses no attempt), and every case
+      when the setting is false, goes to the human as `not-in-spec` does: nothing is specified,
+      tested or logged before the answer.
     - `not-in-spec`: ask the human whether to remove the code, or add it to the spec and test it.
 
    Repeat until clean.

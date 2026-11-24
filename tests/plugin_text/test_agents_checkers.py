@@ -18,7 +18,7 @@ DESCRIPTIONS = {
     ),
     "coverage-analyst": (
         "Stage 5. Explains why each uncovered block of a module is uncovered and "
-        "classifies it as missed, exempt or not-in-spec."
+        "classifies it as missed, exempt, defensive or not-in-spec."
     ),
     "journey-test-writer": (
         "Stage 6. Writes one end-to-end journey test per user journey in the memo and "
@@ -307,7 +307,7 @@ def test_reviewer_scope_stack_checks_honest_readers_and_portability() -> None:
 # --- coverage-analyst --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("cls", ["missed", "exempt", "not-in-spec"])
+@pytest.mark.parametrize("cls", ["missed", "exempt", "defensive", "not-in-spec"])
 def test_coverage_analyst_names_each_class(cls: str) -> None:
     has_all("coverage-analyst", cls)
 
@@ -370,12 +370,120 @@ def test_coverage_analyst_prefers_missed_when_a_fake_or_mock_would_reach_it() ->
 def test_coverage_analyst_report_has_blocks_lines() -> None:
     block = _report_block("coverage-analyst")
     assert "BLOCKS:" in block
-    for cls in ("missed", "exempt", "not-in-spec"):
+    for cls in ("missed", "exempt", "defensive", "not-in-spec"):
         assert cls in block
 
 
 def test_coverage_analyst_report_has_exempt_file_line() -> None:
     assert "exempt-file" in _report_block("coverage-analyst")
+
+
+def test_coverage_analyst_defensive_is_code_the_spec_does_not_mention() -> None:
+    has_all("coverage-analyst", "defensive", "five")
+    has_any("coverage-analyst", "does not mention", "doesn't mention", "not mention")
+
+
+def test_coverage_analyst_defensive_rule_1_runs_only_when_something_is_already_wrong() -> (
+    None
+):
+    has_all("coverage-analyst", "already wrong", "normal input")
+    has_any("coverage-analyst", "damaged", "unreadable")
+    has_any("coverage-analyst", "failing command", "bad argument")
+
+
+def test_coverage_analyst_defensive_rule_2_fails_cleanly_through_an_existing_error_type() -> (
+    None
+):
+    has_all("coverage-analyst", "error type", "module already uses")
+    has_all("coverage-analyst", "new message", "skips the broken item")
+
+
+def test_coverage_analyst_defensive_rule_3_never_writes_deletes_or_overwrites() -> None:
+    has_all("coverage-analyst", "never writes", "deletes", "overwrites")
+
+
+def test_coverage_analyst_defensive_rule_4_changes_no_contract() -> None:
+    has_all("coverage-analyst", "changes no contract")
+
+
+def test_coverage_analyst_defensive_rule_5_is_cheap() -> None:
+    has_all("coverage-analyst", "cheap", "retry loops", "network")
+    has_any("coverage-analyst", "waits", "timeouts")
+    has_any("coverage-analyst", "re-reading", "scanning large files", "large files")
+
+
+def test_coverage_analyst_defensive_report_line_names_the_condition_and_the_error_or_skip() -> (
+    None
+):
+    has_all("coverage-analyst", "bad condition")
+    has_all("coverage-analyst", "the error or the item skipped")
+
+
+def _defensive_entry() -> str:
+    norm = _norm(_body("coverage-analyst"))
+    start = norm.find("**defensive**")
+    end = norm.find("**not-in-spec**", start)
+    assert start >= 0 and end > start, "defensive entry not found"
+    return norm[start:end]
+
+
+def test_coverage_analyst_unspecified_error_handling_that_breaks_a_rule_is_not_in_spec() -> (
+    None
+):
+    entry = _defensive_entry()
+    assert "breaks any rule" in entry
+    assert "not-in-spec" in entry
+    assert entry.find("breaks any rule") < entry.rfind("not-in-spec")
+
+
+def test_coverage_analyst_tie_break_test_could_reach_is_defensive_none_is_exempt() -> (
+    None
+):
+    norm = _norm(_body("coverage-analyst"))
+    has_all("coverage-analyst", "could reach", "no test could reach")
+    idx = norm.find("no test could reach")
+    window = norm[max(0, idx - 250) : idx + 250]
+    assert "defensive" in window
+    assert "exempt" in window
+
+
+def test_coverage_analyst_defensive_adds_no_marker_and_writes_no_test() -> None:
+    norm = _norm(_body("coverage-analyst"))
+    idx = norm.find("defensive")
+    assert idx >= 0
+    tail = norm[idx:]
+    assert any(
+        t in tail for t in ("no marker", "adds no marker", "no tests", "writes no test")
+    )
+    has_any(
+        "coverage-analyst", "changes nothing for", "change nothing", "do not change"
+    )
+
+
+def test_reviewer_defensive_cases_are_checked_against_the_five_rules() -> None:
+    has_all("reviewer", "defensive", "five")
+    has_any("reviewer", "each", "every")
+
+
+def test_reviewer_failing_defensive_case_is_a_blocker_naming_the_rule() -> None:
+    norm = _norm(_body("reviewer"))
+    idx = norm.find("defensive")
+    assert idx >= 0
+    tail = norm[idx:]
+    assert "blocker" in tail
+    assert "names the rule" in tail or "naming the rule" in tail
+
+
+def test_reviewer_failing_defensive_blocker_is_about_the_spec_and_goes_to_the_human() -> (
+    None
+):
+    section = _norm(_section("reviewer", "Defensive cases"))
+    assert "not the code" in section
+    assert "spec" in section
+    assert "orchestrator" in section
+    assert "human" in section
+    assert "no code-writer retry" in section or "no retry" in section
+    assert "no attempt" in section
 
 
 # --- journey-test-writer -----------------------------------------------------------------

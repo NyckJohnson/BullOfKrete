@@ -8,12 +8,7 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": {
-    "applied_contracts": [],
-    "checkpoints": [],
-    "slug": "accept-tests-for-defensive-error",
-    "stage": 1
-  },
+  "feature": null,
   "format": 1,
   "kind": "app",
   "modules": [
@@ -102,7 +97,13 @@
       "name": "settings",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-23T21:27:49.843480Z"
+      },
       "state": "done",
       "units": [
         {
@@ -761,7 +762,13 @@
       "name": "plugin_text",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-23T21:43:12.502406Z"
+      },
       "state": "done",
       "units": [
         {
@@ -797,7 +804,7 @@
           "state": "done"
         },
         {
-          "attempts": 2,
+          "attempts": 1,
           "files": [
             "commands/prototype.md",
             "commands/build.md",
