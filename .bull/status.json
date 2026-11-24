@@ -544,7 +544,7 @@
         "not_in_spec": 0,
         "time": "2026-11-24T00:40:48.191864Z"
       },
-      "state": "in_progress",
+      "state": "done",
       "units": [
         {
           "attempts": 1,
