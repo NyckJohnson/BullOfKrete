@@ -8,7 +8,12 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": null,
+  "feature": {
+    "applied_contracts": [],
+    "checkpoints": [],
+    "slug": "module-tag-and-branch-share-a-name",
+    "stage": 1
+  },
   "format": 1,
   "kind": "app",
   "modules": [
