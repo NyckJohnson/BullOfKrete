@@ -587,7 +587,13 @@
       "name": "gates",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T00:55:09.583458Z"
+      },
       "state": "in_progress",
       "units": [
         {
