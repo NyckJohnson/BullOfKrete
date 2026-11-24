@@ -22,3 +22,16 @@ a module's finished tag has the same name as its branch, so git picks the tag on
   already exist.
 
 ## Agreed scope
+
+Agreed with the human 2026-11-23.
+
+1. A finished module's tag is `done/<M>`, with the mode prefix (`feature/<slug>/done/<M>`,
+   `adopt/done/<M>`), taken from `bull status ref tag done/<M>`. `bull status tags` lists `done/*`
+   tags as pipeline tags. Existing `module/<M>` tags are left alone.
+2. The merge guard and `bull gates --after-merge <branch>` refuse a name that is both a branch and a
+   tag, naming both and suggesting `refs/heads/<name>`. Both accept `refs/heads/<name>`, and treat it
+   as that branch (a module branch is still recognized).
+3. Out of scope: a fresh branch for verify fixes; renaming or deleting existing tags.
+
+Affected: status (tag listing), hooks (merge guard), gates (after-merge), plugin_text (orchestrator
+text), journey 2 (tag `done/<M>`, plus a failure path for an ambiguous name). No contract changes.
