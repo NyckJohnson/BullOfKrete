@@ -13,6 +13,8 @@ from bull.Modules.stacks.Contracts import Detection, Issue, IssueLevel, StackReg
 _MIN_CONFIDENCE = 0.5
 _SKIPPED_FOLDERS = frozenset({".git", "__pycache__"})
 _PREFIXES = ("module", "feature", "adopt")
+# Tags also clash under `done/`, the prefix of a finished module's tag.
+_TAG_PREFIXES = ("done", *_PREFIXES)
 _FOR_EACH_REF = (
     "git",
     "for-each-ref",
@@ -105,7 +107,7 @@ def _repo_issues(root: Path, git: Git, runner: Runner) -> list[Issue]:
             f"tag {name} clashes with bull's tag names",
             "rename or delete it",
         )
-        for prefix in _PREFIXES
+        for prefix in _TAG_PREFIXES
         for name in git.tags(root, f"{prefix}/*")
     )
     issues.extend(
