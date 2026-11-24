@@ -803,7 +803,7 @@
         "not_in_spec": 0,
         "time": "2026-11-23T21:43:12.502406Z"
       },
-      "state": "pending",
+      "state": "in_progress",
       "units": [
         {
           "attempts": 1,
@@ -823,7 +823,7 @@
           ],
           "kind": "code",
           "number": 2,
-          "state": "pending"
+          "state": "done"
         },
         {
           "attempts": 2,

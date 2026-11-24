@@ -332,7 +332,7 @@ def test_stages_section_names_the_checkpoint_tags() -> None:
         "setup",
         "skeleton",
         "ui-approved",
-        "module/<m>",
+        "done/<m>",
         "app-accepted",
         "bull stack check",
     )
@@ -344,6 +344,38 @@ def test_stages_section_says_the_human_starts_each_stage() -> None:
         "human starts each stage",
         "bull status next",
         "checkpoint 3",
+    )
+
+
+def test_stages_table_tags_each_merged_module_done() -> None:
+    row = next(
+        ln
+        for ln in section(r"stages").split("\n")
+        if ln.lstrip().startswith("|") and "/bull:build" in ln
+    )
+    has_all(row, "each module merged", "tag done/<m>")
+    assert "module/<m>" not in _norm(row)
+
+
+def test_text_no_longer_tags_modules_with_module_prefix() -> None:
+    assert "ref tag module/" not in _norm(_raw())
+
+
+def test_stage_5_step_9_tags_with_done_ref_tag() -> None:
+    step = numbered_items(section(r"stage 5 loop"))[9]
+    has_all(step, "git tag", "bull status ref tag done/<m>")
+    assert "module/<m>" not in _norm(step)
+
+
+def test_merge_guard_refuses_a_name_that_is_both_a_branch_and_a_tag() -> None:
+    guards = section(r"safeguards")
+    has_all(
+        guards,
+        "merge guard",
+        "--after-merge",
+        "refuses",
+        "both a branch and a tag",
+        "refs/heads/<name>",
     )
 
 
@@ -507,7 +539,7 @@ def test_stage_5_loop_names_branches_and_tags_from_status_ref() -> None:
         "base_branch",
         "feature/<slug>/main",
         "adopt/main",
-        "bull status ref tag module/<m>",
+        "bull status ref tag done/<m>",
     )
 
 
