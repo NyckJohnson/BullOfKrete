@@ -43,8 +43,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    gates pass → tag `skeleton`, checkpoint `ui-approved`; for each module: branch from `bull status
    ref module <M>`, unit states tests → code (after `gates <M> --fast` passes) → done, `bull gates
    <M> --coverage-report` clean, `bull gates <M>` records a pass, `git merge --no-ff`, `bull gates
-   --after-merge <branch>` records without rerunning, `bull api <M> --write`, tag `done/<M>` (from `bull status ref tag done/<M>`; a
-   finished module's tag never shares its branch's name); then
+   --after-merge <branch>` records without rerunning, `bull api <M> --write`, tag `done/<M>` (from
+   `bull status ref tag done/<M>`; a finished module's tag never shares its branch's name); then
    `bull gates --all` and checkpoint `app-accepted` → tag. Ends when `bull status --json` shows every
    unit done and `bull status tags --json` lists every checkpoint and module tag.
    - Failure path: `bull status module Counter in_progress` before `Store` is done is refused, naming
