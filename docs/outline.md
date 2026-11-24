@@ -43,7 +43,8 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    gates pass → tag `skeleton`, checkpoint `ui-approved`; for each module: branch from `bull status
    ref module <M>`, unit states tests → code (after `gates <M> --fast` passes) → done, `bull gates
    <M> --coverage-report` clean, `bull gates <M>` records a pass, `git merge --no-ff`, `bull gates
-   --after-merge <branch>` records without rerunning, `bull api <M> --write`, tag `module/<M>`; then
+   --after-merge <branch>` records without rerunning, `bull api <M> --write`, tag `done/<M>` (from `bull status ref tag done/<M>`; a
+   finished module's tag never shares its branch's name); then
    `bull gates --all` and checkpoint `app-accepted` → tag. Ends when `bull status --json` shows every
    unit done and `bull status tags --json` lists every checkpoint and module tag.
    - Failure path: `bull status module Counter in_progress` before `Store` is done is refused, naming
@@ -122,6 +123,12 @@ says otherwise. Hooks are driven by feeding `bull hook <name>` the JSON Claude C
    is allowed. Ends when the merge goes through.
    - Failure path: a dirty working tree makes `bull gates Counter` pass without recording, and says
      why.
+   - Failure path: a tag `module/Counter` also exists (bull named finished modules' tags that way
+     before feature module-tag-and-branch-share-a-name), so `module/Counter` names both a branch and
+     a tag. The merge guard refuses `git merge --no-ff module/Counter`, naming both and suggesting
+     `refs/heads/module/Counter`; `git merge --no-ff refs/heads/module/Counter` is allowed once the
+     branch head has its pass. `bull gates --after-merge module/Counter` refuses the same way, and
+     `--after-merge refs/heads/module/Counter` works.
 10. **Settings** — Dana runs `bull config set max_attempts 5` in her app; `bull config show` lists
     `max_attempts = 5 (app)`, `review_mode = combined (bull default)`,
     `coverage.auto_approve_defensive = true (bull default)` and `models.reviewer` from her user layer
@@ -1036,6 +1043,7 @@ when `readers.py` defines `detect`.
   progress gauge, branch and tag names, and the next step.
 - Depends on: foundation, gitrepo, events, settings, memo, parts, usage
 - Files: Contracts/__init__.py, mocks/__init__.py | model.py, store.py, refs.py | transitions.py, modules.py, next_step.py | summary.py, cli.py
+- Changes (module-tag-and-branch-share-a-name): summary.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   class Mode(Enum): APP = "app"; FEATURE = "feature"; ADOPT = "adopt"
@@ -1207,8 +1215,9 @@ when `readers.py` defines `detect`.
   - summary: stage (and mode), checkpoints, units done/total, each module's state and units,
     pause/wait, plan, next step.
   - as_json: the status file's content plus `mode`, `next`, `units_done`, `units_total`.
-  - tags: git tags matching the pipeline's names (checkpoints, `module/*`, `feature/*`, `adopt/*`,
-    `adopted`), sorted.
+  - tags: git tags matching the pipeline's names (checkpoints, `done/*`, `module/*`, `feature/*`,
+    `adopt/*`, `adopted`), sorted. A finished module's tag is `<prefix>done/<M>` (the orchestrator
+    asks `ref tag done/<M>`); `module/*` stays listed for tags made before that.
   - cli: every `bull status …` command in **Commands**; refusals exit 1 with the reason; `usage-check`
     prints `OK|PAUSE|UNKNOWN: <reason>` (exit 0 for all three; `--json` gives the fields).
 - Construction (internal; not contracts):
@@ -1532,6 +1541,7 @@ when `readers.py` defines `detect`.
   legacy check.
 - Depends on: foundation, gitrepo, settings, memo, stacks, parts, status, features
 - Files: Contracts/__init__.py, mocks/__init__.py | detect.py, adopt.py, legacy.py, cli.py
+- Changes (module-tag-and-branch-share-a-name): detect.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   @dataclass(frozen=True)
@@ -1595,7 +1605,7 @@ when `readers.py` defines `detect`.
     each clashing branch (`git for-each-ref --format=%(refname:short) refs/heads/module/
     refs/heads/feature/ refs/heads/adopt/` through `runner`; a non-zero exit raises `GitError`
     "git for-each-ref failed: <stderr>", "check that git works in this repository") → fix "branch <name> clashes with
-    bull's branch names", "rename or delete it"; each clashing tag (`git.tags` for `module/*`,
+    bull's branch names", "rename or delete it"; each clashing tag (`git.tags` for `done/*`, `module/*`,
     `feature/*`, `adopt/*`) → fix "tag <name> clashes with bull's tag names", "rename or delete
     it"; each `git.active_hooks` entry → note "active git hook <name>", "bull's gates do not run
     it"; not `git.is_clean` → fix "uncommitted changes", "commit or stash them". Repo checks other
@@ -1647,6 +1657,7 @@ when `readers.py` defines `detect`.
   skips, and runs journeys with service parts started and stopped.
 - Depends on: foundation, gitrepo, events, settings, memo, stacks, parts, status, coverage, api, interfaces
 - Files: Contracts/__init__.py, mocks/__init__.py | steps.py, passes.py, failed.py | driver.py, after_merge.py | journeys.py, report.py, cli.py
+- Changes (module-tag-and-branch-share-a-name): after_merge.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   class Gate(Enum):
@@ -1833,7 +1844,10 @@ when `readers.py` defines `detect`.
     - render delegates to `report.render(run, triage, comments)` (`comments`: module → comment
       remembered by this instance; unknown → "#").
   - after_merge.py (unit 3): `after_merge_skip(app: AppLayout, branch: str, git: Git, passes:
-    PassRecords, bookkeeping: Sequence[str]) -> PassRecord | None`: branch head
+    PassRecords, bookkeeping: Sequence[str]) -> PassRecord | None`: a `branch` that names both a
+    branch (`git.branch_exists`) and a tag (`git.tags(root, branch)` holds it exactly) →
+    `BullError("<branch> names both a branch and a tag", "use `refs/heads/<branch>`")`, since git
+    would pick the tag; `refs/heads/<name>` is explicit and never refused. Branch head
     (`git.head(root, branch)`; None → `BullError("no branch <branch>")`) has a record and every
     `git.changed_paths(root, head, "HEAD")` path is bookkeeping → that record, else None. A
     bookkeeping entry ending in `/` matches paths under it; otherwise the exact path or paths
@@ -1993,6 +2007,7 @@ when `readers.py` defines `detect`.
   test protection, reference protection, agent start/end events.
 - Depends on: foundation, gitrepo, events, settings, memo, usage, stacks, parts, status, gates
 - Files: Contracts/__init__.py, mocks/__init__.py | merge_guard.py, protection.py | usage_guard.py, session.py, dispatch.py
+- Changes (module-tag-and-branch-share-a-name): merge_guard.py
 - Protocol (draft; lives in `Contracts/`):
   ```python
   class HookKind(Enum):
@@ -2036,7 +2051,10 @@ when `readers.py` defines `detect`.
     wrapper words `env`, `command`, `exec`, `time`, `nohup`, `sudo` and shell keywords `{`, `!`,
     `then`, `do`, `else` skipped before `git`; `sh -c`/`bash -c` strings parsed in turn; `git merge`
     only inside a quoted argument, `git log --merges` and `git mergetool` are not merges) and returns
-    the target refs. For each target: unknown ref → block "unknown ref <ref>"; no pass record for its head sha → block "no recorded full
+    the target refs. For each target: a name that is both a branch (`git.branch_exists`) and a tag
+    (`git.tags(root, name)` holds it exactly) → block "<ref> names both a branch and a tag; git
+    would merge the tag: use `git merge refs/heads/<ref>`"; a target `refs/heads/<name>` is
+    explicit (never ambiguous) and counts as branch `<name>` for the module-branch check; unknown ref → block "unknown ref <ref>"; no pass record for its head sha → block "no recorded full
     gate pass for <ref> at <sha>: run `bull gates …`"; a module branch whose module has reference
     tests and no scan → block "record the reference-test scan for <M> first" (the module's
     `reference_tests` and scan are read from the `.bull/status.json` at the target's head sha, via
@@ -2058,6 +2076,7 @@ when `readers.py` defines `detect`.
 - Depends on: foundation
 - Files: Contracts/__init__.py, mocks/__init__.py, plugin_files.py | orchestrator.md | commands/discuss.md, commands/outline.md, commands/setup.md, commands/skeleton.md | commands/prototype.md, commands/build.md, commands/verify.md, commands/feature.md | commands/adopt.md, commands/resume.md, commands/status.md, commands/stack.md | agents/skeleton-builder.md, agents/screen-builder.md, agents/test-writer.md, agents/code-writer.md | agents/reviewer.md, agents/coverage-analyst.md, agents/journey-test-writer.md | agents/surveyor.md, agents/legacy-test-scanner.md
 - Changes (accept-tests-for-defensive-error): orchestrator.md, commands/build.md, commands/verify.md, commands/feature.md, agents/reviewer.md, agents/coverage-analyst.md
+- Changes (module-tag-and-branch-share-a-name): orchestrator.md
 - Protocol (draft; lives in `Contracts/`):
   ```python
   @dataclass(frozen=True)
@@ -2093,6 +2112,10 @@ when `readers.py` defines `detect`.
   - test-writer: before it reports, it runs the stack's formatter and lint on the test files it
     wrote or changed and fixes what they find, so a formatting slip never costs a gate attempt
     (stack-neutral wording; the stack's rules name the tools).
+  - Module tags (feature module-tag-and-branch-share-a-name): the orchestrator's stages table says
+    each module merged → tag `done/<M>`; Stage 5 step 9 tags with `bull status ref tag done/<M>`.
+    Safeguards: the merge guard (and `bull gates --after-merge`) refuses a name that is both a
+    branch and a tag, because git would use the tag; merge `refs/heads/<name>` instead.
   - Defensive error handling in coverage triage (feature accept-tests-for-defensive-error):
     - coverage-analyst has four classes: `missed`, `exempt`, `defensive`, `not-in-spec`.
       `defensive` = code the spec doesn't mention that meets all five no-downside rules: (1) it runs
@@ -2597,3 +2620,4 @@ Each file in `reference/v1-docs/` and what happens to it.
 - 2026-11-19: memo consistency, found by `bull feature plan` — the build order's status line now lists `usage` (status/cli.py already uses it), and claude_code's note on stacks (contract only, for `CheckItem`) moves off its `Depends on:` line. Memo text only; no code or contract change.
 - 2026-11-20: feature context-use-in-the-status-line, verify review — a non-finite `used_percentage` (JSON `NaN`/`Infinity`) counts as unreadable (None) for 5-hour, 7-day and context, so the line shows `ctx –` instead of falling back to just `bull`. claude_code hook_io.py behavior only; no contract change — approved by Nicholas Johnson
 - 2026-11-23: feature accept-tests-for-defensive-error — coverage triage auto-approves defensive error handling (new coverage-analyst class `defensive`, five no-downside rules: runs only on bad input or a failed environment, fails cleanly through an existing error type or skips, never writes or deletes, no contract change, cheap); each case is specified, tested and logged "auto-approved (defensive)", the reviewer confirms the rules, and acceptance lists them for review. Replaces the rule that every coverage `not-in-spec` asks (idea decided 2026-11-19). New setting `coverage.auto_approve_defensive` (bool, default true, user/app) turns it off. Reference and adoption scans unchanged. plugin_text and settings schema.py; no contract change — approved by Nicholas Johnson
+- 2026-11-23: feature module-tag-and-branch-share-a-name — a finished module's tag shared its branch's name (`module/<M>`), so on a re-merge after a verify fix git picked the tag and silently merged nothing (the merge guard checked the tag's already-gated sha). Human decided: finished-module tags become `<prefix>done/<M>` (status tag listing, adoption clash check, orchestrator text, journey 2); the merge guard and `gates --after-merge` refuse a name that is both a branch and a tag and accept `refs/heads/<name>` (journey 9 failure path); existing `module/*` tags left alone; no fresh branch for verify fixes. No contract change — approved by Nicholas Johnson
