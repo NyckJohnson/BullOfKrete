@@ -8,12 +8,7 @@
     "ui-approved",
     "app-accepted"
   ],
-  "feature": {
-    "applied_contracts": [],
-    "checkpoints": [],
-    "slug": "module-tag-and-branch-share-a-name",
-    "stage": 1
-  },
+  "feature": null,
   "format": 1,
   "kind": "app",
   "modules": [
@@ -329,7 +324,13 @@
       "name": "status",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T00:27:13.752889Z"
+      },
       "state": "done",
       "units": [
         {
@@ -526,7 +527,13 @@
       "name": "adoption",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T00:40:48.191864Z"
+      },
       "state": "done",
       "units": [
         {
@@ -570,7 +577,13 @@
       "name": "gates",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T00:55:09.583458Z"
+      },
       "state": "done",
       "units": [
         {
@@ -724,7 +737,13 @@
       "name": "hooks",
       "part": "app",
       "reference_tests": true,
-      "scan": null,
+      "scan": {
+        "contradicts": 0,
+        "covered": 0,
+        "missed": 0,
+        "not_in_spec": 0,
+        "time": "2026-11-24T01:09:05.152704Z"
+      },
       "state": "done",
       "units": [
         {

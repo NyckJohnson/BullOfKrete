@@ -149,7 +149,7 @@ def _switch_over(
     bull_ok(bull, "api", "Counter", "--write", cwd=app)
     bull_ok(bull, "status", "module", "Counter", "done", cwd=app)
     commit_all(app, env, "chore: Counter adopted")
-    tag_checkpoint(bull, app, env, "module/Counter")
+    tag_checkpoint(bull, app, env, "done/Counter")
 
     # Stage 6.
     bull_ok(bull, "gates", "--all", cwd=app)
@@ -205,7 +205,7 @@ def test_adopt_an_existing_app_ends_as_an_ordinary_accepted_app(
     for expected in (
         "adopt/baseline",
         "adopt/scaffold",
-        "adopt/module/Counter",
+        "adopt/done/Counter",
         "adopted",
     ):
         assert expected in tags

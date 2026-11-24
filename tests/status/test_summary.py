@@ -215,6 +215,26 @@ def test_tags_keeps_only_the_pipelines_names_sorted(rig: Rig) -> None:
     )
 
 
+def test_tags_lists_finished_module_tags_named_done_with_any_prefix(rig: Rig) -> None:
+    rig.git.tag_names = [
+        "done/Store",
+        "feature/dark-mode/done/Counter",
+        "adopt/done/Parser",
+        "module/Old",
+        "v1.0",
+        "done",
+        "donezo/Store",
+    ]
+    assert rig.progress.tags() == sorted(
+        [
+            "adopt/done/Parser",
+            "done/Store",
+            "feature/dark-mode/done/Counter",
+            "module/Old",
+        ]
+    )
+
+
 def test_tags_asks_git_in_the_app_root(rig: Rig) -> None:
     rig.progress.tags()
     assert any(name == "tags" and args[0] == APP.root for name, args in rig.git.calls)

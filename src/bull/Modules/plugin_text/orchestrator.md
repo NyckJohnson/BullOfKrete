@@ -89,6 +89,8 @@ bull refuses some calls on its own. Knowing these tells you why a call was refus
 - **Approval wait.** While a module is waiting for a contract approval, agent launches are blocked.
 - **Merge guard.** A `git merge` of a branch needs a recorded full gate pass for the branch's head.
   For a module with reference tests, it also needs a recorded reference-test scan.
+  It refuses a name that is both a branch and a tag, because git would use the tag. The same
+  goes for `bull gates --after-merge <branch>`. Merge `refs/heads/<name>` instead.
 - **Test protection.** code-writer cannot edit test files.
 - **Reference protection.** test-writer and code-writer may not be given the reference folder, and
   may not read it.
@@ -107,7 +109,7 @@ The human starts each stage with a command. Never start the next stage yourself.
 | (setup) | `/bull:setup` | `bull stack check` passes for every part → tag `setup` |
 | 3. Skeleton | `/bull:skeleton` | Gates pass → tag `skeleton` |
 | 4. Prototype | `/bull:prototype` | **Checkpoint 2**: the human approves the flow → tag `ui-approved` |
-| 5. Modules | `/bull:build` | Each module merged → tag `module/<M>` |
+| 5. Modules | `/bull:build` | Each module merged → tag `done/<M>` |
 | 6. Verify | `/bull:verify` | **Checkpoint 4**: the human accepts the app → tag `app-accepted` |
 
 `/bull:resume` continues after a pause or in a fresh session. `/bull:status` reports progress. An
@@ -253,7 +255,7 @@ only on a clean tree.
    passed step 5, it records the pass without rerunning anything. Otherwise it runs `--all`.
 8. Run `bull api <M> --write`. Update the module's `Contract:` line in the memo to point at
    `docs/api/<M>.md`. Commit.
-9. Run `git tag <tag>`, with the tag from `bull status ref tag module/<M>`. Then run
+9. Run `git tag <tag>`, with the tag from `bull status ref tag done/<M>`. Then run
    `bull status module <M> done` and commit the status change.
 
 After the stage's last module, run `bull gates --all` on `<base>`: the complete run, every test,

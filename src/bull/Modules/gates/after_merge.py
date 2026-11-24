@@ -20,8 +20,13 @@ def after_merge_skip(
 
     Returns None when the branch head was never gated or any path changed between the
     branch head and HEAD lies outside `bookkeeping`. Raises `BullError` for an unknown
-    branch.
+    branch, or for a name that is both a branch and a tag (`refs/heads/<name>` is never
+    ambiguous and is accepted).
     """
+    if git.branch_exists(app.root, branch) and branch in git.tags(app.root, branch):
+        raise BullError(
+            f"{branch} names both a branch and a tag", f"use `refs/heads/{branch}`"
+        )
     head = git.head(app.root, branch)
     if head is None:
         raise BullError(f"no branch {branch}")
