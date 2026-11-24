@@ -12,10 +12,11 @@
     "applied_contracts": [],
     "checkpoints": [
       "outline-approved",
-      "setup"
+      "setup",
+      "skeleton"
     ],
     "slug": "module-tag-and-branch-share-a-name",
-    "stage": 2
+    "stage": 3
   },
   "format": 1,
   "kind": "app",
